@@ -11,8 +11,10 @@ import (
 )
 
 type fakeDriver struct {
-	kind driver.Kind
-	name string
+	driver.SQLiteDialect
+	driver.Introspector // nil; not used by the registry tests
+	kind                driver.Kind
+	name                string
 }
 
 func (f fakeDriver) Kind() driver.Kind                                            { return f.kind }
@@ -66,10 +68,10 @@ func TestCheckOptions(t *testing.T) {
 
 func TestRegistry(t *testing.T) {
 	r := driver.NewRegistry(
-		fakeDriver{driver.SQLite, "SQLite"},
-		fakeDriver{"zeta", "Zeta"},
-		fakeDriver{"alpha", "Alpha"},
-		fakeDriver{driver.Postgres, "PG"},
+		fakeDriver{kind: driver.SQLite, name: "SQLite"},
+		fakeDriver{kind: "zeta", name: "Zeta"},
+		fakeDriver{kind: "alpha", name: "Alpha"},
+		fakeDriver{kind: driver.Postgres, name: "PG"},
 	)
 	d, err := r.Get(driver.Postgres)
 	if err != nil || d.DisplayName() != "PG" {
@@ -78,7 +80,7 @@ func TestRegistry(t *testing.T) {
 	if _, err := r.Get(driver.MySQL); !errors.Is(err, driver.ErrUnknownKind) {
 		t.Fatalf("err = %v, want ErrUnknownKind", err)
 	}
-	r.Register(fakeDriver{driver.Postgres, "PostgreSQL"})
+	r.Register(fakeDriver{kind: driver.Postgres, name: "PostgreSQL"})
 
 	got := r.List()
 	want := []driver.Kind{driver.Postgres, driver.SQLite, "alpha", "zeta"}

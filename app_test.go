@@ -6,16 +6,19 @@ import (
 )
 
 func TestAppOptions(t *testing.T) {
-	svc := newConnectionService(t.TempDir())
-	opts := appOptions(fstest.MapFS{"index.html": {Data: []byte("<html></html>")}}, svc)
+	b := newBackend(t.TempDir())
+	opts := appOptions(fstest.MapFS{"index.html": {Data: []byte("<html></html>")}}, b)
 	if opts.Name != "dbedit" {
 		t.Fatalf("Name = %q, want dbedit", opts.Name)
 	}
-	if len(opts.Services) != 2 {
-		t.Fatalf("expected 2 bound services, got %d", len(opts.Services))
+	if len(opts.Services) != 4 {
+		t.Fatalf("expected 4 bound services, got %d", len(opts.Services))
 	}
-	if opts.Services[1].Instance() != svc {
+	if opts.Services[1].Instance() != b.connections {
 		t.Fatal("ConnectionService not registered")
+	}
+	if opts.Services[2].Instance() != b.schema || opts.Services[3].Instance() != b.browse {
+		t.Fatal("SchemaService/BrowseService not registered")
 	}
 	if opts.Assets.Handler == nil {
 		t.Fatal("asset handler must be set")
@@ -25,8 +28,12 @@ func TestAppOptions(t *testing.T) {
 	}
 }
 
-func TestNewConnectionService(t *testing.T) {
-	svc := newConnectionService(t.TempDir())
+func TestNewBackend(t *testing.T) {
+	b := newBackend(t.TempDir())
+	if b.schema == nil || b.browse == nil {
+		t.Fatal("services missing")
+	}
+	svc := b.connections
 	if got := svc.Drivers(); len(got) != 4 {
 		t.Fatalf("Drivers() = %+v", got)
 	}

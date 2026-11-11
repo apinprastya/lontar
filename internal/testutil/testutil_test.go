@@ -253,3 +253,51 @@ func TestMainTerminatesShared(t *testing.T) {
 		t.Fatal("shared entry not removed")
 	}
 }
+
+func TestSeedBrowseSQLite(t *testing.T) {
+	db := SQLiteTemp(t)
+	conn := Open(t, db)
+	SeedBrowse(t, EngineSQLite, db, conn)
+	SeedBrowse(t, EngineSQLite, db, conn) // second call is a no-op
+	var n int
+	if err := conn.QueryRow("SELECT COUNT(*) FROM numbers").Scan(&n); err != nil || n != 1000 {
+		t.Fatalf("numbers = %d, %v", n, err)
+	}
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM "Odd ""Name"" Tbl"`).Scan(&n); err != nil || n != 2 {
+		t.Fatalf("odd = %d, %v", n, err)
+	}
+	for _, e := range []string{EnginePostgres, EngineMySQL, EngineMariaDB} {
+		if s, err := SeedStatements(e); err != nil || len(s) < 10 {
+			t.Fatalf("SeedStatements(%s) = %d, %v", e, len(s), err)
+		}
+	}
+	if _, err := SeedStatements("oracle"); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestSeedBrowseFailure(t *testing.T) {
+	db := SQLiteTemp(t)
+	conn := Open(t, db)
+	_ = conn.Close()
+	ft := &fakeTB{TB: t}
+	SeedBrowse(ft, EngineSQLite, db, conn)
+	if ft.fatal == "" {
+		t.Fatal("seeding a closed DB should fail")
+	}
+	ft = &fakeTB{TB: t}
+	SeedBrowse(ft, "oracle", db, conn)
+	if ft.fatal == "" {
+		t.Fatal("unknown engine should fail")
+	}
+}
+
+func TestAsRoot(t *testing.T) {
+	got, err := AsRoot(DB{Driver: DriverMySQL, DSN: "dbedit:pw@tcp(localhost:3306)/dbedit?parseTime=true"})
+	if err != nil || !strings.HasPrefix(got.DSN, "root:pw@tcp(localhost:3306)/?") {
+		t.Fatalf("AsRoot = %+v, %v", got, err)
+	}
+	if _, err := AsRoot(DB{DSN: "::bad"}); err == nil {
+		t.Fatal("expected error")
+	}
+}

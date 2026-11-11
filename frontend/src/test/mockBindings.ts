@@ -7,6 +7,7 @@
  */
 import { vi } from 'vitest'
 import type { Connection, DriverInfo, SessionInfo } from '../features/connections/types'
+import type { Location, Page, TableInfo } from '../features/workspace/types'
 
 export const AppService = {
   Version: vi.fn<() => Promise<string>>(),
@@ -23,6 +24,21 @@ export const ConnectionService = {
   Test: vi.fn<(c: Connection, password: string | null) => Promise<string>>(),
   Connect: vi.fn<(id: string) => Promise<SessionInfo>>(),
   Disconnect: vi.fn<(id: string) => Promise<void>>(),
+}
+
+export const SchemaService = {
+  Current: vi.fn<(sessionId: string) => Promise<Location>>(),
+  ListDatabases: vi.fn<(sessionId: string, includeSystem: boolean) => Promise<string[] | null>>(),
+  UseDatabase: vi.fn<(sessionId: string, db: string) => Promise<Location>>(),
+  ListSchemas: vi.fn<(sessionId: string, includeSystem: boolean) => Promise<string[] | null>>(),
+  ListTables: vi.fn<(sessionId: string, schema: string) => Promise<TableInfo[] | null>>(),
+  Columns: vi.fn<(sessionId: string, schema: string, table: string) => Promise<unknown[] | null>>(),
+}
+
+export const BrowseService = {
+  FetchTable: vi.fn<(sessionId: string, requestId: string, req: unknown) => Promise<Page | null>>(),
+  CountRows: vi.fn<(sessionId: string, requestId: string, req: unknown) => Promise<number>>(),
+  CancelFetch: vi.fn<(requestId: string) => Promise<boolean>>(),
 }
 
 export const DRIVERS: DriverInfo[] = [
@@ -63,9 +79,20 @@ export function makeSession(over: Partial<SessionInfo> = {}): SessionInfo {
 
 /** Resets every mock and installs harmless defaults. */
 export function resetBindings() {
-  for (const fn of [...Object.values(AppService), ...Object.values(ConnectionService)]) fn.mockReset()
+  for (const fn of [
+    ...Object.values(AppService),
+    ...Object.values(ConnectionService),
+    ...Object.values(SchemaService),
+    ...Object.values(BrowseService),
+  ])
+    fn.mockReset()
   AppService.Version.mockResolvedValue('0.0.1')
   AppService.Platform.mockResolvedValue('linux')
   ConnectionService.Drivers.mockResolvedValue(DRIVERS)
   ConnectionService.List.mockResolvedValue([])
+  SchemaService.Current.mockResolvedValue({ database: 'shop', schema: 'public' })
+  SchemaService.ListDatabases.mockResolvedValue(['shop'])
+  SchemaService.ListSchemas.mockResolvedValue(['public'])
+  SchemaService.ListTables.mockResolvedValue([])
+  BrowseService.CancelFetch.mockResolvedValue(true)
 }

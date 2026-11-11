@@ -63,6 +63,34 @@ systemctl --user start podman.socket
 export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock
 ```
 
+Integration tests share a fixture, `testutil.SeedBrowse`. It holds every
+value type, a view, tables with no or a composite primary key, and a table
+and columns with awkward names. Run it against each engine (SQLite always;
+PostgreSQL, MySQL and MariaDB when Docker is available).
+
+## Browsing tables
+
+After connecting, the sidebar lists the tables and views of the current
+schema. Switch databases (PostgreSQL, MySQL/MariaDB) or schemas
+(PostgreSQL, attached SQLite databases) at the top. A single click previews
+a table in a reusable tab, and a double click keeps it open. Rows load in
+pages of 300. The status bar shows the server's row estimate until the
+exact count is known.
+
+| Shortcut | Action |
+|---|---|
+| Mod+R | Refresh the table list and the current tab |
+| Mod+F | Toggle the filter bar (Enter applies) |
+| Mod+I / Space | Toggle the row detail panel |
+| Mod+C | Copy the selected cells as TSV |
+| Mod+W | Close the tab |
+| Mod+1 … Mod+9 | Switch tabs (Mod+9 = last) |
+
+Click a column header to sort it (ascending, then descending, then off).
+Shift-click adds a secondary sort. Filter values are always sent as bound
+parameters. The filter bar's **Raw SQL** mode instead takes a WHERE
+condition you type, and uses it verbatim against your database.
+
 ## Saved connections and passwords
 
 Connections are stored as JSON (schema-versioned, written atomically, file

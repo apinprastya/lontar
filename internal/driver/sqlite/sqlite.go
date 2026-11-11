@@ -29,6 +29,7 @@ var reserved = []string{"mode", "vfs"}
 
 // Driver is the SQLite driver.
 type Driver struct {
+	driver.SQLiteDialect
 	homeDir func() (string, error)
 }
 

@@ -1,0 +1,51 @@
+import type { TabState } from '../../stores/workspace'
+
+const fmt = (n: number) => n.toLocaleString('en-US')
+
+/**
+ * Row range of a tab's page: "1–300 of ~12,345" (estimate from the table
+ * list until the exact count arrives), "1–300 of 12,345", "1–300" (unknown
+ * total) or "No rows".
+ */
+export function rowRangeText(tab: Pick<TabState, 'offset' | 'rows' | 'totalCount' | 'estimatedRows' | 'appliedFilters' | 'appliedRawWhere' | 'hasMore'>): string {
+  const n = tab.rows.length
+  if (n === 0) return tab.offset > 0 ? `No rows after ${fmt(tab.offset)}` : 'No rows'
+  const range = `${fmt(tab.offset + 1)}–${fmt(tab.offset + n)}`
+  if (tab.totalCount !== null) return `${range} of ${fmt(tab.totalCount)}`
+  const filtered = tab.appliedFilters.length > 0 || tab.appliedRawWhere !== ''
+  if (!filtered && tab.estimatedRows !== null && tab.estimatedRows >= tab.offset + n) return `${range} of ~${fmt(tab.estimatedRows)}`
+  return tab.hasMore ? `${range} of many` : range
+}
+
+export interface StatusBarProps {
+  tab: TabState | null
+  serverVersion: string
+  onPrev(): void
+  onNext(): void
+}
+
+/** Bottom bar: row range, query time and paging buttons. */
+export default function StatusBar({ tab, serverVersion, onPrev, onNext }: StatusBarProps) {
+  return (
+    <footer className="statusbar ws-statusbar" role="status">
+      {tab && (
+        <>
+          <span data-testid="row-range">{rowRangeText(tab)}</span>
+          {tab.counting && <span className="muted">counting…</span>}
+          {tab.elapsedMs !== null && <span data-testid="query-time">{fmt(tab.elapsedMs)} ms</span>}
+          <span className="pager">
+            <button type="button" aria-label="Previous page" disabled={tab.loading || tab.offset === 0} onClick={onPrev}>
+              ‹
+            </button>
+            <button type="button" aria-label="Next page" disabled={tab.loading || !tab.hasMore} onClick={onNext}>
+              ›
+            </button>
+          </span>
+        </>
+      )}
+      <span className="statusbar-hint" data-testid="statusbar-session">
+        {serverVersion}
+      </span>
+    </footer>
+  )
+}

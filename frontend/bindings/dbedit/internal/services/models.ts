@@ -6,6 +6,14 @@
 import * as driver$0 from "../driver/models.js";
 
 /**
+ * Location is the database and default schema a session is browsing.
+ */
+export interface Location {
+    "database": string;
+    "schema": string;
+}
+
+/**
  * SessionInfo describes an open session to the frontend.
  */
 export interface SessionInfo {

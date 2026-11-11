@@ -26,6 +26,7 @@ var reserved = []string{"user", "passwd", "password", "net", "addr", "dbname"}
 
 // Driver handles MySQL or MariaDB, depending on kind.
 type Driver struct {
+	driver.MySQLDialect
 	kind driver.Kind
 }
 

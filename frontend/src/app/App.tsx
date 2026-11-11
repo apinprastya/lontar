@@ -1,5 +1,4 @@
 import Welcome from '../features/connections/Welcome'
-import { KIND_LABELS, connectionColor } from '../features/connections/types'
 import Workspace from '../features/workspace/Workspace'
 import { modLabel } from '../lib/mod'
 import { useConnections } from '../stores/connections'
@@ -24,28 +23,26 @@ export default function App() {
   const info = useAppInfo()
   const platform = info.status === 'ready' ? info.platform : undefined
   const session = useConnections((s) => s.session)
-  const connection = useConnections((s) => s.connections.find((c) => c.id === s.session?.connectionId))
-  const color = connection ? connectionColor(connection) : ''
+
+  if (session) {
+    // The workspace brings its own sidebar, toolbar and status bar.
+    return (
+      <div className="app-shell app-shell-workspace" data-platform={platform}>
+        <Workspace platform={platform} />
+      </div>
+    )
+  }
 
   return (
     <div className="app-shell" data-platform={platform}>
       <aside className="sidebar" aria-label="Sidebar">
         <div className="sidebar-header">dbedit</div>
-        {session ? (
-          <div className="sidebar-session">
-            <span className="color-dot" style={color ? { background: color } : undefined} />
-            <span>
-              <strong>{session.name}</strong>
-              <br />
-              <span className="muted">{KIND_LABELS[session.kind] ?? session.kind}</span>
-            </span>
-          </div>
-        ) : (
-          <p className="sidebar-empty">Not connected</p>
-        )}
+        <p className="sidebar-empty">Not connected</p>
       </aside>
 
-      <main className="workspace">{session ? <Workspace /> : <Welcome platform={platform} />}</main>
+      <main className="workspace">
+        <Welcome platform={platform} />
+      </main>
 
       <footer className="statusbar" role="status">
         {info.status === 'loading' && <span>Loading…</span>}
@@ -57,7 +54,6 @@ export default function App() {
           </>
         )}
         {info.status === 'error' && <span className="statusbar-error">Backend unavailable: {info.error}</span>}
-        {session && <span data-testid="statusbar-session">{session.serverVersion}</span>}
       </footer>
     </div>
   )

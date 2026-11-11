@@ -92,7 +92,14 @@ func (c Config) PortOr(def int) int {
 }
 
 // Driver is implemented by each supported database engine.
+//
+// Besides opening connections, a driver is its engine's Dialect (pure SQL
+// helpers) and Introspector (metadata queries). The engine packages embed
+// one of the Dialect types from dialect.go.
 type Driver interface {
+	Dialect
+	Introspector
+
 	// Kind returns the kind this driver handles.
 	Kind() Kind
 	// DisplayName is a human readable engine name ("PostgreSQL").

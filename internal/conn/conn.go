@@ -39,6 +39,9 @@ var (
 	// implemented yet (SSH tunnels, SSL options). Connecting without them
 	// would silently bypass what the user configured.
 	ErrUnsupported = errors.New("not supported yet")
+	// ErrUnknownDatabase is returned by UseDatabase for a database that is
+	// not in the server's database list.
+	ErrUnknownDatabase = errors.New("database not found")
 )
 
 // Source provides saved connections and their passwords (store.Store).
@@ -48,7 +51,8 @@ type Source interface {
 }
 
 // Session is an open connection. Its fields are immutable; DB is safe for
-// concurrent use.
+// concurrent use. UseDatabase replaces the session (same ID) with a new
+// value, so callers should Get it again rather than keep a pointer.
 type Session struct {
 	ID            string
 	ConnectionID  string
@@ -57,6 +61,9 @@ type Session struct {
 	ServerVersion string
 	ConnectedAt   time.Time
 	DB            *sql.DB
+	// Database is the database the pool is connected to (as reported by
+	// the server; "" on MySQL when none is selected).
+	Database string
 }
 
 // Manager owns all open sessions. It is safe for concurrent use.
@@ -107,16 +114,22 @@ func checkSupported(c store.Connection) error {
 // open validates c, opens it, pings it and reads the server version. The
 // returned DB is configured with the pool limits.
 func (m *Manager) open(ctx context.Context, c store.Connection, password string) (*sql.DB, string, error) {
+	db, version, _, err := m.openDB(ctx, c, password)
+	return db, version, err
+}
+
+// openDB is open that also reports the current database.
+func (m *Manager) openDB(ctx context.Context, c store.Connection, password string) (*sql.DB, string, string, error) {
 	c.Normalize()
 	if err := c.Validate(); err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	if err := checkSupported(c); err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	d, err := m.drivers.Get(c.Kind)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	timeout := m.pingTimeout()
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -126,7 +139,7 @@ func (m *Manager) open(ctx context.Context, c store.Connection, password string)
 	cfg.ConnectTimeout = timeout
 	db, err := d.Open(ctx, cfg, password)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	db.SetMaxOpenConns(MaxOpenConns)
 	db.SetMaxIdleConns(MaxIdleConns)
@@ -135,14 +148,18 @@ func (m *Manager) open(ctx context.Context, c store.Connection, password string)
 
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
-		return nil, "", friendly(err, timeout)
+		return nil, "", "", friendly(err, timeout)
 	}
 	version, err := d.ServerVersion(ctx, db)
 	if err != nil {
 		_ = db.Close()
-		return nil, "", friendly(err, timeout)
+		return nil, "", "", friendly(err, timeout)
 	}
-	return db, version, nil
+	current, err := d.CurrentDatabase(ctx, db)
+	if err != nil {
+		current = c.Database
+	}
+	return db, version, current, nil
 }
 
 // friendly turns timeouts into a readable message; other driver errors are
@@ -179,11 +196,12 @@ func (m *Manager) Connect(ctx context.Context, connectionID string) (string, err
 	if err != nil {
 		return "", err
 	}
-	db, version, err := m.open(ctx, c, password)
+	db, version, current, err := m.openDB(ctx, c, password)
 	if err != nil {
 		return "", err
 	}
 	s := &Session{
+		Database:      current,
 		ID:            m.newID(),
 		ConnectionID:  c.ID,
 		Name:          c.Name,
@@ -260,4 +278,69 @@ func (m *Manager) DisconnectAll() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// UseDatabase reconnects the session to another database on the same
+// server, keeping its ID. A new pool is opened from the stored connection
+// settings and secret with only the database replaced; this is required on
+// PostgreSQL (a connection is bound to one database) and is simpler and
+// safer than USE on MySQL/MariaDB, where USE would affect only one pooled
+// connection. The name must appear in the server's database list. The old
+// pool is closed after the swap, so queries still running on it fail.
+// SQLite has a single database and returns ErrUnsupported.
+func (m *Manager) UseDatabase(ctx context.Context, sessionID, database string) (*Session, error) {
+	old, err := m.Get(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if old.Kind.IsFileBased() {
+		return nil, fmt.Errorf("switching databases is %w for %s", ErrUnsupported, old.Kind)
+	}
+	d, err := m.drivers.Get(old.Kind)
+	if err != nil {
+		return nil, err
+	}
+	known, err := d.ListDatabases(ctx, old.DB, true)
+	if err != nil {
+		return nil, err
+	}
+	if !contains(known, database) {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownDatabase, database)
+	}
+	c, err := m.src.Get(old.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	password, err := m.src.Password(old.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	c.Database = database
+	db, version, current, err := m.openDB(ctx, c, password)
+	if err != nil {
+		return nil, err
+	}
+	next := *old
+	next.DB, next.ServerVersion, next.Database = db, version, current
+
+	m.mu.Lock()
+	cur, ok := m.sessions[sessionID]
+	if !ok || m.closed {
+		m.mu.Unlock()
+		_ = db.Close()
+		return nil, ErrSessionNotFound
+	}
+	m.sessions[sessionID] = &next
+	m.mu.Unlock()
+	_ = cur.DB.Close()
+	return &next, nil
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

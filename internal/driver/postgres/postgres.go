@@ -26,8 +26,10 @@ const ApplicationName = "dbedit"
 // credentials must never be stored as plain options.
 var reserved = []string{"host", "hostaddr", "port", "user", "password", "passfile", "dbname", "database"}
 
-// Driver is the PostgreSQL driver.
-type Driver struct{}
+// Driver is the PostgreSQL driver. Introspection lives in introspect.go.
+type Driver struct {
+	driver.PostgresDialect
+}
 
 // New returns a PostgreSQL driver.
 func New() *Driver { return &Driver{} }

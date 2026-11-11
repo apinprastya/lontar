@@ -5,6 +5,7 @@ import (
 
 	"dbedit/internal/conn"
 	"dbedit/internal/driver/all"
+	"dbedit/internal/query"
 	"dbedit/internal/services"
 	"dbedit/internal/store"
 
@@ -14,26 +15,41 @@ import (
 // appName is used for the application name and the main window title.
 const appName = "dbedit"
 
-// newConnectionService wires the connection store (JSON + OS keychain, with
-// the encrypted-file fallback on Linux), the session manager and the driver
-// registry, keeping everything under configDir.
-func newConnectionService(configDir string) *services.ConnectionService {
+// backend holds the Wails-bound services.
+type backend struct {
+	connections *services.ConnectionService
+	schema      *services.SchemaService
+	browse      *services.BrowseService
+}
+
+// newBackend wires the connection store (JSON + OS keychain, with the
+// encrypted-file fallback on Linux), the session manager and the driver
+// registry, keeping everything under configDir. All services share one
+// session manager.
+func newBackend(configDir string) backend {
 	st := store.New(configDir, store.NewSecretStore(configDir))
 	drivers := all.Registry()
-	return services.NewConnectionService(st, conn.NewManager(st, drivers), drivers)
+	sessions := conn.NewManager(st, drivers)
+	return backend{
+		connections: services.NewConnectionService(st, sessions, drivers),
+		schema:      services.NewSchemaService(sessions, drivers),
+		browse:      services.NewBrowseService(sessions, drivers, query.NewRunner()),
+	}
 }
 
 // appOptions builds the Wails application options. It is kept separate from
 // main() so it can be unit tested without starting a webview. Bound
 // services implementing ServiceShutdown (ConnectionService closes all open
 // sessions) are shut down by Wails when the app quits.
-func appOptions(assets fs.FS, connections *services.ConnectionService) application.Options {
+func appOptions(assets fs.FS, b backend) application.Options {
 	return application.Options{
 		Name:        appName,
 		Description: "A fast, lightweight desktop database client",
 		Services: []application.Service{
 			application.NewService(services.NewAppService()),
-			application.NewService(connections),
+			application.NewService(b.connections),
+			application.NewService(b.schema),
+			application.NewService(b.browse),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

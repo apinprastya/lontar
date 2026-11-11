@@ -19,7 +19,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	app := application.New(appOptions(assets, newConnectionService(dir)))
+	app := application.New(appOptions(assets, newBackend(dir)))
 	app.Window.NewWithOptions(mainWindowOptions())
 	if err := app.Run(); err != nil {
 		log.Fatal(err)

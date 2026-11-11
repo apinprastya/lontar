@@ -272,3 +272,106 @@ func TestConcurrentUse(t *testing.T) {
 		t.Fatal("sessions leaked")
 	}
 }
+
+func TestUseDatabaseErrors(t *testing.T) {
+	ctx := context.Background()
+	c := sqliteConn(t, "a", true)
+	src := newFakeSource(c)
+	m := NewManager(src, all.Registry())
+	if _, err := m.UseDatabase(ctx, "nope", "x"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+	id, err := m.Connect(ctx, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := m.Get(id)
+	if s.Database != "main" {
+		t.Fatalf("sqlite database = %q", s.Database)
+	}
+	if _, err := m.UseDatabase(ctx, id, "main"); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("err = %v", err)
+	}
+	_ = m.DisconnectAll()
+}
+
+// fakeServer pretends to be a server driver on top of SQLite so that
+// UseDatabase's error paths can run without Docker.
+type fakeServer struct {
+	driver.Driver
+	dbs     []string
+	listErr error
+}
+
+func (f fakeServer) Kind() driver.Kind { return driver.Postgres }
+func (f fakeServer) ListDatabases(context.Context, *sql.DB, bool) ([]string, error) {
+	return f.dbs, f.listErr
+}
+func (f fakeServer) CurrentDatabase(context.Context, *sql.DB) (string, error) {
+	return "", errors.New("unknown")
+}
+
+func TestUseDatabaseFakeServer(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "x.db")
+	lite := sqlite.New()
+	// Opening ignores Host/Database and always opens path.
+	open := func(fs fakeServer) *Manager {
+		reg := driver.NewRegistry(fakeServerOpen{fakeServer: fs, path: path, lite: lite})
+		c := store.Connection{ID: "p", Name: "pg", Kind: driver.Postgres, Host: "h", Database: "one"}
+		src := newFakeSource(c)
+		return NewManager(src, reg)
+	}
+
+	m := open(fakeServer{Driver: lite, dbs: []string{"one", "two"}})
+	id, err := m.Connect(ctx, "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := m.Get(id)
+	if s.Database != "one" { // CurrentDatabase failed: falls back to the config
+		t.Fatalf("database = %q", s.Database)
+	}
+	s2, err := m.UseDatabase(ctx, id, "two")
+	if err != nil || s2.ID != id || s2.Database != "two" {
+		t.Fatalf("UseDatabase = %+v, %v", s2, err)
+	}
+
+	// Errors: listing databases, loading the connection, its password,
+	// and the session disappearing while switching.
+	m = open(fakeServer{Driver: lite, listErr: errors.New("list boom")})
+	id, _ = m.Connect(ctx, "p")
+	if _, err := m.UseDatabase(ctx, id, "two"); err == nil || !strings.Contains(err.Error(), "list boom") {
+		t.Fatalf("err = %v", err)
+	}
+
+	m = open(fakeServer{Driver: lite, dbs: []string{"one", "two"}})
+	id, _ = m.Connect(ctx, "p")
+	m.src.(*fakeSource).pwErr = errors.New("keychain locked")
+	if _, err := m.UseDatabase(ctx, id, "two"); err == nil || !strings.Contains(err.Error(), "keychain") {
+		t.Fatalf("err = %v", err)
+	}
+	m.src.(*fakeSource).pwErr = nil
+	delete(m.src.(*fakeSource).conns, "p")
+	if _, err := m.UseDatabase(ctx, id, "two"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+	_ = m.DisconnectAll()
+	if _, err := m.UseDatabase(ctx, id, "two"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// fakeServerOpen opens an SQLite file for a "postgres" connection.
+type fakeServerOpen struct {
+	fakeServer
+	path string
+	lite *sqlite.Driver
+}
+
+func (f fakeServerOpen) Open(ctx context.Context, cfg driver.Config, pw string) (*sql.DB, error) {
+	if cfg.Database == "bad" {
+		return nil, errors.New("open boom")
+	}
+	return f.lite.Open(ctx, driver.Config{Kind: driver.SQLite, FilePath: f.path, CreateIfMissing: true}, pw)
+}

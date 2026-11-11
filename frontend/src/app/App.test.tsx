@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../bindings/dbedit/internal/services', () => import('../test/mockBindings'))
@@ -45,7 +45,8 @@ describe('App shell', () => {
     expect(screen.getByLabelText('Workspace')).toBeInTheDocument()
     expect(screen.getByLabelText('Sidebar')).toHaveTextContent('Production')
     expect(screen.getByTestId('statusbar-session')).toHaveTextContent('PostgreSQL 16.4')
-    expect(await screen.findByText('Shortcuts use ⌘')).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('.app-shell')).toHaveAttribute('data-platform', 'darwin'))
+    expect(document.querySelector('.app-shell')).toHaveClass('app-shell-workspace')
     expect(ConnectionService.List).not.toHaveBeenCalled()
   })
 
