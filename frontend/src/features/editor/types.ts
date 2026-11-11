@@ -55,12 +55,17 @@ export interface ExecResult {
   notices: string[]
   sessionReset: boolean
   cancelled: boolean
+  /** Confirm safe mode: nothing ran; these write statements need confirmation. */
+  needsConfirm?: boolean
+  writeStatements?: string[]
 }
 
 export interface ExecOptions {
   maxRows: number
   continueOnError: boolean
   baseOffset: number
+  /** The user confirmed the writes (confirm safe mode). */
+  confirmed: boolean
 }
 
 export interface Statement {

@@ -25,7 +25,7 @@ vi.mock('@glideapps/glide-data-grid', async (importOriginal) => {
   const real = await importOriginal<typeof import('@glideapps/glide-data-grid')>()
   return {
     ...real,
-    DataEditor: (p: FakeProps) => {
+    DataEditor: (await import('react')).forwardRef((p: FakeProps, _ref: unknown) => {
       lastProps = p
       return (
         <div data-testid="fake-grid" tabIndex={0}>
@@ -52,7 +52,7 @@ vi.mock('@glideapps/glide-data-grid', async (importOriginal) => {
           </table>
         </div>
       )
-    },
+    }),
   }
 })
 

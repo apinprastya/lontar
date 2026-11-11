@@ -54,6 +54,15 @@ export interface QueryTabState {
   maxRows: number
   continueOnError: boolean
   editorRequest: EditorRequest | null
+  /** Confirm safe mode: a run waiting for the user to confirm its writes. */
+  confirm: PendingRun | null
+}
+
+/** A run that needs confirmation before it executes. */
+export interface PendingRun {
+  text: string
+  base: number
+  statements: string[]
 }
 
 export type RunMode = 'current' | 'all'
@@ -70,6 +79,9 @@ export interface QueryState {
   setEditorSelection(id: string, cursor: number, selection: Range | null): void
   updateCurrentStatement(id: string): Promise<void>
   runQuery(id: string, mode: RunMode): Promise<void>
+  /** Runs the run waiting for confirmation (confirm safe mode). */
+  confirmRun(id: string): Promise<void>
+  cancelConfirm(id: string): void
   cancelQuery(id: string): void
   loadMore(id: string, resultId: string): Promise<void>
   setActiveResult(id: string, key: string): void
@@ -144,6 +156,7 @@ export function newQueryTabState(title: string, sql = ''): QueryTabState {
     maxRows: DEFAULT_MAX_ROWS,
     continueOnError: false,
     editorRequest: null,
+    confirm: null,
   }
 }
 
@@ -230,6 +243,49 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
   }
   const persist = () => saveDrafts(get().connectionId, queryTabs().map((t) => ({ title: t.title, sql: t.sql })))
 
+  /** Runs text (base = its offset in the editor); confirmed answers confirm safe mode. */
+  const execute = async (id: string, text: string, base: number, confirmed: boolean) => {
+    const tab = findQuery(id)
+    if (!tab) return
+    const requestId = `run-${Date.now().toString(36)}-${nextSeq()}`
+    patch(id, { running: true, requestId, error: null, confirm: null })
+    try {
+      let editorId = tab.editorId
+      if (!editorId) {
+        editorId = await api.openEditor(get().sessionId)
+        patch(id, { editorId })
+      }
+      const result = await api.execute(editorId, requestId, text, {
+        maxRows: tab.maxRows,
+        continueOnError: tab.continueOnError,
+        baseOffset: base,
+        confirmed,
+      })
+      if (isDisposed() || findQuery(id)?.requestId !== requestId) return
+      if (result.needsConfirm) {
+        patch(id, { running: false, requestId: null, confirm: { text, base, statements: result.writeStatements ?? [] } })
+        return
+      }
+      const errPos = firstErrorPosition(result)
+      patch(id, {
+        running: false,
+        requestId: null,
+        result,
+        activeResult: initialResultTab(result),
+        sorts: {},
+        selectedRow: null,
+        tx: result.tx,
+        editorRequest: errPos ? { seq: nextSeq(), type: 'error', ...errPos } : findQuery(id)?.editorRequest ?? null,
+      })
+    } catch (err) {
+      if (isDisposed() || findQuery(id)?.requestId !== requestId) return
+      const message = errorMessage(err)
+      // The backend editor is gone (e.g. closed): open a new one next time.
+      const lost = /editor not found/i.test(message)
+      patch(id, { running: false, requestId: null, error: message, ...(lost ? { editorId: null, tx: null } : {}) })
+    }
+  }
+
   const actions: Omit<QueryState, 'historyOpen' | 'completion' | 'completionLoading'> = {
     newQueryTab(sql = '') {
       const tab = newQueryTabState(nextQueryTitle(queryTabs().map((t) => t.title)), sql)
@@ -292,38 +348,19 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
         }
       }
       if (!text.trim()) return
-      const requestId = `run-${Date.now().toString(36)}-${nextSeq()}`
-      patch(id, { running: true, requestId, error: null })
-      try {
-        let editorId = tab.editorId
-        if (!editorId) {
-          editorId = await api.openEditor(get().sessionId)
-          patch(id, { editorId })
-        }
-        const result = await api.execute(editorId, requestId, text, {
-          maxRows: tab.maxRows,
-          continueOnError: tab.continueOnError,
-          baseOffset: base,
-        })
-        if (isDisposed() || findQuery(id)?.requestId !== requestId) return
-        const errPos = firstErrorPosition(result)
-        patch(id, {
-          running: false,
-          requestId: null,
-          result,
-          activeResult: initialResultTab(result),
-          sorts: {},
-          selectedRow: null,
-          tx: result.tx,
-          editorRequest: errPos ? { seq: nextSeq(), type: 'error', ...errPos } : findQuery(id)?.editorRequest ?? null,
-        })
-      } catch (err) {
-        if (isDisposed() || findQuery(id)?.requestId !== requestId) return
-        const message = errorMessage(err)
-        // The backend editor is gone (e.g. closed): open a new one next time.
-        const lost = /editor not found/i.test(message)
-        patch(id, { running: false, requestId: null, error: message, ...(lost ? { editorId: null, tx: null } : {}) })
-      }
+      await execute(id, text, base, false)
+    },
+
+    async confirmRun(id) {
+      const tab = findQuery(id)
+      if (!tab?.confirm || tab.running) return
+      const { text, base } = tab.confirm
+      patch(id, { confirm: null })
+      await execute(id, text, base, true)
+    },
+
+    cancelConfirm(id) {
+      patch(id, { confirm: null })
     },
 
     cancelQuery(id) {

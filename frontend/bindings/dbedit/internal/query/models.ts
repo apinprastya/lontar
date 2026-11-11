@@ -52,6 +52,13 @@ export interface ExecOptions {
      * every reported offset.
      */
     "baseOffset": number;
+
+    /**
+     * Confirmed is the user's confirmation of the write statements of a
+     * run on a connection in "confirm" safe mode (see
+     * ExecResult.NeedsConfirm). It is ignored in other modes.
+     */
+    "confirmed": boolean;
 }
 
 /**
@@ -74,6 +81,14 @@ export interface ExecResult {
      */
     "sessionReset": boolean;
     "cancelled": boolean;
+
+    /**
+     * NeedsConfirm reports that nothing was run: the connection is in
+     * "confirm" safe mode and the script contains the WriteStatements.
+     * Run it again with ExecOptions.Confirmed to execute it.
+     */
+    "needsConfirm": boolean;
+    "writeStatements": string[] | null;
 }
 
 /**
@@ -165,6 +180,16 @@ export interface ResultColumn {
     "type": string;
     "isPK": boolean;
     "nullable": boolean;
+
+    /**
+     * HasDefault reports a column default (table pages only).
+     */
+    "hasDefault"?: boolean;
+
+    /**
+     * EnumValues lists an enum column's values (table pages only).
+     */
+    "enumValues"?: string[] | null;
 }
 
 /**

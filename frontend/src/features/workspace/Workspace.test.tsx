@@ -8,14 +8,14 @@ vi.mock('@glideapps/glide-data-grid', async (importOriginal) => {
   const real = await importOriginal<typeof import('@glideapps/glide-data-grid')>()
   return {
     ...real,
-    DataEditor: (p: {
+    DataEditor: (await import('react')).forwardRef((p: {
       columns: { title: string }[]
       rows: number
       getCellContent(c: [number, number]): { displayData: string }
       onHeaderClicked(i: number, e: { shiftKey: boolean }): void
       onGridSelectionChange(s: unknown): void
       onKeyDown(e: unknown): void
-    }) => (
+    }, _ref: unknown) => (
       <div
         data-testid="fake-grid"
         tabIndex={0}
@@ -42,7 +42,7 @@ vi.mock('@glideapps/glide-data-grid', async (importOriginal) => {
           </div>
         ))}
       </div>
-    ),
+    )),
   }
 })
 

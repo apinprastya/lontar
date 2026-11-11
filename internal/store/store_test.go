@@ -197,7 +197,7 @@ func TestVersionHandling(t *testing.T) {
 		}
 	}
 
-	write(`{"version": 2, "connections": []}`)
+	write(`{"version": 3, "connections": []}`)
 	if _, err := s.List(); !errors.Is(err, ErrNewerVersion) {
 		t.Fatalf("err = %v, want ErrNewerVersion", err)
 	}
@@ -205,7 +205,7 @@ func TestVersionHandling(t *testing.T) {
 		t.Fatalf("Save must refuse to overwrite a newer file, err = %v", err)
 	}
 	data, _ := os.ReadFile(s.Path())
-	if !strings.Contains(string(data), `"version": 2`) {
+	if !strings.Contains(string(data), `"version": 3`) {
 		t.Fatal("newer file was modified")
 	}
 
@@ -497,5 +497,82 @@ func TestCloneIsDeep(t *testing.T) {
 	d.SSL.Mode = "disable"
 	if c.Options["a"] != "1" || c.SSH.Host != "h" || c.SSL.Mode != "require" {
 		t.Fatal("clone shares state")
+	}
+}
+
+func TestMigrateV1ToV2(t *testing.T) {
+	s, _ := newTestStore(t)
+	if err := os.MkdirAll(s.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	v1 := `{"version":1,"connections":[
+	  {"id":"a","name":"A","kind":"postgres","host":"h","tag":"prod"},
+	  {"id":"b","name":"B","kind":"sqlite","filePath":"/x.db","tag":"none","readOnly":true}]}`
+	if err := os.WriteFile(s.Path(), []byte(v1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range list {
+		if c.SafeMode != SafeOff {
+			t.Fatalf("%s: safeMode = %q, want off", c.ID, c.SafeMode)
+		}
+	}
+	// Reading never rewrites the file.
+	if data, _ := os.ReadFile(s.Path()); !strings.Contains(string(data), `"version":1`) {
+		t.Fatal("load must not rewrite the file")
+	}
+	// The next write stores version 2 with the field.
+	a, _ := s.Get("a")
+	a.SafeMode = SafeConfirm
+	if _, err := s.Save(a, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(s.Path())
+	var f map[string]any
+	if err := json.Unmarshal(data, &f); err != nil {
+		t.Fatal(err)
+	}
+	if f["version"] != float64(2) {
+		t.Fatalf("version = %v", f["version"])
+	}
+	conns := f["connections"].([]any)
+	got := map[string]string{}
+	for _, c := range conns {
+		m := c.(map[string]any)
+		got[m["id"].(string)] = m["safeMode"].(string)
+	}
+	if got["a"] != "confirm" || got["b"] != "off" {
+		t.Fatalf("safe modes = %v", got)
+	}
+}
+
+func TestSafeModeValidation(t *testing.T) {
+	c := Connection{Name: "x", Kind: "postgres", Host: "h"}
+	c.Normalize()
+	if c.SafeMode != SafeOff {
+		t.Fatalf("default = %q", c.SafeMode)
+	}
+	for _, m := range SafeModes {
+		c.SafeMode = m
+		if err := c.Validate(); err != nil {
+			t.Fatalf("%s: %v", m, err)
+		}
+	}
+	c.SafeMode = "paranoid"
+	var ve *ValidationError
+	if err := c.Validate(); !errors.As(err, &ve) || ve.Field != "safeMode" {
+		t.Fatalf("err = %v", err)
+	}
+	// Read-only safe mode opens the driver read-only on every engine.
+	c.SafeMode = SafeReadOnly
+	if !c.DriverConfig().ReadOnly {
+		t.Fatal("readonly safe mode must set driver ReadOnly")
+	}
+	c.SafeMode = SafeConfirm
+	if c.DriverConfig().ReadOnly {
+		t.Fatal("confirm mode must not be read-only")
 	}
 }

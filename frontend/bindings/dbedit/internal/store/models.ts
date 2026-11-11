@@ -29,6 +29,12 @@ export interface Connection {
     "color"?: string;
 
     /**
+     * SafeMode defaults to SafeOff (Normalize). The UI suggests
+     * SafeConfirm for production-tagged connections.
+     */
+    "safeMode": SafeMode;
+
+    /**
      * Optional, added in later milestones; nil means "not configured".
      */
     "ssh"?: SSHConfig | null;
@@ -77,6 +83,37 @@ export interface SSLConfig {
     "certFile"?: string;
     "keyFile"?: string;
 }
+
+/**
+ * SafeMode guards a connection against accidental writes.
+ */
+export enum SafeMode {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * Safe modes.
+     *
+     * SafeOff: no restrictions.
+     */
+    SafeOff = "off",
+
+    /**
+     * SafeConfirm: SQL editor runs that contain a write and every commit of
+     * staged grid edits need an explicit confirmation in the UI.
+     */
+    SafeConfirm = "confirm",
+
+    /**
+     * SafeReadOnly: the session is opened read-only at the database level
+     * (PostgreSQL default_transaction_read_only, MySQL/MariaDB
+     * transaction_read_only / tx_read_only, SQLite mode=ro) and the app
+     * refuses to apply grid edits.
+     */
+    SafeReadOnly = "readonly",
+};
 
 /**
  * Tag classifies a connection's environment. It drives the colour strip in

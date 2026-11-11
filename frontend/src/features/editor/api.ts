@@ -46,6 +46,8 @@ export const editorApi: EditorApi = {
     return {
       ...res,
       notices: res.notices ?? [],
+      needsConfirm: res.needsConfirm ?? false,
+      writeStatements: res.writeStatements ?? [],
       statements: (res.statements ?? []).map((s) => ({
         ...s,
         resultSets: (s.resultSets ?? []).map(toResultSet),

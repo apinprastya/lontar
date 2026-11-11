@@ -58,8 +58,11 @@ type Config struct {
 	FilePath string
 	// CreateIfMissing allows a file-based database to be created on open.
 	CreateIfMissing bool
-	// ReadOnly opens the database read-only. Currently honoured by SQLite
-	// (mode=ro); server drivers get read-only sessions with safe mode (M4).
+	// ReadOnly opens the database read-only, enforced by the server or
+	// engine: SQLite mode=ro; PostgreSQL default_transaction_read_only=on;
+	// MySQL transaction_read_only=1; MariaDB tx_read_only=1 (session
+	// variables set on every new connection). Set by the connection's
+	// read-only flag (SQLite) or its "readonly" safe mode.
 	ReadOnly bool
 
 	// Options are extra driver parameters (e.g. "sslmode" for PostgreSQL,

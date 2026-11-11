@@ -37,6 +37,10 @@ type ExecOptions struct {
 	// UTF-16 code units, i.e. JavaScript string indices); it is added to
 	// every reported offset.
 	BaseOffset int `json:"baseOffset"`
+	// Confirmed is the user's confirmation of the write statements of a
+	// run on a connection in "confirm" safe mode (see
+	// ExecResult.NeedsConfirm). It is ignored in other modes.
+	Confirmed bool `json:"confirmed"`
 }
 
 // NormalizeMaxRows applies the default and the upper bound.
@@ -137,6 +141,11 @@ type ExecResult struct {
 	// from earlier runs are gone.
 	SessionReset bool `json:"sessionReset"`
 	Cancelled    bool `json:"cancelled"`
+	// NeedsConfirm reports that nothing was run: the connection is in
+	// "confirm" safe mode and the script contains the WriteStatements.
+	// Run it again with ExecOptions.Confirmed to execute it.
+	NeedsConfirm    bool     `json:"needsConfirm"`
+	WriteStatements []string `json:"writeStatements"`
 }
 
 // FirstError returns the first failed statement's error (nil if none).

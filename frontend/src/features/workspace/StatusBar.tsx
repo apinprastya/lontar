@@ -19,17 +19,48 @@ export function rowRangeText(tab: Pick<TabState, 'offset' | 'rows' | 'totalCount
   return tab.hasMore ? `${range} of many` : range
 }
 
+/** Staged edits of the active table tab. */
+export interface PendingStatus {
+  count: number
+  committing: boolean
+  previewLoading: boolean
+  /** Label of the commit shortcut, e.g. "Ctrl+S". */
+  commitHint: string
+  onPreview(): void
+  onCommit(): void
+  onDiscard(): void
+}
+
 export interface StatusBarProps {
   tab: Tab | null
   serverVersion: string
   onPrev(): void
   onNext(): void
+  pending?: PendingStatus | null
 }
 
-/** Bottom bar: row range, query time and paging buttons. */
-export default function StatusBar({ tab, serverVersion, onPrev, onNext }: StatusBarProps) {
+export function pendingText(n: number): string {
+  return `${n.toLocaleString('en-US')} pending change${n === 1 ? '' : 's'}`
+}
+
+/** Bottom bar: row range, query time, paging and pending-change actions. */
+export default function StatusBar({ tab, serverVersion, onPrev, onNext, pending }: StatusBarProps) {
   return (
     <footer className="statusbar ws-statusbar" role="status">
+      {pending && pending.count > 0 && (
+        <span className="pending-actions" data-testid="pending">
+          <span className="pending-count">{pendingText(pending.count)}</span>
+          <button type="button" onClick={pending.onDiscard} disabled={pending.committing}>
+            Discard
+          </button>
+          <button type="button" onClick={pending.onPreview} disabled={pending.committing || pending.previewLoading}>
+            Preview SQL
+          </button>
+          <button type="button" className="primary" onClick={pending.onCommit} disabled={pending.committing} title={`Commit (${pending.commitHint})`}>
+            {pending.committing ? 'Committing…' : 'Commit'}
+          </button>
+        </span>
+      )}
       {tab?.kind === 'query' && <QueryStatus tab={tab} />}
       {tab?.kind === 'table' && (
         <>

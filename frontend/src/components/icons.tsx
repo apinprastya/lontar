@@ -57,3 +57,21 @@ export function KeyIcon(p: IconProps) {
     </Svg>
   )
 }
+
+export function LockIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="currentColor" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    </Svg>
+  )
+}
+
+export function ShieldIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M8 1.5l5.5 2v4c0 3.5-2.4 6-5.5 7-3.1-1-5.5-3.5-5.5-7v-4z" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M5.5 8l1.8 1.8L10.8 6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Svg>
+  )
+}

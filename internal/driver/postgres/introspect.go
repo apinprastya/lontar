@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"dbedit/internal/driver"
@@ -96,7 +97,9 @@ func (*Driver) Columns(ctx context.Context, db *sql.DB, schema, table string) ([
 		        NOT a.attnotnull,
 		        pg_catalog.pg_get_expr(d.adbin, d.adrelid),
 		        COALESCE((SELECT k.ord FROM unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
-		                  WHERE k.attnum = a.attnum), 0)
+		                  WHERE k.attnum = a.attnum), 0),
+		        (SELECT array_to_json(array_agg(e.enumlabel ORDER BY e.enumsortorder))::text
+		         FROM pg_catalog.pg_enum e WHERE e.enumtypid = a.atttypid)
 		 FROM pg_catalog.pg_attribute a
 		 JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 		 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -113,14 +116,19 @@ func (*Driver) Columns(ctx context.Context, db *sql.DB, schema, table string) ([
 	out := []driver.Column{}
 	for rows.Next() {
 		var (
-			c   driver.Column
-			def sql.NullString
+			c         driver.Column
+			def, enum sql.NullString
 		)
-		if err := rows.Scan(&c.Name, &c.DataType, &c.Nullable, &def, &c.PKPosition); err != nil {
+		if err := rows.Scan(&c.Name, &c.DataType, &c.Nullable, &def, &c.PKPosition, &enum); err != nil {
 			return nil, fmt.Errorf("postgres: list columns: %w", err)
 		}
 		if def.Valid {
 			c.Default = &def.String
+		}
+		if enum.Valid {
+			if err := json.Unmarshal([]byte(enum.String), &c.EnumValues); err != nil {
+				return nil, fmt.Errorf("postgres: enum labels of %s: %w", c.Name, err)
+			}
 		}
 		c.IsPrimaryKey = c.PKPosition > 0
 		c.Ordinal = len(out) + 1

@@ -26,6 +26,12 @@ export interface Column {
      * column is not part of it).
      */
     "pkPosition": number;
+
+    /**
+     * EnumValues lists the allowed values of an enum column in declaration
+     * order (PostgreSQL enum types, MySQL/MariaDB ENUM); nil otherwise.
+     */
+    "enumValues"?: string[] | null;
 }
 
 /**

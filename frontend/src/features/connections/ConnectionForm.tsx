@@ -1,5 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
 import { errorMessage } from '../../lib/errors'
+import { SAFE_MODES, type SafeMode } from '../edits/types'
 import { matchesShortcut, shortcutLabel } from '../../lib/mod'
 import {
   Connection,
@@ -37,6 +38,7 @@ interface Draft {
   createIfMissing: boolean
   tag: Tag
   color: string
+  safeMode: SafeMode
 }
 
 type Errors = Partial<Record<keyof Draft, string>>
@@ -64,6 +66,7 @@ function toDraft(c: Connection | undefined, drivers: DriverInfo[]): Draft {
     createIfMissing: c?.createIfMissing ?? false,
     tag: c?.tag ?? 'none',
     color: c?.color ?? '',
+    safeMode: c?.safeMode ?? 'off',
   }
 }
 
@@ -102,7 +105,16 @@ function toConnection(d: Draft, initial: Connection | undefined): Connection {
     createIfMissing: file && d.createIfMissing,
     tag: d.tag,
     color: d.color,
+    safeMode: d.safeMode,
   }
+}
+
+/**
+ * Tag change: choosing Production suggests confirm safe mode (a UI default
+ * only; the user can change it), unless a stricter mode is already set.
+ */
+export function safeModeForTag(tag: Tag, current: SafeMode): SafeMode {
+  return tag === 'prod' && current === 'off' ? 'confirm' : current
 }
 
 export default function ConnectionForm({ initial, drivers, platform, onSave, onTest, onConnect, onClose }: ConnectionFormProps) {
@@ -340,13 +352,33 @@ export default function ConnectionForm({ initial, drivers, platform, onSave, onT
           )}
 
           <label htmlFor={field('tag')}>Tag</label>
-          <select id={field('tag')} value={draft.tag} onChange={(e) => update('tag', e.target.value as Tag)}>
+          <select
+            id={field('tag')}
+            value={draft.tag}
+            onChange={(e) => {
+              const tag = e.target.value as Tag
+              update('tag', tag)
+              update('safeMode', safeModeForTag(tag, draft.safeMode))
+            }}
+          >
             {TAGS.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
               </option>
             ))}
           </select>
+
+          <label htmlFor={field('safeMode')}>Safe mode</label>
+          <div className="field">
+            <select id={field('safeMode')} value={draft.safeMode} onChange={(e) => update('safeMode', e.target.value as SafeMode)}>
+              {SAFE_MODES.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <span className="hint">{SAFE_MODES.find((m) => m.value === draft.safeMode)?.hint}</span>
+          </div>
 
           <span id={`${uid}-color-label`}>Colour</span>
           <div className="swatches" role="radiogroup" aria-labelledby={`${uid}-color-label`}>

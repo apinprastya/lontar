@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DRIVERS, makeConnection } from '../../test/mockBindings'
-import ConnectionForm, { ConnectionFormProps, GO_ZERO_TIME, validateDraft } from './ConnectionForm'
+import ConnectionForm, { ConnectionFormProps, GO_ZERO_TIME, safeModeForTag, validateDraft } from './ConnectionForm'
 import type { Connection } from './types'
 
 function setup(over: Partial<ConnectionFormProps> = {}) {
@@ -118,7 +118,7 @@ describe('ConnectionForm', () => {
   })
 
   it('validateDraft covers SQLite and port edge cases', () => {
-    const base = { name: 'n', kind: 'postgres' as const, host: 'h', port: '1', user: '', database: '', filePath: '', readOnly: false, createIfMissing: false, tag: 'none' as const, color: '' }
+    const base = { name: 'n', kind: 'postgres' as const, host: 'h', port: '1', user: '', database: '', filePath: '', readOnly: false, createIfMissing: false, tag: 'none' as const, color: '', safeMode: 'off' as const }
     expect(validateDraft(base)).toEqual({})
     expect(validateDraft({ ...base, port: '65535' })).toEqual({})
     expect(validateDraft({ ...base, port: '0' }).port).toBeDefined()
@@ -242,5 +242,30 @@ describe('ConnectionForm', () => {
     setup({ initial: makeConnection({ kind: 'sqlite', host: undefined, port: undefined, filePath: '/data/a.db', readOnly: true }) })
     expect(field('Database file').value).toBe('/data/a.db')
     expect(field('Read-only')).toBeChecked()
+  })
+
+  it('chooses a safe mode; Production suggests confirm', async () => {
+    const { props, user } = setup()
+    await user.type(field('Name'), 'Prod')
+    expect(field('Safe mode').value).toBe('off')
+    await user.selectOptions(field('Tag'), 'prod')
+    expect(field('Safe mode').value).toBe('confirm')
+    expect(screen.getByText('Ask before running writes and before committing edits')).toBeInTheDocument()
+    // The user can still change it.
+    await user.selectOptions(field('Safe mode'), 'readonly')
+    await user.selectOptions(field('Tag'), 'dev')
+    expect(field('Safe mode').value).toBe('readonly')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ tag: 'dev', safeMode: 'readonly' }), null)
+  })
+
+  it('keeps a saved safe mode when editing', async () => {
+    const { props, user } = setup({ initial: makeConnection({ tag: 'prod', safeMode: 'off' }) })
+    expect(field('Safe mode').value).toBe('off')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ safeMode: 'off' }), null)
+    expect(safeModeForTag('prod', 'off')).toBe('confirm')
+    expect(safeModeForTag('prod', 'readonly')).toBe('readonly')
+    expect(safeModeForTag('dev', 'off')).toBe('off')
   })
 })

@@ -20,17 +20,17 @@ describe('editorApi', () => {
       sessionReset: false,
       cancelled: false,
     })
-    const res = await editorApi.execute('e', 'r', 'x; y', { maxRows: 10, continueOnError: true, baseOffset: 4 })
-    expect(EditorService.Execute).toHaveBeenCalledWith('e', 'r', 'x; y', { maxRows: 10, continueOnError: true, baseOffset: 4 })
+    const res = await editorApi.execute('e', 'r', 'x; y', { maxRows: 10, continueOnError: true, baseOffset: 4, confirmed: false })
+    expect(EditorService.Execute).toHaveBeenCalledWith('e', 'r', 'x; y', { maxRows: 10, continueOnError: true, baseOffset: 4, confirmed: false })
     expect(res.notices).toEqual([])
     expect(res.statements[0].resultSets[0]).toEqual({ id: 'r', columns: [], rows: [[], [{ k: 'num', v: 1 }]], truncated: false, canLoadMore: false })
     expect(res.statements[0].rowsAffected).toBeNull()
     expect(res.statements[1].resultSets).toEqual([])
     expect(res.statements[1].error).toEqual({ message: 'm', code: 'c', position: null })
     EditorService.Execute.mockResolvedValue({ statements: null, notices: [] })
-    expect((await editorApi.execute('e', 'r', '', { maxRows: 1, continueOnError: false, baseOffset: 0 })).statements).toEqual([])
+    expect((await editorApi.execute('e', 'r', '', { maxRows: 1, continueOnError: false, baseOffset: 0, confirmed: false })).statements).toEqual([])
     EditorService.Execute.mockResolvedValue(null)
-    await expect(editorApi.execute('e', 'r', '', { maxRows: 1, continueOnError: false, baseOffset: 0 })).rejects.toThrow('empty response')
+    await expect(editorApi.execute('e', 'r', '', { maxRows: 1, continueOnError: false, baseOffset: 0, confirmed: false })).rejects.toThrow('empty response')
   })
 
   it('wraps the other editor calls', async () => {

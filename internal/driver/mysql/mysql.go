@@ -66,8 +66,12 @@ func (d *Driver) Config(cfg driver.Config, password string) (*gomysql.Config, er
 	mc.DBName = cfg.Database
 	mc.ParseTime = true
 	mc.Timeout = cfg.Timeout()
+	// UPDATE reports matched rather than changed rows, like PostgreSQL and
+	// SQLite: committing grid edits checks that every UPDATE hit exactly
+	// one row, and an update that writes the current value must count.
+	mc.ClientFoundRows = true
 	if len(cfg.Options) == 0 {
-		return mc, nil
+		return d.readOnly(mc, cfg), nil
 	}
 	// Route options through the driver's own DSN parser so known keys
 	// (charset, tls, readTimeout, ...) are validated and applied exactly as
@@ -84,7 +88,36 @@ func (d *Driver) Config(cfg driver.Config, password string) (*gomysql.Config, er
 	// Never rely on the DSN round trip for the identity fields: keep them
 	// exactly as given, whatever characters they contain.
 	parsed.User, parsed.Passwd, parsed.DBName, parsed.Addr = mc.User, mc.Passwd, mc.DBName, mc.Addr
-	return parsed, nil
+	parsed.ClientFoundRows = true
+	return d.readOnly(parsed, cfg), nil
+}
+
+// ReadOnlyVariable returns the session variable that makes transactions
+// read-only: MySQL 8 has transaction_read_only (tx_read_only was removed in
+// 8.0.3); MariaDB has tx_read_only in every version (transaction_read_only
+// only from 11.1). The choice follows the connection's kind.
+func ReadOnlyVariable(kind driver.Kind) string {
+	if kind == driver.MariaDB {
+		return "tx_read_only"
+	}
+	return "transaction_read_only"
+}
+
+// readOnly adds the read-only session variable for cfg.ReadOnly. The driver
+// sends it as SET on every new connection, so the server rejects writes
+// (error 1792). It is set last so that Options cannot override it.
+func (d *Driver) readOnly(mc *gomysql.Config, cfg driver.Config) *gomysql.Config {
+	if !cfg.ReadOnly {
+		return mc
+	}
+	if mc.Params == nil {
+		mc.Params = map[string]string{}
+	}
+	for _, k := range []string{"transaction_read_only", "tx_read_only"} {
+		delete(mc.Params, k)
+	}
+	mc.Params[ReadOnlyVariable(d.kind)] = "1"
+	return mc
 }
 
 // BuildDSN implements driver.Driver using mysql.Config.FormatDSN, which

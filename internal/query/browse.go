@@ -99,6 +99,10 @@ type ResultColumn struct {
 	Type     string `json:"type"`
 	IsPK     bool   `json:"isPK"`
 	Nullable bool   `json:"nullable"`
+	// HasDefault reports a column default (table pages only).
+	HasDefault bool `json:"hasDefault,omitempty"`
+	// EnumValues lists an enum column's values (table pages only).
+	EnumValues []string `json:"enumValues,omitempty"`
 }
 
 // Page is one page of rows.
@@ -368,7 +372,8 @@ func FetchTable(ctx context.Context, db *sql.DB, e Engine, req Request) (*Page, 
 	cats := make([]values.Category, len(cols))
 	types, _ := rows.ColumnTypes()
 	for i, c := range cols {
-		page.Columns[i] = ResultColumn{Name: c.Name, Type: c.DataType, IsPK: c.IsPrimaryKey, Nullable: c.Nullable}
+		page.Columns[i] = ResultColumn{Name: c.Name, Type: c.DataType, IsPK: c.IsPrimaryKey, Nullable: c.Nullable,
+			HasDefault: c.Default != nil, EnumValues: c.EnumValues}
 		// The driver's wire type is the most precise hint for decoding;
 		// fall back to the declared type (SQLite expressions, etc.).
 		cats[i] = values.Categorize(c.DataType)

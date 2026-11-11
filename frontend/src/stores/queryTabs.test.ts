@@ -131,7 +131,7 @@ describe('query tabs in the workspace store', () => {
     st().setEditorSelection(id, 17, { from: 10, to: 18 })
     await st().runQuery(id, 'current')
     expect(editor.openEditor).toHaveBeenCalledWith('s1')
-    expect(editor.execute).toHaveBeenLastCalledWith('ed-1', expect.stringMatching(/^run-/), 'SELECT 2', { maxRows: 1000, continueOnError: false, baseOffset: 10 })
+    expect(editor.execute).toHaveBeenLastCalledWith('ed-1', expect.stringMatching(/^run-/), 'SELECT 2', { maxRows: 1000, continueOnError: false, baseOffset: 10, confirmed: false })
     expect(editor.statementAt).not.toHaveBeenCalled()
 
     // No selection: the statement under the cursor (from Go).
@@ -142,13 +142,13 @@ describe('query tabs in the workspace store', () => {
     st().setContinueOnError(id, true)
     await st().runQuery(id, 'current')
     expect(editor.statementAt).toHaveBeenCalledWith('postgres', 'SELECT 1;\nSELECT 2;', 3)
-    expect(editor.execute).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1', { maxRows: 50, continueOnError: true, baseOffset: 0 })
+    expect(editor.execute).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1', { maxRows: 50, continueOnError: true, baseOffset: 0, confirmed: false })
     expect(editor.openEditor).toHaveBeenCalledTimes(1) // reused
 
     // All ignores the selection.
     st().setEditorSelection(id, 2, { from: 0, to: 2 })
     await st().runQuery(id, 'all')
-    expect(editor.execute).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1;\nSELECT 2;', expect.objectContaining({ baseOffset: 0 }))
+    expect(editor.execute).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1;\nSELECT 2;', expect.objectContaining({ baseOffset: 0, confirmed: false }))
     expect(q().result?.statements).toHaveLength(1)
     expect(q().activeResult).toBe('rs-1')
     expect(q().running).toBe(false)

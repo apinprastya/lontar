@@ -54,6 +54,11 @@ export const EditorService = {
   CompletionColumns: vi.fn<(sessionId: string, schema: string, table: string) => Promise<unknown>>(),
 }
 
+export const EditService = {
+  Preview: vi.fn<(sessionId: string, cs: unknown) => Promise<unknown>>(),
+  Apply: vi.fn<(sessionId: string, cs: unknown) => Promise<unknown>>(),
+}
+
 export const HistoryService = {
   List: vi.fn<(connectionId: string, search: string, limit: number, offset: number) => Promise<unknown>>(),
   Delete: vi.fn<(id: number) => Promise<void>>(),
@@ -105,6 +110,7 @@ export function resetBindings() {
     ...Object.values(BrowseService),
     ...Object.values(EditorService),
     ...Object.values(HistoryService),
+    ...Object.values(EditService),
   ])
     fn.mockReset()
   AppService.Version.mockResolvedValue('0.0.1')

@@ -4,6 +4,8 @@
  * on the wire and nicer to work with. api.ts converts at the boundary.
  */
 
+import type { SafeMode } from '../edits/types'
+
 export type Kind = 'postgres' | 'mysql' | 'mariadb' | 'sqlite'
 export type Tag = 'none' | 'local' | 'dev' | 'staging' | 'prod'
 
@@ -21,6 +23,8 @@ export interface Connection {
   options?: Record<string, string | undefined> | null
   tag: Tag
   color?: string
+  /** Guards against accidental writes; "off" when absent. */
+  safeMode?: SafeMode
   ssh?: unknown
   ssl?: unknown
   /** Set by the backend; the password itself never reaches the frontend. */
@@ -43,6 +47,8 @@ export interface SessionInfo {
   kind: Kind
   serverVersion: string
   connectedAt: string
+  /** Safe mode of the session (fixed until reconnect). */
+  safeMode?: SafeMode
 }
 
 export const TAGS: { value: Tag; label: string; color: string }[] = [

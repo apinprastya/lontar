@@ -37,6 +37,9 @@ const DefaultPort = 5432
 // ApplicationName is reported to the server (visible in pg_stat_activity).
 const ApplicationName = "dbedit"
 
+// ReadOnlyParam is the run-time parameter that makes sessions read-only.
+const ReadOnlyParam = "default_transaction_read_only"
+
 // reserved option keys: these are set from dedicated Config fields, and
 // credentials must never be stored as plain options.
 var reserved = []string{"host", "hostaddr", "port", "user", "password", "passfile", "dbname", "database"}
@@ -87,6 +90,13 @@ func (d *Driver) BuildDSN(cfg driver.Config, password string) (string, error) {
 	q.Set("application_name", ApplicationName)
 	for k, v := range cfg.Options {
 		q.Set(k, v)
+	}
+	if cfg.ReadOnly {
+		// A runtime parameter sent at connection start: every transaction
+		// of every pooled connection is read-only, so the server rejects
+		// writes ("cannot execute INSERT in a read-only transaction"). Set
+		// after Options so that they cannot turn it off.
+		q.Set(ReadOnlyParam, "on")
 	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil

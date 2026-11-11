@@ -126,6 +126,7 @@ func (d *Driver) Columns(ctx context.Context, db *sql.DB, schema, table string) 
 			return nil, fmt.Errorf("%s: list columns: %w", d.kind, err)
 		}
 		c.Nullable = nullable == "YES"
+		c.EnumValues = ParseEnum(c.DataType)
 		c.PKPosition = pkPos[c.Name]
 		c.IsPrimaryKey = c.PKPosition > 0
 		if def.Valid {
@@ -158,4 +159,56 @@ func (d *Driver) SchemaColumns(ctx context.Context, db *sql.DB, schema string) (
 		return nil, fmt.Errorf("%s: list schema columns: %w", d.kind, err)
 	}
 	return out, nil
+}
+
+// ParseEnum returns the values of an ENUM column type as reported by
+// information_schema.COLUMNS.COLUMN_TYPE, for example enum('a','b'). Inside a
+// value an embedded quote is doubled and a backslash is escaped. It returns
+// nil for other types or malformed input.
+func ParseEnum(columnType string) []string {
+	t := strings.TrimSpace(columnType)
+	if len(t) < 6 || !strings.EqualFold(t[:5], "enum(") || !strings.HasSuffix(t, ")") {
+		return nil
+	}
+	body := t[5 : len(t)-1]
+	out := []string{}
+	for i := 0; i < len(body); {
+		if body[i] != '\'' {
+			return nil
+		}
+		var sb strings.Builder
+		i++
+		closed := false
+		for i < len(body) {
+			ch := body[i]
+			switch {
+			case ch == '\'' && i+1 < len(body) && body[i+1] == '\'':
+				sb.WriteByte('\'')
+				i += 2
+			case ch == '\'':
+				i++
+				closed = true
+			case ch == '\\' && i+1 < len(body):
+				sb.WriteByte(body[i+1])
+				i += 2
+			default:
+				sb.WriteByte(ch)
+				i++
+			}
+			if closed {
+				break
+			}
+		}
+		if !closed {
+			return nil
+		}
+		out = append(out, sb.String())
+		if i < len(body) {
+			if body[i] != ',' {
+				return nil
+			}
+			i++
+		}
+	}
+	return out
 }

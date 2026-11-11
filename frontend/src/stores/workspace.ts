@@ -19,6 +19,24 @@ import { editorApi as defaultEditorApi, type EditorApi } from '../features/edito
 import { cycleSort } from '../features/grid/sort'
 import { errorMessage } from '../lib/errors'
 import { createQueryActions, loadDrafts, newQueryTabState, type QueryState, type QueryTabState } from './queryTabs'
+import { editApi as defaultEditApi, type EditApi } from '../features/edits/api'
+import type { EditValue, PreviewStatement, SafeMode } from '../features/edits/types'
+import {
+  buildChangeSet,
+  deleteRows,
+  displayRows,
+  duplicateValues,
+  emptyPending,
+  failedChange,
+  insertRow,
+  isDirty,
+  redo,
+  setCells,
+  undo,
+  type CellChange,
+  type Pending,
+  type RowRef,
+} from './pending'
 
 /** One editable row of the filter bar. */
 export interface FilterRow extends Filter {
@@ -63,7 +81,42 @@ export interface TabState {
   countKey: string | null
   selectedRow: number | null
   columnWidths: Record<string, number>
+
+  /** Staged grid edits (see stores/pending.ts). */
+  pending: Pending
+  committing: boolean
+  /** Last failed commit (the changes are kept). */
+  commitError: string | null
+  /** The staged change the failed commit names. */
+  failed: { key?: string; insertId?: number } | null
+  /** Open preview dialog: the generated display SQL. */
+  preview: PreviewStatement[] | null
+  previewLoading: boolean
 }
+
+/** Why a table tab cannot be edited (null: it can). */
+export function readOnlyReason(tab: Pick<TabState, 'type' | 'columns'>, safeMode: SafeMode): string | null {
+  if (safeMode === 'readonly') return 'This connection is in read-only safe mode. Change it in the connection settings to edit data.'
+  if (tab.type !== 'table') return `This is a ${tab.type}; views are read-only.`
+  if (tab.columns.length > 0 && !tab.columns.some((c) => c.isPK)) return 'This table has no primary key, so its rows cannot be identified for editing. It is read-only.'
+  return null
+}
+
+/** Whether a table tab can be edited now (columns loaded, no reason against it). */
+export function canEdit(tab: Pick<TabState, 'type' | 'columns'>, safeMode: SafeMode): boolean {
+  return tab.columns.length > 0 && readOnlyReason(tab, safeMode) === null
+}
+
+/** A pending "unsaved changes" prompt. */
+export interface Guard {
+  /** Tabs with staged changes that the action would lose. */
+  tabIds: string[]
+  /** Runs the guarded action. */
+  proceed(): void
+  busy: boolean
+}
+
+export type GuardChoice = 'commit' | 'discard' | 'cancel'
 
 /** A tab of the workspace: a table or an SQL editor. */
 export type Tab = TabState | QueryTabState
@@ -121,6 +174,27 @@ export interface WorkspaceState extends QueryState {
   toggleDetail(): void
   setColumnWidth(id: string, column: string, width: number): void
   dispose(): void
+
+  /** The connection's safe mode (fixed for the session). */
+  safeMode: SafeMode
+  guard: Guard | null
+  /** Runs proceed now, or first asks Commit / Discard / Cancel when any of the tabs has staged changes. */
+  guarded(tabIds: string[], proceed: () => void): void
+  resolveGuard(choice: GuardChoice): Promise<void>
+
+  stageCells(id: string, changes: CellChange[]): void
+  addRow(id: string, values?: Record<string, EditValue>): void
+  duplicateRow(id: string, ref: RowRef): void
+  markDeleted(id: string, refs: RowRef[]): void
+  undoEdit(id: string): void
+  redoEdit(id: string): void
+  discardChanges(id: string): void
+  openPreview(id: string): Promise<void>
+  closePreview(id: string): void
+  /** Applies the staged changes; true on success. */
+  commit(id: string): Promise<boolean>
+  /** Mod+S: commits, or opens the preview first in confirm safe mode. */
+  requestCommit(id: string): Promise<void>
 }
 
 export type WorkspaceStore = StoreApi<WorkspaceState>
@@ -183,6 +257,12 @@ function newTab(t: TableInfo, pinned: boolean): TabState {
     countKey: null,
     selectedRow: null,
     columnWidths: {},
+    pending: emptyPending,
+    committing: false,
+    commitError: null,
+    failed: null,
+    preview: null,
+    previewLoading: false,
   }
 }
 
@@ -208,9 +288,15 @@ export interface WorkspaceSession {
   id: string
   kind: Kind
   connectionId?: string
+  safeMode?: SafeMode
 }
 
-export function createWorkspaceStore(session: WorkspaceSession, api: WorkspaceApi, editor: EditorApi = defaultEditorApi): WorkspaceStore {
+export function createWorkspaceStore(
+  session: WorkspaceSession,
+  api: WorkspaceApi,
+  editor: EditorApi = defaultEditorApi,
+  edits: EditApi = defaultEditApi,
+): WorkspaceStore {
   let disposed = false
   const connectionId = session.connectionId ?? ''
   // Query tabs of this connection from the previous visit.
@@ -236,6 +322,18 @@ export function createWorkspaceStore(session: WorkspaceSession, api: WorkspaceAp
     const reload = (id: string, patch: Partial<TabState>) => {
       patchTab(id, { ...patch, pinned: true })
       void get().loadTab(id)
+    }
+
+    const clearNow = (tab: TabState) => {
+      reload(tab.id, {
+        draftFilters: [newFilterRow(tab.columns[0]?.name ?? '')],
+        rawWhere: '',
+        appliedFilters: [],
+        appliedRawWhere: '',
+        offset: 0,
+        totalCount: null,
+        selectedRow: null,
+      })
     }
 
     const countRows = async (id: string) => {
@@ -276,8 +374,144 @@ export function createWorkspaceStore(session: WorkspaceSession, api: WorkspaceAp
       set({ tabs: rest, activeTabId: rest.some((t) => t.id === activeTabId) ? activeTabId : (rest[0]?.id ?? null) })
     }
 
+    /** Table tabs among ids with staged changes. */
+    const dirtyTabs = (ids: string[]) => ids.filter((id) => {
+      const t = findTab(id)
+      return t ? isDirty(t.pending) : false
+    })
+    const allTableIds = () => get().tabs.filter((t) => t.kind === 'table').map((t) => t.id)
+    /** Stages a pending change: pins the tab and clears a stale failure. */
+    const stage = (id: string, fn: (t: TabState) => Pending) => {
+      const tab = findTab(id)
+      if (!tab || !canEdit(tab, get().safeMode)) return
+      const pending = fn(tab)
+      if (pending === tab.pending) return
+      patchTab(id, { pending, pinned: true, failed: null })
+    }
+
     return {
       ...createQueryActions<WorkspaceState>(set, get, editor, () => disposed),
+      safeMode: session.safeMode ?? 'off',
+      guard: null,
+
+      guarded(tabIds, proceed) {
+        const dirty = dirtyTabs(tabIds)
+        if (dirty.length === 0) proceed()
+        else set({ guard: { tabIds: dirty, proceed, busy: false } })
+      },
+
+      async resolveGuard(choice) {
+        const g = get().guard
+        if (!g || g.busy) return
+        if (choice === 'cancel') {
+          set({ guard: null })
+          return
+        }
+        if (choice === 'discard') {
+          for (const id of g.tabIds) patchTab(id, { pending: emptyPending, commitError: null, failed: null })
+          set({ guard: null })
+          g.proceed()
+          return
+        }
+        set({ guard: { ...g, busy: true } })
+        for (const id of g.tabIds) {
+          if (!(await get().commit(id))) {
+            // The failure is shown in the tab; stay where we are.
+            set({ guard: null, activeTabId: id })
+            return
+          }
+        }
+        set({ guard: null })
+        g.proceed()
+      },
+
+      stageCells(id, changes) {
+        stage(id, (t) => setCells(t.pending, t.columns, t.rows, changes))
+      },
+
+      addRow(id, values) {
+        stage(id, (t) => insertRow(t.pending, values).pending)
+      },
+
+      duplicateRow(id, ref) {
+        stage(id, (t) => {
+          const d = displayRows(t.columns, t.rows, t.pending).find((r) =>
+            ref.type === 'row' ? r.ref.type === 'row' && r.ref.index === ref.index : r.ref.type === 'insert' && r.ref.id === ref.id,
+          )
+          return d ? insertRow(t.pending, duplicateValues(t.columns, d, t.pending)).pending : t.pending
+        })
+      },
+
+      markDeleted(id, refs) {
+        stage(id, (t) => deleteRows(t.pending, t.columns, t.rows, refs))
+      },
+
+      undoEdit(id) {
+        stage(id, (t) => undo(t.pending))
+      },
+
+      redoEdit(id) {
+        stage(id, (t) => redo(t.pending))
+      },
+
+      discardChanges(id) {
+        if (findTab(id)) patchTab(id, { pending: emptyPending, commitError: null, failed: null, preview: null })
+      },
+
+      async openPreview(id) {
+        const tab = findTab(id)
+        if (!tab || !isDirty(tab.pending)) return
+        patchTab(id, { previewLoading: true, commitError: null })
+        try {
+          const preview = await edits.preview(get().sessionId, buildChangeSet(tab.schema, tab.table, tab.pending).cs)
+          if (!disposed) patchTab(id, { preview, previewLoading: false })
+        } catch (err) {
+          if (!disposed) patchTab(id, { previewLoading: false, preview: null, commitError: errorMessage(err) })
+        }
+      },
+
+      closePreview(id) {
+        patchTab(id, { preview: null })
+      },
+
+      async commit(id) {
+        const tab = findTab(id)
+        if (!tab || tab.committing) return false
+        if (!isDirty(tab.pending)) return true
+        if (get().safeMode === 'readonly') {
+          patchTab(id, { commitError: 'This connection is in read-only safe mode; nothing was saved.' })
+          return false
+        }
+        const { cs, refs } = buildChangeSet(tab.schema, tab.table, tab.pending)
+        const pending = tab.pending
+        patchTab(id, { committing: true, commitError: null, failed: null })
+        try {
+          const res = await edits.apply(get().sessionId, cs)
+          if (disposed) return false
+          if (res.ok) {
+            // Changes staged while the commit ran stay staged.
+            const cur = findTab(id)
+            const rest = cur && cur.pending !== pending ? cur.pending : emptyPending
+            patchTab(id, { committing: false, pending: rest === pending ? emptyPending : rest, preview: null, totalCount: null })
+            void get().loadTab(id)
+            return true
+          }
+          const f = res.failure
+          patchTab(id, { committing: false, preview: null, commitError: f?.message ?? 'The commit failed; nothing was saved.', failed: failedChange(refs, f) })
+          return false
+        } catch (err) {
+          if (!disposed) patchTab(id, { committing: false, preview: null, commitError: errorMessage(err) })
+          return false
+        }
+      },
+
+      async requestCommit(id) {
+        const tab = findTab(id)
+        if (!tab || !isDirty(tab.pending) || tab.committing) return
+        if (get().safeMode === 'confirm') await get().openPreview(id)
+        else await get().commit(id)
+      },
+
       historyOpen: false,
       completion: null,
       completionLoading: false,
@@ -322,6 +556,11 @@ export function createWorkspaceStore(session: WorkspaceSession, api: WorkspaceAp
 
       async selectDatabase(database) {
         if (database === get().database) return
+        if (dirtyTabs(allTableIds()).length > 0) {
+          // Switching closes the table tabs: ask first.
+          get().guarded(allTableIds(), () => void get().selectDatabase(database))
+          return
+        }
         set({ sidebarError: null, tablesLoading: true })
         try {
           const loc = await api.useDatabase(get().sessionId, database)
@@ -373,6 +612,10 @@ export function createWorkspaceStore(session: WorkspaceSession, api: WorkspaceAp
       },
 
       closeTab(id) {
+        if (dirtyTabs([id]).length > 0) {
+          get().guarded([id], () => get().closeTab(id))
+          return
+        }
         const { tabs, activeTabId } = get()
         const i = tabs.findIndex((t) => t.id === id)
         if (i < 0) return
@@ -442,6 +685,10 @@ export function createWorkspaceStore(session: WorkspaceSession, api: WorkspaceAp
         if (tab?.kind === 'query') {
           await Promise.all([get().refreshTables(), get().completion ? get().loadCompletion(true) : Promise.resolve()])
         } else if (tab) {
+          if (dirtyTabs([tab.id]).length > 0) {
+            get().guarded([tab.id], () => void get().refresh())
+            return
+          }
           patchTab(tab.id, { totalCount: null })
           await Promise.all([get().refreshTables(), get().loadTab(tab.id)])
         } else {
@@ -452,19 +699,27 @@ export function createWorkspaceStore(session: WorkspaceSession, api: WorkspaceAp
       nextPage(id) {
         const tab = findTab(id)
         if (!tab || !tab.hasMore || tab.loading) return
-        reload(id, { offset: tab.offset + tab.limit, selectedRow: null })
+        get().guarded([id], () => {
+          const t = findTab(id)
+          if (t) reload(id, { offset: t.offset + t.limit, selectedRow: null })
+        })
       },
 
       prevPage(id) {
         const tab = findTab(id)
         if (!tab || tab.offset === 0 || tab.loading) return
-        reload(id, { offset: Math.max(0, tab.offset - tab.limit), selectedRow: null })
+        get().guarded([id], () => {
+          const t = findTab(id)
+          if (t) reload(id, { offset: Math.max(0, t.offset - t.limit), selectedRow: null })
+        })
       },
 
       toggleSort(id, column, additive) {
-        const tab = findTab(id)
-        if (!tab) return
-        reload(id, { sort: cycleSort(tab.sort, column, additive), offset: 0, selectedRow: null })
+        if (!findTab(id)) return
+        get().guarded([id], () => {
+          const t = findTab(id)
+          if (t) reload(id, { sort: cycleSort(t.sort, column, additive), offset: 0, selectedRow: null })
+        })
       },
 
       toggleFilterBar(id, open) {
@@ -496,26 +751,22 @@ export function createWorkspaceStore(session: WorkspaceSession, api: WorkspaceAp
       },
 
       applyFilters(id) {
-        const tab = findTab(id)
-        if (!tab) return
-        // Raw mode sends only the typed condition; otherwise only the rows.
-        const appliedFilters = tab.rawMode ? [] : effectiveFilters(tab.draftFilters)
-        const appliedRawWhere = tab.rawMode ? tab.rawWhere.trim() : ''
-        reload(id, { appliedFilters, appliedRawWhere, offset: 0, totalCount: null, selectedRow: null })
+        if (!findTab(id)) return
+        get().guarded([id], () => {
+          const tab = findTab(id)
+          if (!tab) return
+          // Raw mode sends only the typed condition; otherwise only the rows.
+          const appliedFilters = tab.rawMode ? [] : effectiveFilters(tab.draftFilters)
+          const appliedRawWhere = tab.rawMode ? tab.rawWhere.trim() : ''
+          reload(id, { appliedFilters, appliedRawWhere, offset: 0, totalCount: null, selectedRow: null })
+        })
       },
 
       clearFilters(id) {
-        const tab = findTab(id)
-        if (!tab) return
-        const first = tab.columns[0]?.name ?? ''
-        reload(id, {
-          draftFilters: [newFilterRow(first)],
-          rawWhere: '',
-          appliedFilters: [],
-          appliedRawWhere: '',
-          offset: 0,
-          totalCount: null,
-          selectedRow: null,
+        if (!findTab(id)) return
+        get().guarded([id], () => {
+          const tab = findTab(id)
+          if (tab) clearNow(tab)
         })
       },
 

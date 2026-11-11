@@ -18,8 +18,30 @@ import (
 // openSQLiteSession saves an SQLite connection, seeds it and connects.
 func openSQLiteSession(t *testing.T) (*conn.Manager, string) {
 	t.Helper()
+	return openSQLiteSessionMode(t, store.SafeOff)
+}
+
+// openSQLiteSessionMode is openSQLiteSession with a safe mode. The file is
+// seeded before connecting, so read-only sessions work too.
+func openSQLiteSessionMode(t *testing.T, mode store.SafeMode) (*conn.Manager, string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "x.db")
+	seed, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)`,
+		`INSERT INTO t VALUES (1, 'a'), (2, NULL), (3, 'c')`,
+		`CREATE VIEW v AS SELECT name FROM t`,
+	} {
+		if _, err := seed.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = seed.Close()
 	st := store.New(t.TempDir(), store.NewMemorySecretStore())
-	c, err := st.Save(store.Connection{Name: "lite", Kind: driver.SQLite, FilePath: filepath.Join(t.TempDir(), "x.db"), CreateIfMissing: true}, nil)
+	c, err := st.Save(store.Connection{Name: "lite", Kind: driver.SQLite, FilePath: path, SafeMode: mode}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,16 +50,6 @@ func openSQLiteSession(t *testing.T) (*conn.Manager, string) {
 	id, err := m.Connect(context.Background(), c.ID)
 	if err != nil {
 		t.Fatal(err)
-	}
-	s, _ := m.Get(id)
-	for _, q := range []string{
-		`CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)`,
-		`INSERT INTO t VALUES (1, 'a'), (2, NULL), (3, 'c')`,
-		`CREATE VIEW v AS SELECT name FROM t`,
-	} {
-		if _, err := s.DB.Exec(q); err != nil {
-			t.Fatal(err)
-		}
 	}
 	return m, id
 }

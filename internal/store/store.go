@@ -31,7 +31,10 @@ const AppDirName = "dbedit"
 const ConnectionsFile = "connections.json"
 
 // CurrentVersion is the schema version written to connections.json.
-const CurrentVersion = 1
+//
+//	1: M1 (connections, tags, colours, optional SSH/SSL)
+//	2: M4 adds "safeMode" ("off" | "confirm" | "readonly")
+const CurrentVersion = 2
 
 // ErrNotFound is returned for unknown connection IDs.
 var ErrNotFound = errors.New("connection not found")
@@ -104,8 +107,23 @@ func (s *Store) load() (*file, error) {
 	case f.Version < 1:
 		return nil, fmt.Errorf("connections file %s has an invalid version %d", s.Path(), f.Version)
 	}
-	// Future migrations from older versions go here.
+	migrate(&f)
 	return &f, nil
+}
+
+// migrate upgrades an older file in memory; the next write stores it with
+// CurrentVersion. Older dbedit versions then refuse the file
+// (ErrNewerVersion) instead of silently dropping the new fields.
+func migrate(f *file) {
+	if f.Version < 2 {
+		// v1 had no safe mode: every connection was unrestricted.
+		for i := range f.Connections {
+			if f.Connections[i].SafeMode == "" {
+				f.Connections[i].SafeMode = SafeOff
+			}
+		}
+		f.Version = 2
+	}
 }
 
 func (s *Store) write(f *file) error {

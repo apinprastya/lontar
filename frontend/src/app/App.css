@@ -15,6 +15,10 @@
   --bg-dialog: #ffffff;
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
   --warning: #9a6700;
+  --edit-modified: rgba(210, 153, 34, 0.3);
+  --edit-inserted: rgba(26, 127, 55, 0.18);
+  --edit-deleted: rgba(194, 47, 47, 0.16);
+  --edit-failed: rgba(194, 47, 47, 0.42);
   --stmt-bg: rgba(59, 111, 214, 0.1);
   --error-bg: rgba(194, 47, 47, 0.12);
   --search-bg: rgba(210, 153, 34, 0.25);
@@ -38,6 +42,10 @@
     --border: #33343c;
     --danger: #ff6b6b;
     --ok: #3fb950;
+    --edit-modified: rgba(210, 153, 34, 0.28);
+    --edit-inserted: rgba(63, 185, 80, 0.18);
+    --edit-deleted: rgba(248, 81, 73, 0.18);
+    --edit-failed: rgba(248, 81, 73, 0.45);
     --accent: #4c82f0;
     --bg-input: #15161a;
     --bg-hover: #2a2b33;
@@ -1288,4 +1296,158 @@ input[type='checkbox'] {
 
 .history-empty {
   padding: 12px 6px;
+}
+
+/* ---- M4: editing and safe mode ---- */
+
+.cell-editor-overlay {
+  position: absolute;
+  z-index: 20;
+  max-width: calc(100% - 8px);
+  background: var(--bg-dialog);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  box-shadow: var(--shadow);
+  padding: 4px;
+}
+
+.cell-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cell-editor-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+}
+
+textarea.cell-editor-input {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.cell-editor-input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.cell-editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+
+.cell-editor-bar button {
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.context-menu {
+  position: fixed;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  min-width: 200px;
+  background: var(--bg-dialog);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}
+
+.context-menu li[role='separator'] {
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+.context-menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  padding: 4px 12px;
+}
+
+.context-menu button:hover:not(:disabled) {
+  background: var(--bg-selected);
+}
+
+.readonly-banner {
+  justify-content: flex-start;
+  margin: 6px 8px 0;
+  color: var(--muted);
+}
+
+.pending-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pending-count {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.pending-actions button {
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+.safe-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: 11px;
+  border: 1px solid currentColor;
+  vertical-align: middle;
+}
+
+.safe-mode-badge.safe-confirm {
+  color: var(--warning);
+}
+
+.safe-mode-badge.safe-readonly {
+  color: var(--accent);
+}
+
+.preview-dialog {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.preview-sql {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px 10px;
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.row-detail-item.modified dd {
+  background: var(--edit-modified);
+}
+
+.row-detail-edit {
+  margin-left: auto;
+  font-size: 11px;
 }

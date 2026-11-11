@@ -41,6 +41,8 @@ type SessionInfo struct {
 	Kind          driver.Kind `json:"kind"`
 	ServerVersion string      `json:"serverVersion"`
 	ConnectedAt   time.Time   `json:"connectedAt"`
+	// SafeMode is the session's safe mode (fixed until reconnect).
+	SafeMode store.SafeMode `json:"safeMode"`
 }
 
 // ConnectionService exposes saved connections and sessions to the frontend.
@@ -124,6 +126,7 @@ func (s *ConnectionService) Connect(ctx context.Context, connectionID string) (S
 		Kind:          sess.Kind,
 		ServerVersion: sess.ServerVersion,
 		ConnectedAt:   sess.ConnectedAt,
+		SafeMode:      sess.SafeMode,
 	}, nil
 }
 

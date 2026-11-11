@@ -12,6 +12,7 @@ import (
 	"dbedit/internal/history"
 	"dbedit/internal/query"
 	"dbedit/internal/sqlsplit"
+	"dbedit/internal/store"
 )
 
 // EditorSessions is the subset of *conn.Manager used by EditorService.
@@ -122,14 +123,42 @@ func (s *EditorService) CloseEditor(editorID string) error {
 	return s.editors.Close(editorID)
 }
 
+// MsgReadOnly is added to the notices of a run with write statements on a
+// connection in read-only safe mode.
+const MsgReadOnly = "This connection is in read-only safe mode: the database rejects every statement that writes. Change the safe mode in the connection settings and reconnect to make changes."
+
 // Execute runs sql (one or more statements) in the editor; see
 // query.Editors.Execute. requestID can be passed to Cancel. The run is
 // recorded in the query history.
+//
+// Safe mode: on a "confirm" connection a script containing writes
+// (query.IsWrite) is not run unless opts.Confirmed; the result then only
+// has NeedsConfirm and the write statements, for the UI to show. On a
+// "readonly" connection everything runs and the database rejects the
+// writes; a notice explains why.
 func (s *EditorService) Execute(ctx context.Context, editorID, requestID, sql string, opts query.ExecOptions) (*query.ExecResult, error) {
+	sess, err := s.sessions.Get(s.editors.SessionOf(editorID))
+	if err != nil {
+		// Unknown editor or closed session: let Execute report it.
+		sess = &conn.Session{}
+	}
+	var writes []string
+	if sess.SafeMode == store.SafeConfirm || sess.SafeMode == store.SafeReadOnly {
+		writes = query.WriteStatements(sess.Kind, sql)
+	}
+	if sess.SafeMode == store.SafeConfirm && !opts.Confirmed && len(writes) > 0 {
+		return &query.ExecResult{
+			Statements: []query.StatementResult{}, Notices: []string{}, Tx: query.TxInfo{State: query.TxUnknown},
+			NeedsConfirm: true, WriteStatements: writes,
+		}, nil
+	}
 	started := time.Now()
 	res, err := s.editors.Execute(ctx, editorID, requestID, sql, opts)
 	if err != nil {
 		return nil, err
+	}
+	if sess.SafeMode == store.SafeReadOnly && len(writes) > 0 {
+		res.Notices = append(res.Notices, MsgReadOnly)
 	}
 	s.record(editorID, sql, started, res)
 	return res, nil

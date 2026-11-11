@@ -4,6 +4,23 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as driver$0 from "../driver/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as edits$0 from "../edits/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as store$0 from "../store/models.js";
+
+/**
+ * ApplyResult is the outcome of EditService.Apply. A change set that was
+ * refused or rolled back is not a Go error: Failure names the failing
+ * change so the UI can highlight it (nothing was saved then).
+ */
+export interface ApplyResult {
+    "ok": boolean;
+    "result": edits$0.Result | null;
+    "failure": edits$0.ChangeError | null;
+}
 
 /**
  * CompletionColumn is a column offered by the editor's autocompletion.
@@ -58,6 +75,11 @@ export interface SessionInfo {
     "kind": driver$0.Kind;
     "serverVersion": string;
     "connectedAt": string;
+
+    /**
+     * SafeMode is the session's safe mode (fixed until reconnect).
+     */
+    "safeMode": store$0.SafeMode;
 }
 
 /**

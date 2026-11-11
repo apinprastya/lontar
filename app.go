@@ -23,6 +23,7 @@ type backend struct {
 	browse      *services.BrowseService
 	editor      *services.EditorService
 	history     *services.HistoryService
+	edit        *services.EditService
 }
 
 // newBackend wires the connection store (JSON + OS keychain, with the
@@ -40,6 +41,7 @@ func newBackend(configDir string) backend {
 		browse:      services.NewBrowseService(sessions, drivers, query.NewRunner()),
 		editor:      services.NewEditorService(sessions, drivers, hist),
 		history:     services.NewHistoryService(hist),
+		edit:        services.NewEditService(sessions, drivers),
 	}
 }
 
@@ -58,6 +60,7 @@ func appOptions(assets fs.FS, b backend) application.Options {
 			application.NewService(b.browse),
 			application.NewService(b.editor),
 			application.NewService(b.history),
+			application.NewService(b.edit),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

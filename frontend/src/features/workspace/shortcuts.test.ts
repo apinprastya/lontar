@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceState } from '../../stores/workspace'
-import { handleShortcut } from './shortcuts'
+import { handleShortcut, isTextTarget } from './shortcuts'
+import { SHORTCUTS, conflicts } from './keymap'
 
 function fakeState(withTab = true) {
   return {
@@ -90,5 +91,85 @@ describe('handleShortcut with SQL tabs', () => {
     expect(handleShortcut(key('Enter'), 'linux', s)).toBe(false)
     expect(handleShortcut(key('Escape', { ctrlKey: false }), 'linux', s)).toBe(false)
     expect(handleShortcut(key('t', { shiftKey: true }), 'linux', s)).toBe(false)
+  })
+})
+
+describe('editing shortcuts', () => {
+  const tableState = (safeMode = 'off') =>
+    ({
+      activeTab: () => ({ kind: 'table', id: 't1', type: 'table', columns: [{ name: 'id', type: 'int', isPK: true, nullable: false }] }),
+      safeMode,
+      requestCommit: vi.fn(async () => {}),
+      undoEdit: vi.fn(),
+      redoEdit: vi.fn(),
+      addRow: vi.fn(),
+      newQueryTab: vi.fn(),
+    }) as unknown as WorkspaceState & Record<string, ReturnType<typeof vi.fn>>
+
+  it('commits, undoes, redoes and inserts in table tabs', () => {
+    const s = tableState()
+    expect(handleShortcut(key('s'), 'linux', s)).toBe(true)
+    expect(s.requestCommit).toHaveBeenCalledWith('t1')
+    expect(handleShortcut(key('z'), 'linux', s)).toBe(true)
+    expect(s.undoEdit).toHaveBeenCalledWith('t1')
+    expect(handleShortcut(key('Z', { shiftKey: true }), 'linux', s)).toBe(true)
+    expect(s.redoEdit).toHaveBeenCalledWith('t1')
+    expect(handleShortcut(key('n'), 'linux', s)).toBe(true)
+    expect(s.addRow).toHaveBeenCalledWith('t1')
+    // Mod+Shift+S is not commit.
+    expect(handleShortcut(key('s', { shiftKey: true }), 'linux', s)).toBe(false)
+  })
+
+  it('leaves undo and insert to text fields, and to read-only tables', () => {
+    const s = tableState()
+    expect(handleShortcut(key('z'), 'linux', s, true)).toBe(false)
+    expect(handleShortcut(key('n'), 'linux', s, true)).toBe(false)
+    expect(s.undoEdit).not.toHaveBeenCalled()
+    // Commit still works from a field (e.g. the filter bar).
+    expect(handleShortcut(key('s'), 'linux', s, true)).toBe(true)
+    const ro = tableState('readonly')
+    expect(handleShortcut(key('n'), 'linux', ro)).toBe(false)
+    expect(ro.addRow).not.toHaveBeenCalled()
+  })
+
+  it('does not treat Mod+S/Z as edits in query tabs', () => {
+    const s = { ...fakeState(), activeTab: () => ({ kind: 'query', id: 'q1' }), requestCommit: vi.fn(), undoEdit: vi.fn() } as unknown as WorkspaceState &
+      Record<string, ReturnType<typeof vi.fn>>
+    expect(handleShortcut(key('s'), 'linux', s)).toBe(false)
+    expect(handleShortcut(key('z'), 'linux', s)).toBe(false)
+    expect(s.requestCommit).not.toHaveBeenCalled()
+  })
+
+  it('recognises text targets', () => {
+    expect(isTextTarget(null)).toBe(false)
+    expect(isTextTarget(window)).toBe(false)
+    expect(isTextTarget(document.createElement('input'))).toBe(true)
+    expect(isTextTarget(document.createElement('textarea'))).toBe(true)
+    expect(isTextTarget(document.createElement('select'))).toBe(true)
+    const cm = document.createElement('div')
+    cm.className = 'cm-editor'
+    const inner = document.createElement('div')
+    cm.appendChild(inner)
+    expect(isTextTarget(inner)).toBe(true)
+    expect(isTextTarget(document.createElement('canvas'))).toBe(false)
+  })
+})
+
+describe('keymap', () => {
+  it('has no conflicting shortcuts', () => {
+    expect(conflicts()).toEqual([])
+    expect(SHORTCUTS.find((s) => s.id === 'detail')).toMatchObject({ key: 'i', mod: true })
+    expect(SHORTCUTS.find((s) => s.id === 'insertRow')).toMatchObject({ key: 'n', mod: true })
+  })
+
+  it('detects conflicts across scopes', () => {
+    const list = [
+      { id: 'a', key: 'i', mod: true, scope: 'global' as const, description: '' },
+      { id: 'b', key: 'i', mod: true, scope: 'grid' as const, description: '' },
+      { id: 'c', key: 'i', mod: true, shift: true, scope: 'grid' as const, description: '' },
+      { id: 'd', key: 'x', mod: false, scope: 'grid' as const, description: '' },
+      { id: 'e', key: 'x', mod: false, scope: 'editor' as const, description: '' },
+    ]
+    expect(conflicts(list)).toEqual([['a', 'b']])
   })
 })

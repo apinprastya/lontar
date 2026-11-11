@@ -69,6 +69,9 @@ type Column struct {
 	// PKPosition is the 1-based position in the primary key (0 when the
 	// column is not part of it).
 	PKPosition int `json:"pkPosition"`
+	// EnumValues lists the allowed values of an enum column in declaration
+	// order (PostgreSQL enum types, MySQL/MariaDB ENUM); nil otherwise.
+	EnumValues []string `json:"enumValues,omitempty"`
 }
 
 // Introspector reads database metadata. Every method takes the caller's

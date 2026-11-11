@@ -156,3 +156,25 @@ func TestOpenAgainstServer(t *testing.T) {
 		t.Errorf("version = %q, want PostgreSQL 16.x", v)
 	}
 }
+
+func TestBuildDSNReadOnly(t *testing.T) {
+	d := postgres.New()
+	for _, ro := range []bool{false, true} {
+		// An option cannot turn read-only off.
+		dsn, err := d.BuildDSN(driver.Config{Host: "h", ReadOnly: ro, Options: map[string]string{postgres.ReadOnlyParam: "off"}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		pc, err := pgx.ParseConfig(dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "off"
+		if ro {
+			want = "on"
+		}
+		if got := pc.RuntimeParams[postgres.ReadOnlyParam]; got != want {
+			t.Errorf("readOnly=%v: %s = %q", ro, postgres.ReadOnlyParam, got)
+		}
+	}
+}

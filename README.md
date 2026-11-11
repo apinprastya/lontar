@@ -135,6 +135,56 @@ next to `connections.json`, with the newest 10,000 runs kept per connection. Ope
 it with **History**: click an entry to insert it, double-click to open it in a
 new tab.
 
+## Editing data
+
+Tables with a primary key can be edited in the grid. Views, tables without a
+primary key and connections in read-only safe mode are read-only, and a banner
+says why. Changes are staged, not written: modified cells are highlighted,
+new rows are green, and rows marked for deletion are red and struck through.
+The status bar shows "N pending changes" with **Discard**, **Preview SQL** and
+**Commit**.
+
+| Shortcut | Action |
+|---|---|
+| Double-click / Enter / typing | Edit the cell (type-aware editor: numbers, booleans, dates, JSON, enums, hex bytes) |
+| Mod+S | Commit the staged changes |
+| Mod+Z / Mod+Shift+Z | Undo / redo a staged change |
+| Mod+N | Insert a row |
+| Mod+D | Duplicate the selected row |
+| Mod+Shift+N | Set the selected cells to NULL |
+| Delete / Backspace | Mark the selected rows for deletion (again to unmark) |
+| Right-click | Edit, Set NULL, Set DEFAULT, Set empty string, Insert, Duplicate, Delete |
+
+Pasting tab-separated text fills a range of cells. Values cut for display
+(text over 1 MiB, binary over 64 KiB) show a padlock and cannot be edited.
+The row detail panel (Mod+I) edits the selected row too.
+
+A commit runs every change in one transaction: deletes, then updates, then
+inserts. Every value is sent as a bound parameter; the UI never sends SQL.
+Each update and delete must hit exactly one row, found by its original
+primary key. If a row was deleted or re-keyed elsewhere, or anything fails,
+nothing is saved. The failing row is highlighted, and your changes stay staged.
+**Preview SQL** shows a readable rendering of the statements, with a copy
+button. Changing the page, sort or filter, refreshing, closing the tab,
+switching database or disconnecting asks you to commit or discard first.
+
+## Safe mode
+
+Each connection has a safe mode, set in the connection form:
+
+| Mode | Effect |
+|---|---|
+| Off | No restrictions |
+| Confirm writes | The SQL editor shows the statements that write and asks before running them. Committing grid edits always opens the preview first. Choosing the Production tag suggests this mode. |
+| Read-only | The session is read-only in the database itself (PostgreSQL `default_transaction_read_only`, MySQL `transaction_read_only`, MariaDB `tx_read_only`, SQLite `mode=ro`). Grid editing is disabled and the editor's writes are rejected. |
+
+The active mode is shown next to the connection name and applies from the
+next connect. "Confirm" decides by each statement's leading keyword and
+treats anything not clearly a read as a write, including `SET`. A `SELECT`
+that calls a function with side effects is not detected. Read-only mode is a
+guard against accidents, not a permission system: use database privileges
+for that.
+
 ## Saved connections and passwords
 
 Connections are stored as JSON (schema-versioned, written atomically, file

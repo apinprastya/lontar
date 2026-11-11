@@ -27,7 +27,7 @@ func (f *fakeSessions) Connect(_ context.Context, id string) (string, error) {
 	if f.connectErr != nil {
 		return "", f.connectErr
 	}
-	f.session = &conn.Session{ID: "sess-1", ConnectionID: id, Name: "n", Kind: driver.SQLite, ServerVersion: "SQLite 3.50", ConnectedAt: time.Unix(10, 0)}
+	f.session = &conn.Session{ID: "sess-1", ConnectionID: id, Name: "n", Kind: driver.SQLite, ServerVersion: "SQLite 3.50", ConnectedAt: time.Unix(10, 0), SafeMode: store.SafeConfirm}
 	return "sess-1", nil
 }
 func (f *fakeSessions) Disconnect(id string) error {
@@ -138,7 +138,7 @@ func TestConnectionServiceSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.ID != "sess-1" || info.ConnectionID != "conn-1" || info.ServerVersion != "SQLite 3.50" || info.Kind != driver.SQLite || info.ConnectedAt.IsZero() {
+	if info.ID != "sess-1" || info.ConnectionID != "conn-1" || info.ServerVersion != "SQLite 3.50" || info.Kind != driver.SQLite || info.ConnectedAt.IsZero() || info.SafeMode != store.SafeConfirm {
 		t.Fatalf("info = %+v", info)
 	}
 	if err := svc.Disconnect("sess-1"); err != nil {

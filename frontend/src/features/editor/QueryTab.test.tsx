@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataGridProps } from '../grid/DataGrid'
 
@@ -208,5 +208,29 @@ describe('QueryTab', () => {
     mount()
     fireEvent.click(screen.getByText('Run all'))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('session not found'))
+  })
+
+  it('asks before running writes in confirm safe mode', async () => {
+    editor.execute.mockResolvedValueOnce(execResult([], { needsConfirm: true, writeStatements: ['DELETE FROM t'] }))
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Run all' }))
+    const dlg = await screen.findByRole('alertdialog')
+    expect(within(dlg).getByTestId('write-statements')).toHaveTextContent('DELETE FROM t;')
+    expect(editor.execute).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1;\nSELEC 2', expect.objectContaining({ confirmed: false }))
+    expect(tab().result).toBeNull()
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(editor.execute).toHaveBeenCalledTimes(1)
+
+    editor.execute.mockResolvedValueOnce(execResult([], { needsConfirm: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run all' }))
+    await waitFor(() => expect(tab().confirm?.statements).toEqual([]))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Run' }))
+    await waitFor(() => expect(tab().result).not.toBeNull())
+    expect(editor.execute).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1;\nSELEC 2', expect.objectContaining({ confirmed: true, baseOffset: 0 }))
+    expect(tab().confirm).toBeNull()
+    // Nothing waiting: confirmRun is a no-op.
+    await store.getState().confirmRun(tab().id)
+    expect(editor.execute).toHaveBeenCalledTimes(3)
   })
 })

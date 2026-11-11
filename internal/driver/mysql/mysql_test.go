@@ -155,3 +155,54 @@ func TestOpenAgainstServers(t *testing.T) {
 		})
 	}
 }
+
+func TestClientFoundRowsAndReadOnly(t *testing.T) {
+	for _, opts := range []map[string]string{nil, {"charset": "utf8mb4", "transaction_read_only": "0", "clientFoundRows": "false"}} {
+		for _, d := range []*mysql.Driver{mysql.New(), mysql.NewMariaDB()} {
+			mc, err := d.Config(driver.Config{Host: "h", Options: opts}, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !mc.ClientFoundRows {
+				t.Errorf("%s: clientFoundRows must always be on", d.Kind())
+			}
+			if mc.Params["transaction_read_only"] == "1" || mc.Params["tx_read_only"] != "" {
+				t.Errorf("%s: read-write config has %v", d.Kind(), mc.Params)
+			}
+			mc, err = d.Config(driver.Config{Host: "h", Options: opts, ReadOnly: true}, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, other := mysql.ReadOnlyVariable(d.Kind()), "tx_read_only"
+			if want == other {
+				other = "transaction_read_only"
+			}
+			if _, has := mc.Params[other]; mc.Params[want] != "1" || has {
+				t.Errorf("%s: read-only params = %v (want only %s=1)", d.Kind(), mc.Params, want)
+			}
+		}
+	}
+	if mysql.ReadOnlyVariable(driver.MariaDB) != "tx_read_only" || mysql.ReadOnlyVariable(driver.MySQL) != "transaction_read_only" {
+		t.Fatal("ReadOnlyVariable")
+	}
+}
+
+func TestParseEnum(t *testing.T) {
+	cases := map[string][]string{
+		"enum('a','b')":          {"a", "b"},
+		"ENUM('it''s','x,y')":    {"it's", "x,y"},
+		`enum('back\\slash','')`: {`back\slash`, ""},
+		"varchar(10)":            nil,
+		"enum('a'":               nil,
+		"enum('a' 'b')":          nil,
+		"enum(a)":                nil,
+		"enum('unterminated)":    nil,
+		"enum()":                 {},
+	}
+	for in, want := range cases {
+		got := mysql.ParseEnum(in)
+		if (got == nil) != (want == nil) || strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("ParseEnum(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

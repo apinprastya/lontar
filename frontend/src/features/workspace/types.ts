@@ -25,6 +25,10 @@ export interface ResultColumn {
   type: string
   isPK: boolean
   nullable: boolean
+  /** Table pages only: the column has a default. */
+  hasDefault?: boolean
+  /** Table pages only: allowed values of an enum column. */
+  enumValues?: string[] | null
 }
 
 export interface Page {

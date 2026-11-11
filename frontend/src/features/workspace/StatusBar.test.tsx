@@ -2,7 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TabState } from '../../stores/workspace'
-import StatusBar, { rowRangeText } from './StatusBar'
+import StatusBar, { pendingText, rowRangeText } from './StatusBar'
 
 const rows = (n: number) => Array.from({ length: n }, () => [])
 
@@ -77,5 +77,28 @@ describe('StatusBar for SQL tabs', () => {
     expect(screen.getByText('running…')).toBeInTheDocument()
     rerender(<StatusBar tab={{ ...tab, result: execResult([stmt(0, 'x')]), activeResult: 'messages' }} serverVersion="v" onPrev={() => {}} onNext={() => {}} />)
     expect(screen.getByTestId('row-range')).toHaveTextContent('1 statement')
+  })
+})
+
+describe('pending changes in the status bar', () => {
+  afterEach(cleanup)
+  it('shows the count and the actions', async () => {
+    const user = userEvent.setup()
+    const pending = { count: 3, committing: false, previewLoading: false, commitHint: 'Ctrl+S', onPreview: vi.fn(), onCommit: vi.fn(), onDiscard: vi.fn() }
+    const { rerender } = render(<StatusBar tab={null} serverVersion="v" onPrev={vi.fn()} onNext={vi.fn()} pending={pending} />)
+    expect(screen.getByTestId('pending')).toHaveTextContent('3 pending changes')
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
+    await user.click(screen.getByRole('button', { name: 'Preview SQL' }))
+    await user.click(screen.getByRole('button', { name: 'Commit' }))
+    expect(pending.onDiscard).toHaveBeenCalled()
+    expect(pending.onPreview).toHaveBeenCalled()
+    expect(pending.onCommit).toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Commit' })).toHaveAttribute('title', 'Commit (Ctrl+S)')
+    rerender(<StatusBar tab={null} serverVersion="v" onPrev={vi.fn()} onNext={vi.fn()} pending={{ ...pending, count: 1, committing: true }} />)
+    expect(screen.getByTestId('pending')).toHaveTextContent('1 pending change')
+    expect(screen.getByRole('button', { name: 'Committing…' })).toBeDisabled()
+    rerender(<StatusBar tab={null} serverVersion="v" onPrev={vi.fn()} onNext={vi.fn()} pending={{ ...pending, count: 0 }} />)
+    expect(screen.queryByTestId('pending')).toBeNull()
+    expect(pendingText(1200)).toBe('1,200 pending changes')
   })
 })

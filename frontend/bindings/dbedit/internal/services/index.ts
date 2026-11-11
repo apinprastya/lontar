@@ -4,6 +4,7 @@
 import * as AppService from "./appservice.js";
 import * as BrowseService from "./browseservice.js";
 import * as ConnectionService from "./connectionservice.js";
+import * as EditService from "./editservice.js";
 import * as EditorService from "./editorservice.js";
 import * as HistoryService from "./historyservice.js";
 import * as SchemaService from "./schemaservice.js";
@@ -11,12 +12,14 @@ export {
     AppService,
     BrowseService,
     ConnectionService,
+    EditService,
     EditorService,
     HistoryService,
     SchemaService
 };
 
 export type {
+    ApplyResult,
     CompletionColumn,
     CompletionSchema,
     CompletionTable,

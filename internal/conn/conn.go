@@ -64,6 +64,10 @@ type Session struct {
 	// Database is the database the pool is connected to (as reported by
 	// the server; "" on MySQL when none is selected).
 	Database string
+	// SafeMode is the connection's safe mode when it was opened (a change
+	// to the saved connection applies from the next connect). In
+	// SafeReadOnly the pool itself is read-only (driver.Config.ReadOnly).
+	SafeMode store.SafeMode
 }
 
 // Manager owns all open sessions. It is safe for concurrent use.
@@ -237,7 +241,9 @@ func (m *Manager) Connect(ctx context.Context, connectionID string) (string, err
 	if err != nil {
 		return "", err
 	}
+	c.Normalize()
 	s := &Session{
+		SafeMode:      c.SafeMode,
 		Database:      current,
 		ID:            m.newID(),
 		ConnectionID:  c.ID,
@@ -355,6 +361,9 @@ func (m *Manager) UseDatabase(ctx context.Context, sessionID, database string) (
 		return nil, err
 	}
 	c.Database = database
+	// Keep the session's safe mode (and so its read-only pool) even if the
+	// saved connection changed since it was opened.
+	c.SafeMode = old.SafeMode
 	db, version, current, err := m.openDB(ctx, c, password)
 	if err != nil {
 		return nil, err

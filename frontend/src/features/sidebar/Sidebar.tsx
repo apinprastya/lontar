@@ -9,6 +9,8 @@ export interface SidebarProps {
   name: string
   kind: Kind
   color: string
+  /** Shown next to the name (safe mode). */
+  badge?: React.ReactNode
 }
 
 function TableItem({ t, active }: { t: TableInfo; active: boolean }) {
@@ -36,7 +38,7 @@ function TableItem({ t, active }: { t: TableInfo; active: boolean }) {
  * Workspace sidebar: connection header, database/schema switchers, search
  * and the grouped table/view list.
  */
-export default function Sidebar({ name, kind, color }: SidebarProps) {
+export default function Sidebar({ name, kind, color, badge }: SidebarProps) {
   const s = useWorkspace((st) => st)
   const active = s.tabs.find((t) => t.id === s.activeTabId)
   const groups = useMemo(() => groupTables(s.tables, s.search), [s.tables, s.search])
@@ -51,7 +53,9 @@ export default function Sidebar({ name, kind, color }: SidebarProps) {
         <span className="ws-conn-strip" style={color ? { background: color } : undefined} data-testid="conn-strip" />
         <div className="ws-conn-text">
           <strong>{name}</strong>
-          <span className="muted">{KIND_LABELS[kind] ?? kind}</span>
+          <span className="muted">
+            {KIND_LABELS[kind] ?? kind} {badge}
+          </span>
         </div>
         <button type="button" className="icon-button" aria-label="Refresh table list" title="Refresh" onClick={() => void s.refreshTables()}>
           <RefreshIcon />

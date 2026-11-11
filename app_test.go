@@ -11,14 +11,17 @@ func TestAppOptions(t *testing.T) {
 	if opts.Name != "dbedit" {
 		t.Fatalf("Name = %q, want dbedit", opts.Name)
 	}
-	if len(opts.Services) != 6 {
-		t.Fatalf("expected 6 bound services, got %d", len(opts.Services))
+	if len(opts.Services) != 7 {
+		t.Fatalf("expected 7 bound services, got %d", len(opts.Services))
 	}
 	if opts.Services[1].Instance() != b.connections {
 		t.Fatal("ConnectionService not registered")
 	}
 	if opts.Services[2].Instance() != b.schema || opts.Services[3].Instance() != b.browse {
 		t.Fatal("SchemaService/BrowseService not registered")
+	}
+	if opts.Services[6].Instance() != b.edit {
+		t.Error("edit service not bound")
 	}
 	if opts.Services[4].Instance() != b.editor || opts.Services[5].Instance() != b.history {
 		t.Fatal("EditorService/HistoryService not registered")

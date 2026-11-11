@@ -9,6 +9,7 @@ import ResultsPanel from './ResultsPanel'
 import SqlEditor from './SqlEditor'
 import TxIndicator from './TxIndicator'
 import { MAX_ROWS_OPTIONS } from './types'
+import { ConfirmRunDialog } from '../edits/dialogs'
 
 /** Debounce of the current-statement highlight (a backend call). */
 export const HIGHLIGHT_DELAY = 120
@@ -120,6 +121,9 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
           editorAndResults
         )}
       </div>
+      {tab.confirm && (
+        <ConfirmRunDialog statements={tab.confirm.statements} onConfirm={() => void s.confirmRun(tab.id)} onCancel={() => s.cancelConfirm(tab.id)} />
+      )}
     </div>
   )
 }

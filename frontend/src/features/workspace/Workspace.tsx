@@ -8,10 +8,17 @@ import { WorkspaceContext, createWorkspaceStore, useActiveTab, useWorkspace, typ
 import { connectionColor } from '../connections/types'
 import RowDetail from '../grid/RowDetail'
 import Sidebar from '../sidebar/Sidebar'
-import { RefreshIcon } from '../../components/icons'
+import { RefreshIcon, ShieldIcon } from '../../components/icons'
 import { shortcutLabel } from '../../lib/mod'
 import { workspaceApi, type WorkspaceApi } from './api'
-import { handleShortcut } from './shortcuts'
+import { handleShortcut, isTextTarget } from './shortcuts'
+import { editApi, type EditApi } from '../edits/api'
+import { PreviewDialog, UnsavedDialog } from '../edits/dialogs'
+import { initialText } from '../edits/editors'
+import { safeModeLabel, type EditValue } from '../edits/types'
+import type { Kind } from '../connections/types'
+import { canEdit, type TabState } from '../../stores/workspace'
+import { displayRows, pendingCount, stagedValue } from '../../stores/pending'
 import StatusBar from './StatusBar'
 import TabBar from './TabBar'
 import TableTab from './TableTab'
@@ -21,6 +28,38 @@ export interface WorkspaceProps {
   /** Backend adapters; tests may inject fakes. */
   api?: WorkspaceApi
   editor?: EditorApi
+  edits?: EditApi
+}
+
+/** Safe mode badge next to the connection name. */
+export function SafeModeBadge({ mode }: { mode: string | undefined }) {
+  if (!mode || mode === 'off') return null
+  return (
+    <span className={`safe-mode-badge safe-${mode}`} data-testid="safe-mode" title={mode === 'readonly' ? 'Read-only: the database rejects writes' : 'Writes need confirmation'}>
+      <ShieldIcon className="icon" /> {safeModeLabel(mode as 'confirm' | 'readonly')}
+    </span>
+  )
+}
+
+/** Row detail editing for the selected row of an editable table tab. */
+function detailEditing(tab: TabState, kind: Kind, store: WorkspaceStore) {
+  if (tab.selectedRow === null) return null
+  const rows = displayRows(tab.columns, tab.rows, tab.pending)
+  const d = rows[tab.selectedRow]
+  if (!d) return null
+  return {
+    engine: kind,
+    state: d,
+    editText: (col: number) => {
+      const column = tab.columns[col]
+      const orig = d.ref.type === 'row' ? tab.rows[d.ref.index]?.[col] : undefined
+      return column ? initialText(stagedValue(tab.pending, d, column.name), orig) : ''
+    },
+    onCommit: (col: number, value: EditValue) => {
+      const column = tab.columns[col]
+      if (column) store.getState().stageCells(tab.id, [{ ref: d.ref, column: column.name, value }])
+    },
+  }
 }
 
 function WorkspaceView({ platform, store, editor }: { platform?: string; store: WorkspaceStore; editor: EditorApi }) {
@@ -32,12 +71,15 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
   const toggleDetail = useWorkspace((s) => s.toggleDetail)
   const refresh = useWorkspace((s) => s.refresh)
   const kind = useWorkspace((s) => s.kind)
+  const safeMode = useWorkspace((s) => s.safeMode)
+  const guard = useWorkspace((s) => s.guard)
+  const tabs = useWorkspace((s) => s.tabs)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Keys the SQL editor (or another widget) already handled.
       if (e.defaultPrevented) return
-      if (handleShortcut(e, platform, store.getState())) e.preventDefault()
+      if (handleShortcut(e, platform, store.getState(), isTextTarget(e.target))) e.preventDefault()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -52,8 +94,18 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
 
   if (!session) return null
   const color = connection ? connectionColor(connection) : ''
+  const tableTab = tab?.kind === 'table' ? tab : null
+  const editable = tableTab ? canEdit(tableTab, safeMode) : false
+  const guardCount = guard
+    ? guard.tabIds.reduce((n, id) => {
+        const t = tabs.find((x) => x.id === id)
+        return n + (t?.kind === 'table' ? pendingCount(t.pending) : 0)
+      }, 0)
+    : 0
+  const tableIds = () => store.getState().tabs.filter((t) => t.kind === 'table').map((t) => t.id)
   const detailColumns = tab?.kind === 'table' ? tab.columns : (queryView?.set.columns ?? [])
-  const detailRows = tab?.kind === 'table' ? tab.rows : (queryView?.rows ?? [])
+  // Table tabs show staged values (and staged inserts) in the detail.
+  const detailRows = tab?.kind === 'table' ? displayRows(tab.columns, tab.rows, tab.pending).map((r) => r.cells) : (queryView?.rows ?? [])
   const detailRow = tab && tab.selectedRow !== null ? (detailRows[tab.selectedRow] ?? null) : null
   const rowOffset = tab?.kind === 'table' ? tab.offset : 0
 
@@ -61,7 +113,7 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
     <section className="ws" aria-label="Workspace" style={color ? { borderTopColor: color } : undefined}>
       <Group orientation="horizontal" className="ws-panels">
         <Panel id="sidebar" defaultSize={240} minSize={160} maxSize={480}>
-          <Sidebar name={session.name} kind={kind} color={color} />
+          <Sidebar name={session.name} kind={kind} color={color} badge={<SafeModeBadge mode={safeMode} />} />
         </Panel>
         <Separator className="resize-handle" />
         <Panel id="main" minSize={300}>
@@ -86,8 +138,13 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
               <button type="button" aria-pressed={showDetail} onClick={toggleDetail} title={`Row detail (${shortcutLabel(platform, 'I')} or Space)`}>
                 Row detail
               </button>
+              {tableTab && editable && (
+                <button type="button" onClick={() => store.getState().addRow(tableTab.id)} title={`Insert row (${shortcutLabel(platform, 'N')})`}>
+                  Insert row
+                </button>
+              )}
               <span className="spacer" />
-              <button type="button" onClick={() => void disconnect()}>
+              <button type="button" onClick={() => store.getState().guarded(tableIds(), () => void disconnect())}>
                 Disconnect
               </button>
             </div>
@@ -112,6 +169,7 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
                 row={detailRow}
                 rowNumber={tab && tab.selectedRow !== null ? rowOffset + tab.selectedRow + 1 : null}
                 onClose={toggleDetail}
+                editing={tableTab && editable ? detailEditing(tableTab, kind, store) : null}
               />
             </Panel>
           </>
@@ -122,7 +180,30 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
         serverVersion={session.serverVersion}
         onPrev={() => tab?.kind === 'table' && store.getState().prevPage(tab.id)}
         onNext={() => tab?.kind === 'table' && store.getState().nextPage(tab.id)}
+        pending={
+          tableTab
+            ? {
+                count: pendingCount(tableTab.pending),
+                committing: tableTab.committing,
+                previewLoading: tableTab.previewLoading,
+                commitHint: shortcutLabel(platform, 'S'),
+                onPreview: () => void store.getState().openPreview(tableTab.id),
+                onCommit: () => void store.getState().requestCommit(tableTab.id),
+                onDiscard: () => store.getState().discardChanges(tableTab.id),
+              }
+            : null
+        }
       />
+      {tableTab?.preview && (
+        <PreviewDialog
+          statements={tableTab.preview}
+          safeMode={safeMode}
+          committing={tableTab.committing}
+          onCommit={() => void store.getState().commit(tableTab.id)}
+          onClose={() => store.getState().closePreview(tableTab.id)}
+        />
+      )}
+      {guard && <UnsavedDialog count={guardCount} busy={guard.busy} onChoose={(c) => void store.getState().resolveGuard(c)} />}
     </section>
   )
 }
@@ -131,14 +212,15 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
  * Workspace for the open session: sidebar | table tabs | optional row
  * detail, with a status bar. Each session gets its own workspace store.
  */
-export default function Workspace({ platform, api = workspaceApi, editor = editorApi }: WorkspaceProps) {
+export default function Workspace({ platform, api = workspaceApi, editor = editorApi, edits = editApi }: WorkspaceProps) {
   const session = useConnections((s) => s.session)
   const sessionId = session?.id
   const kind = session?.kind
   const connectionId = session?.connectionId
+  const safeMode = session?.safeMode
   const store = useMemo(
-    () => (sessionId && kind ? createWorkspaceStore({ id: sessionId, kind, connectionId }, api, editor) : null),
-    [sessionId, kind, connectionId, api, editor],
+    () => (sessionId && kind ? createWorkspaceStore({ id: sessionId, kind, connectionId, safeMode }, api, editor, edits) : null),
+    [sessionId, kind, connectionId, safeMode, api, editor, edits],
   )
 
   useEffect(() => {

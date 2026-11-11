@@ -58,6 +58,12 @@ export function CompletionSchema(sessionID: string, schema: string, refresh: boo
  * Execute runs sql (one or more statements) in the editor; see
  * query.Editors.Execute. requestID can be passed to Cancel. The run is
  * recorded in the query history.
+ * 
+ * Safe mode: on a "confirm" connection a script containing writes
+ * (query.IsWrite) is not run unless opts.Confirmed; the result then only
+ * has NeedsConfirm and the write statements, for the UI to show. On a
+ * "readonly" connection everything runs and the database rejects the
+ * writes; a notice explains why.
  */
 export function Execute(editorID: string, requestID: string, sql: string, opts: query$0.ExecOptions): $CancellablePromise<query$0.ExecResult | null> {
     return $Call.ByID(2200776953, editorID, requestID, sql, opts);

@@ -35,6 +35,36 @@ func (t Tag) Valid() bool {
 	return false
 }
 
+// SafeMode guards a connection against accidental writes.
+type SafeMode string
+
+// Safe modes.
+const (
+	// SafeOff: no restrictions.
+	SafeOff SafeMode = "off"
+	// SafeConfirm: SQL editor runs that contain a write and every commit of
+	// staged grid edits need an explicit confirmation in the UI.
+	SafeConfirm SafeMode = "confirm"
+	// SafeReadOnly: the session is opened read-only at the database level
+	// (PostgreSQL default_transaction_read_only, MySQL/MariaDB
+	// transaction_read_only / tx_read_only, SQLite mode=ro) and the app
+	// refuses to apply grid edits.
+	SafeReadOnly SafeMode = "readonly"
+)
+
+// SafeModes lists the valid modes in display order.
+var SafeModes = []SafeMode{SafeOff, SafeConfirm, SafeReadOnly}
+
+// Valid reports whether m is a known mode.
+func (m SafeMode) Valid() bool {
+	for _, v := range SafeModes {
+		if m == v {
+			return true
+		}
+	}
+	return false
+}
+
 // SSHConfig describes an SSH tunnel. Reserved for milestone M6: it is
 // persisted but not applied yet, and conn refuses to connect while it is
 // enabled so that a connection never silently bypasses its tunnel. Secrets
@@ -78,6 +108,9 @@ type Connection struct {
 	Options map[string]string `json:"options,omitempty"`
 	Tag     Tag               `json:"tag"`
 	Color   string            `json:"color,omitempty"`
+	// SafeMode defaults to SafeOff (Normalize). The UI suggests
+	// SafeConfirm for production-tagged connections.
+	SafeMode SafeMode `json:"safeMode"`
 
 	// Optional, added in later milestones; nil means "not configured".
 	SSH *SSHConfig `json:"ssh,omitempty"`
@@ -101,7 +134,7 @@ func (c Connection) DriverConfig() driver.Config {
 		Database:        c.Database,
 		FilePath:        c.FilePath,
 		CreateIfMissing: c.CreateIfMissing,
-		ReadOnly:        c.ReadOnly,
+		ReadOnly:        c.ReadOnly || c.SafeMode == SafeReadOnly,
 		Options:         c.Options,
 	}
 }
@@ -136,6 +169,9 @@ func (c *Connection) Normalize() {
 	if c.Tag == "" {
 		c.Tag = TagNone
 	}
+	if c.SafeMode == "" {
+		c.SafeMode = SafeOff
+	}
 	if c.Kind.IsFileBased() {
 		c.Host, c.Port, c.User, c.Database = "", 0, "", ""
 	} else {
@@ -157,6 +193,8 @@ func (c *Connection) Validate() error {
 		return invalid("kind", "unsupported database type %q", c.Kind)
 	case !c.Tag.Valid():
 		return invalid("tag", "unknown tag %q", c.Tag)
+	case !c.SafeMode.Valid():
+		return invalid("safeMode", "unknown safe mode %q", c.SafeMode)
 	case c.Color != "" && !colorRe.MatchString(c.Color):
 		return invalid("color", "colour must look like #rrggbb")
 	}
