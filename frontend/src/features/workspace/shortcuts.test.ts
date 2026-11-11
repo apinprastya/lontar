@@ -173,3 +173,36 @@ describe('keymap', () => {
     expect(conflicts(list)).toEqual([['a', 'b']])
   })
 })
+
+describe('structure shortcuts', () => {
+  const state = (view: 'data' | 'structure') =>
+    ({
+      activeTab: () => ({ kind: 'table', id: 't1', type: 'table', view, columns: [{ name: 'id', type: 'int', isPK: true, nullable: false }] }),
+      safeMode: 'off',
+      toggleTabView: vi.fn(),
+      setTabView: vi.fn(),
+      toggleFilterBar: vi.fn(),
+      addRow: vi.fn(),
+    }) as unknown as WorkspaceState & Record<string, ReturnType<typeof vi.fn>>
+
+  it('toggles data / structure with Mod+E in table tabs', () => {
+    const s = state('data')
+    expect(handleShortcut(key('e'), 'linux', s)).toBe(true)
+    expect(s.toggleTabView).toHaveBeenCalledWith('t1')
+    expect(handleShortcut(key('e', { shiftKey: true }), 'linux', s)).toBe(false)
+    const q = { activeTab: () => ({ kind: 'query', id: 'q1' }) } as unknown as WorkspaceState
+    expect(handleShortcut(key('e'), 'linux', q)).toBe(false)
+    expect(SHORTCUTS.find((x) => x.id === 'toggleStructure')).toMatchObject({ key: 'e', mod: true, scope: 'global' })
+    expect(SHORTCUTS.find((x) => x.id === 'openReference')).toMatchObject({ key: 'o', mod: true, scope: 'grid' })
+  })
+
+  it('opens the filter bar in the data view and never inserts rows from the structure view', () => {
+    const s = state('structure')
+    expect(handleShortcut(key('f'), 'linux', s)).toBe(true)
+    expect(s.setTabView).toHaveBeenCalledWith('t1', 'data')
+    expect(s.toggleFilterBar).toHaveBeenCalledWith('t1', true)
+    expect(handleShortcut(key('n'), 'linux', s)).toBe(false)
+    expect(s.addRow).not.toHaveBeenCalled()
+  })
+})
+

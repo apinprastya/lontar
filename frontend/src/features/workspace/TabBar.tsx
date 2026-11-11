@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useWorkspace, type Tab } from '../../stores/workspace'
 import { shortcutLabel } from '../../lib/mod'
+import { displayName } from '../structure/fk'
 
-function tabTitle(t: Tab): string {
-  return t.kind === 'query' ? t.title : t.table
+/** Tab title; tables of another schema (e.g. opened by a foreign key) are qualified. */
+function tabTitle(t: Tab, schema: string): string {
+  return t.kind === 'query' ? t.title : displayName(t.schema, t.table, schema)
 }
 
 function tabTooltip(t: Tab): string {
@@ -22,6 +24,7 @@ export default function TabBar({ platform }: { platform?: string }) {
   const pinTab = useWorkspace((s) => s.pinTab)
   const closeTab = useWorkspace((s) => s.closeTab)
   const renameTab = useWorkspace((s) => s.renameTab)
+  const schema = useWorkspace((s) => s.schema)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   if (tabs.length === 0) return null
@@ -70,13 +73,13 @@ export default function TabBar({ platform }: { platform?: string }) {
               }}
             />
           ) : (
-            <span className="tab-title">{tabTitle(t)}</span>
+            <span className="tab-title">{tabTitle(t, schema)}</span>
           )}
           {t.kind === 'query' && t.running && <span className="tab-running" aria-label="running" />}
           <button
             type="button"
             className="tab-close"
-            aria-label={`Close ${tabTitle(t)}`}
+            aria-label={`Close ${tabTitle(t, schema)}`}
             onClick={(e) => {
               e.stopPropagation()
               closeTab(t.id)

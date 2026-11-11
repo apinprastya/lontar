@@ -5,6 +5,7 @@ import type { ApplyResult, SafeMode } from '../features/edits/types'
 import type { FetchRequest, Page, TableInfo } from '../features/workspace/types'
 import { canEdit, createWorkspaceStore, readOnlyReason, type TabState, type WorkspaceStore } from './workspace'
 import { emptyPending, pendingCount } from './pending'
+import { makeDetail } from '../test/structure'
 
 const T = (name: string, type: TableInfo['type'] = 'table'): TableInfo => ({ schema: 'public', name, type, estimatedRows: 10 })
 
@@ -37,6 +38,8 @@ function fakeApi() {
     fetchTable: vi.fn(async (_s: string, _r: string, req: FetchRequest) => page(req)),
     countRows: vi.fn(async () => 10),
     cancel: vi.fn(async () => true),
+    tableInfo: vi.fn(async () => makeDetail()),
+    tableDDL: vi.fn(async () => ''),
   } satisfies WorkspaceApi
 }
 

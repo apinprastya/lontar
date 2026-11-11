@@ -15,6 +15,7 @@ import { pendingCount } from '../../stores/pending'
 import type { WorkspaceApi } from './api'
 import type { FetchRequest } from './types'
 import TableTab from './TableTab'
+import { makeDetail } from '../../test/structure'
 
 const api: WorkspaceApi = {
   current: vi.fn(async () => ({ database: 'd', schema: 'public' })),
@@ -39,6 +40,8 @@ const api: WorkspaceApi = {
   })),
   countRows: vi.fn(async () => 2),
   cancel: vi.fn(async () => true),
+  tableInfo: vi.fn(async () => makeDetail()),
+  tableDDL: vi.fn(async () => ''),
 }
 const edits = { preview: vi.fn(async () => []), apply: vi.fn(async () => ({ ok: true, result: null, failure: null })) }
 

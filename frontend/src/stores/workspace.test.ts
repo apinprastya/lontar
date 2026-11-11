@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceApi } from '../features/workspace/api'
 import type { FetchRequest, Page, TableInfo } from '../features/workspace/types'
 import { createWorkspaceStore, cycleSort, effectiveFilters, filterKey, newFilterRow, newRequestId, tabRequest, type TabState, type WorkspaceStore } from './workspace'
+import { makeDetail } from '../test/structure'
 
 const T = (name: string, type: TableInfo['type'] = 'table', estimatedRows: number | null = 1000): TableInfo => ({
   schema: 'public',
@@ -39,6 +40,8 @@ function fakeApi() {
     fetchTable: vi.fn(async (_s: string, _r: string, req: FetchRequest) => page(req)),
     countRows: vi.fn(async (_s: string, _r: string, _req: FetchRequest) => 12345),
     cancel: vi.fn(async () => true),
+    tableInfo: vi.fn(async () => makeDetail()),
+    tableDDL: vi.fn(async () => ''),
   } satisfies WorkspaceApi
   return api
 }

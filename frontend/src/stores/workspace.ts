@@ -18,6 +18,9 @@ import type { Kind } from '../features/connections/types'
 import { editorApi as defaultEditorApi, type EditorApi } from '../features/editor/api'
 import { cycleSort } from '../features/grid/sort'
 import { errorMessage } from '../lib/errors'
+import { copyText } from '../lib/clipboard'
+import { referenceFilters } from '../features/structure/fk'
+import type { ForeignKey, StructureSection, TableDetail } from '../features/structure/types'
 import { createQueryActions, loadDrafts, newQueryTabState, type QueryState, type QueryTabState } from './queryTabs'
 import { editApi as defaultEditApi, type EditApi } from '../features/edits/api'
 import type { EditValue, PreviewStatement, SafeMode } from '../features/edits/types'
@@ -92,7 +95,22 @@ export interface TabState {
   /** Open preview dialog: the generated display SQL. */
   preview: PreviewStatement[] | null
   previewLoading: boolean
+
+  /** Which view the tab shows: the rows or the read-only structure. */
+  view: TabView
+  /** Selected part of the structure view. */
+  section: StructureSection
+  /** Cached structure (also gives the grid its foreign keys). */
+  structure: TableDetail | null
+  structureLoading: boolean
+  structureError: string | null
+  /** Cached DDL (loaded when the DDL section is first shown). */
+  ddl: string | null
+  ddlLoading: boolean
+  ddlError: string | null
 }
+
+export type TabView = 'data' | 'structure'
 
 /** Why a table tab cannot be edited (null: it can). */
 export function readOnlyReason(tab: Pick<TabState, 'type' | 'columns'>, safeMode: SafeMode): string | null {
@@ -149,6 +167,21 @@ export interface WorkspaceState extends QueryState {
   setSearch(search: string): void
 
   openTable(table: TableInfo, pin?: boolean): void
+  /** Opens (pinned) and shows the data or structure view (sidebar menu, links). */
+  openTableView(schema: string, name: string, view?: TabView): void
+  setTabView(id: string, view: TabView): void
+  toggleTabView(id: string): void
+  setStructureSection(id: string, section: StructureSection): void
+  loadStructure(id: string): Promise<void>
+  loadDDL(id: string): Promise<void>
+  /** Copies a table's DDL (sidebar menu); errors go to the sidebar. */
+  copyDDL(schema: string, name: string): Promise<boolean>
+  /**
+   * Opens the row a foreign key of the row points at: the referenced
+   * table's tab (reused, after the unsaved-changes guard, or new) filtered
+   * by refColumn = value for every key column.
+   */
+  followReference(id: string, fk: ForeignKey, row: Cell[]): boolean
   pinTab(id: string): void
   closeTab(id: string): void
   activateTab(id: string): void
@@ -263,6 +296,14 @@ function newTab(t: TableInfo, pinned: boolean): TabState {
     failed: null,
     preview: null,
     previewLoading: false,
+    view: 'data',
+    section: 'columns',
+    structure: null,
+    structureLoading: false,
+    structureError: null,
+    ddl: null,
+    ddlLoading: false,
+    ddlError: null,
   }
 }
 
@@ -373,6 +414,12 @@ export function createWorkspaceStore(
       const rest = tabs.filter((t) => t.kind !== 'table')
       set({ tabs: rest, activeTabId: rest.some((t) => t.id === activeTabId) ? activeTabId : (rest[0]?.id ?? null) })
     }
+
+    /** Sidebar info of schema.name (a plain table when it is not listed, e.g. another schema). */
+    const tableInfoOf = (schema: string, name: string): TableInfo =>
+      get().tables.find((t) => t.schema === schema && t.name === name) ?? { schema, name, type: 'table', estimatedRows: null }
+    const findTableTab = (schema: string, name: string) =>
+      get().tabs.find((x): x is TabState => x.kind === 'table' && x.schema === schema && x.table === name)
 
     /** Table tabs among ids with staged changes. */
     const dirtyTabs = (ids: string[]) => ids.filter((id) => {
@@ -605,6 +652,104 @@ export function createWorkspaceStore(
           set({ tabs: [...tabs, tab], activeTabId: tab.id })
         }
         void get().loadTab(tab.id)
+        void get().loadStructure(tab.id)
+      },
+
+      openTableView(schema, name, view = 'data') {
+        get().openTable(tableInfoOf(schema, name), true)
+        const tab = findTableTab(schema, name)
+        if (tab) get().setTabView(tab.id, view)
+      },
+
+      setTabView(id, view) {
+        const tab = findTab(id)
+        if (!tab || tab.view === view) return
+        patchTab(id, { view })
+        if (view === 'structure' && !tab.structure && !tab.structureLoading) void get().loadStructure(id)
+        if (view === 'structure' && tab.section === 'ddl' && tab.ddl === null && !tab.ddlLoading) void get().loadDDL(id)
+      },
+
+      toggleTabView(id) {
+        const tab = findTab(id)
+        if (tab) get().setTabView(id, tab.view === 'data' ? 'structure' : 'data')
+      },
+
+      setStructureSection(id, section) {
+        const tab = findTab(id)
+        if (!tab) return
+        patchTab(id, { section })
+        if (section === 'ddl' && tab.ddl === null && !tab.ddlLoading) void get().loadDDL(id)
+      },
+
+      async loadStructure(id) {
+        const tab = findTab(id)
+        if (!tab) return
+        patchTab(id, { structureLoading: true, structureError: null })
+        try {
+          const structure = await api.tableInfo(get().sessionId, tab.schema, tab.table)
+          if (!disposed) patchTab(id, { structure, structureLoading: false })
+        } catch (err) {
+          if (!disposed) patchTab(id, { structureLoading: false, structureError: errorMessage(err) })
+        }
+      },
+
+      async loadDDL(id) {
+        const tab = findTab(id)
+        if (!tab) return
+        patchTab(id, { ddlLoading: true, ddlError: null })
+        try {
+          const ddl = await api.tableDDL(get().sessionId, tab.schema, tab.table)
+          if (!disposed) patchTab(id, { ddl, ddlLoading: false })
+        } catch (err) {
+          if (!disposed) patchTab(id, { ddlLoading: false, ddlError: errorMessage(err) })
+        }
+      },
+
+      async copyDDL(schema, name) {
+        set({ sidebarError: null })
+        try {
+          await copyText(await api.tableDDL(get().sessionId, schema, name))
+          return true
+        } catch (err) {
+          set({ sidebarError: errorMessage(err) })
+          return false
+        }
+      },
+
+      followReference(id, fk, row) {
+        const tab = findTab(id)
+        if (!tab) return false
+        const filters = referenceFilters(fk, tab.columns, row)
+        if (!filters) return false
+        const show = {
+          view: 'data' as const,
+          filterOpen: true,
+          rawMode: false,
+          rawWhere: '',
+          draftFilters: filters.map((f) => ({ ...newFilterRow(f.column), value: f.value })),
+          appliedFilters: filters,
+          appliedRawWhere: '',
+          offset: 0,
+          totalCount: null,
+          selectedRow: null,
+          pinned: true,
+        }
+        const target = findTableTab(fk.refSchema, fk.refTable)
+        if (target) {
+          // Reusing a tab replaces its rows: ask first when it has staged changes.
+          get().guarded([target.id], () => {
+            if (!findTab(target.id)) return
+            patchTab(target.id, show)
+            set({ activeTabId: target.id })
+            void get().loadTab(target.id)
+          })
+          return true
+        }
+        const created = { ...newTab(tableInfoOf(fk.refSchema, fk.refTable), true), ...show }
+        set({ tabs: [...get().tabs, created], activeTabId: created.id })
+        void get().loadTab(created.id)
+        void get().loadStructure(created.id)
+        return true
       },
 
       pinTab(id) {
@@ -684,13 +829,16 @@ export function createWorkspaceStore(
         const tab = get().activeTab()
         if (tab?.kind === 'query') {
           await Promise.all([get().refreshTables(), get().completion ? get().loadCompletion(true) : Promise.resolve()])
+        } else if (tab?.view === 'structure') {
+          // Structure only: nothing staged is lost, so no guard.
+          await Promise.all([get().refreshTables(), get().loadStructure(tab.id), tab.ddl !== null ? get().loadDDL(tab.id) : Promise.resolve()])
         } else if (tab) {
           if (dirtyTabs([tab.id]).length > 0) {
             get().guarded([tab.id], () => void get().refresh())
             return
           }
-          patchTab(tab.id, { totalCount: null })
-          await Promise.all([get().refreshTables(), get().loadTab(tab.id)])
+          patchTab(tab.id, { totalCount: null, ddl: null })
+          await Promise.all([get().refreshTables(), get().loadTab(tab.id), get().loadStructure(tab.id)])
         } else {
           await get().refreshTables()
         }

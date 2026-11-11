@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeDetail } from '../../test/structure'
 
 vi.mock('../../../bindings/dbedit/internal/services', () => import('../../test/mockBindings'))
 vi.mock('../../lib/clipboard', () => ({ copyText: vi.fn(async () => {}) }))
@@ -89,6 +90,8 @@ function fakeApi() {
     fetchTable: vi.fn(async (_s: string, _r: string, req: FetchRequest) => page(req)),
     countRows: vi.fn(async () => 12001),
     cancel: vi.fn(async () => true),
+    tableInfo: vi.fn(async (_s: string, schema: string, table: string) => makeDetail({ schema, name: table })),
+    tableDDL: vi.fn(async (_s: string, _schema: string, table: string) => `CREATE TABLE ${table} ();`),
   } satisfies WorkspaceApi
 }
 

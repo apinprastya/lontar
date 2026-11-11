@@ -121,3 +121,22 @@ func (s *SchemaService) Columns(ctx context.Context, sessionID, schema, table st
 	}
 	return d.Columns(ctx, db, schema, table)
 }
+
+// TableInfo returns the structure of a table or view: detailed columns,
+// indexes, foreign keys (both directions), checks, triggers and metadata.
+func (s *SchemaService) TableInfo(ctx context.Context, sessionID, schema, table string) (*driver.TableDetail, error) {
+	db, d, err := s.resolve(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return d.TableInfo(ctx, db, schema, table)
+}
+
+// TableDDL returns the CREATE statement(s) of a table or view.
+func (s *SchemaService) TableDDL(ctx context.Context, sessionID, schema, table string) (string, error) {
+	db, d, err := s.resolve(sessionID)
+	if err != nil {
+		return "", err
+	}
+	return d.TableDDL(ctx, db, schema, table)
+}

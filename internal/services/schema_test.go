@@ -79,6 +79,17 @@ func TestSchemaServiceSQLite(t *testing.T) {
 	if err != nil || len(cols) != 2 || !cols[0].IsPrimaryKey {
 		t.Fatalf("Columns = %+v, %v", cols, err)
 	}
+	ti, err := svc.TableInfo(ctx, id, "main", "t")
+	if err != nil || ti.Name != "t" || len(ti.Columns) != 2 || !ti.Columns[0].AutoIncrement {
+		t.Fatalf("TableInfo = %+v, %v", ti, err)
+	}
+	ddl, err := svc.TableDDL(ctx, id, "main", "v")
+	if err != nil || ddl != "CREATE VIEW v AS SELECT name FROM t;\n" {
+		t.Fatalf("TableDDL = %q, %v", ddl, err)
+	}
+	if _, err := svc.TableDDL(ctx, id, "main", "nope"); !errors.Is(err, driver.ErrTableNotFound) {
+		t.Fatalf("TableDDL err = %v", err)
+	}
 	if _, err := svc.UseDatabase(ctx, id, "other"); !errors.Is(err, conn.ErrUnsupported) {
 		t.Fatalf("UseDatabase err = %v", err)
 	}
@@ -90,6 +101,8 @@ func TestSchemaServiceSQLite(t *testing.T) {
 		"ListSchemas":   func() error { _, err := svc.ListSchemas(ctx, "nope", false); return err },
 		"ListTables":    func() error { _, err := svc.ListTables(ctx, "nope", "main"); return err },
 		"Columns":       func() error { _, err := svc.Columns(ctx, "nope", "main", "t"); return err },
+		"TableInfo":     func() error { _, err := svc.TableInfo(ctx, "nope", "main", "t"); return err },
+		"TableDDL":      func() error { _, err := svc.TableDDL(ctx, "nope", "main", "t"); return err },
 	} {
 		if err := call(); !errors.Is(err, conn.ErrSessionNotFound) {
 			t.Errorf("%s err = %v", name, err)

@@ -33,6 +33,8 @@ export const SchemaService = {
   ListSchemas: vi.fn<(sessionId: string, includeSystem: boolean) => Promise<string[] | null>>(),
   ListTables: vi.fn<(sessionId: string, schema: string) => Promise<TableInfo[] | null>>(),
   Columns: vi.fn<(sessionId: string, schema: string, table: string) => Promise<unknown[] | null>>(),
+  TableInfo: vi.fn<(sessionId: string, schema: string, table: string) => Promise<unknown>>(),
+  TableDDL: vi.fn<(sessionId: string, schema: string, table: string) => Promise<string>>(),
 }
 
 export const BrowseService = {

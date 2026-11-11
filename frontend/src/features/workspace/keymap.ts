@@ -24,6 +24,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'undo', key: 'z', mod: true, scope: 'global', description: 'Undo staged change' },
   { id: 'redo', key: 'z', mod: true, shift: true, scope: 'global', description: 'Redo staged change' },
   { id: 'insertRow', key: 'n', mod: true, scope: 'global', description: 'Insert row' },
+  { id: 'toggleStructure', key: 'e', mod: true, scope: 'global', description: 'Switch between data and structure' },
   { id: 'runCurrent', key: 'enter', mod: true, scope: 'global', description: 'Run statement' },
   { id: 'runAll', key: 'enter', mod: true, shift: true, scope: 'global', description: 'Run all' },
   { id: 'stop', key: 'escape', mod: false, scope: 'global', description: 'Stop the running query' },
@@ -33,6 +34,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'setNull', key: 'n', mod: true, shift: true, scope: 'grid', description: 'Set NULL' },
   { id: 'duplicateRow', key: 'd', mod: true, scope: 'grid', description: 'Duplicate row' },
   { id: 'deleteRow', key: 'delete', mod: false, scope: 'grid', description: 'Mark rows for deletion (also Backspace)' },
+  { id: 'openReference', key: 'o', mod: true, scope: 'grid', description: 'Open the referenced row (foreign key cell)' },
 ]
 
 /** Shortcuts that collide: same key and modifiers in the same or the global scope. */

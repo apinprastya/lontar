@@ -75,3 +75,15 @@ export function ShieldIcon(p: IconProps) {
     </Svg>
   )
 }
+
+export function LinkIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <g fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+        <path d="M6.5 9.5l3-3" />
+        <path d="M8 4.5l1.2-1.2a2.5 2.5 0 0 1 3.5 3.5L11.5 8" />
+        <path d="M8 11.5l-1.2 1.2a2.5 2.5 0 0 1-3.5-3.5L4.5 8" />
+      </g>
+    </Svg>
+  )
+}

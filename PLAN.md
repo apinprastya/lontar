@@ -228,6 +228,77 @@ Workspace: left sidebar | main area with tabs (each tab = table data, structure,
      - A safe-mode change applies from the next connect.
      - SQLite timestamp keys: modernc returns DATE/DATETIME text as `time.Time`, so a key stored as `'2024-01-02 03:04:05'` comes back as `…T…` and would not match. Such rows report `stale` instead of being changed wrongly.
 6. **M5 Structure** — columns/indexes/FKs views, DDL view (PG via catalog query, MySQL `SHOW CREATE TABLE`, SQLite `sqlite_master`), FK click-through navigation.
+   *As built:*
+   - **Driver contract.** `driver/structure.go` adds a `Structure` interface, embedded in `Introspector`, with two methods: `TableInfo(ctx, db, schema, table) (*TableDetail, error)` and `TableDDL(ctx, db, schema, table) (string, error)`. Both return `driver.ErrTableNotFound` for unknown tables.
+     - `TableDetail` holds the type; the comment; the MySQL engine and collation; `estimatedRows`; `sizeBytes`; detailed `columns`; `indexes`; `foreignKeys`; `referencedBy`; `checks`; `triggers`; and `checksSupported`. Slices are never nil.
+     - `ColumnDetail` adds the following to `Column`: `autoIncrement`, `identity` (ALWAYS / BY DEFAULT), `generated` (STORED / VIRTUAL) with `generationExpr`, `onUpdate` (MySQL), `collation` and `comment`.
+     - `Index` holds the name; `columns`, where expressions are shown in parentheses and prefix lengths as `name(n)`; `unique`; `primary`; `method`; `predicate`; and `definition`.
+     - `ForeignKey` has the source schema, table and columns; the referenced schema, table and columns, in key order; and the referential actions.
+     - Helpers: `FindTable`/`LookupTable` (exact-name check against `ListTables`) and `ReferentialAction`.
+     - The name is `TableDetail` rather than `TableInfo`, because the frontend already has a `TableInfo` type (the sidebar list item).
+   - **PostgreSQL** (`postgres/structure.go`). The relation is looked up once by bound `nspname`/`relname`; every later query binds its OID (`$1::int8::oid`).
+     - Columns: `format_type`, `pg_attrdef`, `attidentity`, `attgenerated`, the collation (only when it differs from the type's), `col_description`, the PK position and enum labels. A column counts as serial when its `nextval` default is on a sequence it owns (`pg_depend` with `deptype = 'a'`).
+     - Indexes: `pg_index` with `pg_am`. Columns or expressions come from `pg_get_indexdef(oid, n, true)`, the predicate from `pg_get_expr(indpred)`, and the definition from `pg_get_indexdef`. It also records whether a constraint owns the index.
+     - FKs come from `pg_constraint` in both directions. Incoming keys skip the clones on partitions (`conparentid = 0`).
+     - Checks use `pg_get_expr(conbin)`. Triggers use `pg_get_triggerdef`, with timing and event decoded from `tgtype`.
+     - Metadata: `obj_description`, `reltuples` (-1 → nil) and `pg_total_relation_size`.
+   - **PG DDL reconstruction** (`postgres/ddl.go`, the pure `buildDDL`, unit-tested with fixture catalog rows). Identifiers are quoted by the server with `quote_ident`, so they are only quoted when needed.
+     - Tables become `CREATE [UNLOGGED] TABLE schema.name (...)`. Each column gets its `format_type`, `COLLATE` when it is not the default, then one of `GENERATED ALWAYS AS (…) STORED|VIRTUAL`, `GENERATED ALWAYS|BY DEFAULT AS IDENTITY` or `DEFAULT …`, then `NOT NULL`.
+     - **Serial columns are emitted as `smallserial/serial/bigserial` without the `nextval` default**, so the DDL creates its own sequence.
+     - Next come the local constraints as `CONSTRAINT name <pg_get_constraintdef>`, in the order PK, UNIQUE, EXCLUDE, CHECK, FK, with FKs inline. Partitioned tables get `PARTITION BY` from `pg_get_partkeydef`.
+     - Views become `CREATE VIEW … AS <pg_get_viewdef>`. Materialized views become `CREATE MATERIALIZED VIEW … AS … WITH DATA`.
+     - After that come the non-constraint indexes (`pg_get_indexdef`), the triggers (`pg_get_triggerdef`), and `COMMENT ON TABLE/VIEW/MATERIALIZED VIEW/COLUMN`. Comment literals are quoted the way `quote_literal` does it, using `E''` when the text has a backslash.
+     - **Limits (not emitted):** ownership; GRANTs; RLS policies; tablespaces; storage parameters; identity sequence options (start, increment); inheritance; partitions, which are rendered as plain tables without `PARTITION OF`; foreign-table servers and options; view options (`security_barrier`, `CHECK OPTION`); index comments; and the definitions of referenced types, sequences and functions.
+     - Because FKs are inline, the referenced tables must exist first. Names are schema-qualified wherever PG prints them that way: in the `CREATE` and `COMMENT` lines, and in types, functions and FK targets outside the `search_path`.
+     - **Round trip, tested.** `TestDDLRoundTrip` takes the DDL of every fixture relation, swaps `shop.` for `shop_rt.`, executes it in a fresh schema, and asserts that `TableInfo` of each copy equals the original (after normalising the schema name, without rows and size). It also asserts that the copy's DDL is identical.
+   - **MySQL/MariaDB** (`mysql/structure.go`). Everything comes from `information_schema` with bound names:
+     - Metadata from `TABLES`, columns from `COLUMNS` (`EXTRA` gives auto_increment, VIRTUAL/STORED/PERSISTENT GENERATED and `on update …`), indexes from `STATISTICS`, FKs from `KEY_COLUMN_USAGE` joined with `REFERENTIAL_CONSTRAINTS` in both directions, and triggers from `TRIGGERS`.
+     - Feature probes look at `information_schema.COLUMNS` instead of the version: `STATISTICS.EXPRESSION` (MySQL 8.0.13+ functional indexes) and `CHECK_CONSTRAINTS`. On MariaDB that table has `TABLE_NAME`, because check names are per table there. MySQL 8.0.16+ joins `TABLE_CONSTRAINTS`, and older servers report `checksSupported: false`.
+     - The index `definition` is synthesised in `SHOW CREATE TABLE` style.
+     - `TableDDL` first checks the name with `FindTable`, then quotes it with the dialect and runs `SHOW CREATE TABLE` or `SHOW CREATE VIEW`. Each trigger, named from `information_schema`, follows with `SHOW CREATE TRIGGER`; a body containing `;` is wrapped in `DELIMITER ;;`.
+   - **SQLite** (`sqlite/structure.go`). It uses table-valued pragmas with bound arguments: `pragma_table_xinfo` (hidden 2/3 = virtual/stored generated), `pragma_index_list`/`pragma_index_xinfo` (cid -2 = expression, shown as `(expression)`) and `pragma_foreign_key_list`.
+     - Incoming FKs come from `pragma_table_list × pragma_foreign_key_list`, matched with `COLLATE NOCASE`. `REFERENCES parent` without columns resolves to the parent's PK, and the parent's name is mapped to its real case.
+     - `sqlite_master` supplies the index and trigger SQL. Its schema prefix can't be bound, so the schema is first checked against `pragma_database_list` and then dialect-quoted. Partial-index predicates and trigger timing/event are parsed from that SQL.
+     - A single `INTEGER PRIMARY KEY` in a rowid table is auto-increment and NOT NULL.
+     - Not reported: checks (`checksSupported: false`; they appear in the DDL), comments, size and estimate.
+     - `TableDDL` is the `sqlite_master.sql` of the table or view, then its indexes and triggers.
+   - **Services.** `SchemaService.TableInfo` and `SchemaService.TableDDL`; the bindings are regenerated.
+   - **Frontend.**
+     - Table tabs gain `view: 'data' | 'structure'`, `section`, a cached `structure`, a lazy `ddl` and their loading/error states.
+       - `openTable` loads the structure alongside the first page, so the grid knows its foreign keys. The DDL loads the first time the DDL section opens.
+       - Mod+R in the structure view reloads the structure and any loaded DDL, without the unsaved-changes guard, since no rows are touched. In the data view it also reloads the structure and drops the cached DDL.
+     - The **Data | Structure toggle** is a segmented control at the bottom of every table tab. **Mod+E** (`toggleStructure`, global) switches it. In the structure view, Mod+F switches to data and opens the filter bar, and Mod+N does nothing.
+     - `features/structure/StructureView` has a header (qualified name, type, ~rows, size, engine, collation, comment) and sections:
+       - Columns: #, name with key and link icons, type, nullable, default, extra, collation, comment.
+       - Indexes: including the predicate, unique, method and definition.
+       - Foreign keys and Referenced by: the table names are links that open that table's tab, qualified when they are in another schema.
+       - Checks (shown as "not reported" on SQLite) and Triggers.
+       - DDL: a read-only CodeMirror (`DdlView`: dialect highlighting, line numbers, `EditorState.readOnly`) with **Copy** and **Open in new query tab**.
+     - **FK navigation.** `structure/fk.ts`: `fkByColumn` and `referenceFilters(fk, columns, row)` build one `refCol = value` filter per key column, in key order. They return null when any key value is NULL (MATCH SIMPLE), binary, truncated or missing.
+       - The grid gets a `links` prop. FK headers show a link icon (`fk`, or `pkfk` for key columns that are also FKs).
+       - Followable cells draw a "→" at the right edge and are left-aligned, so values stay clear of it. Clicking the arrow, pressing **Mod+O** (`openReference`, grid scope) or choosing **Open referenced row** from the context menu follows the key. The context menu now exists in read-only grids too, with just that item.
+       - `followReference` opens a new pinned tab with the filters applied and shown in the filter bar; no guard is needed. If the target table's tab is already open, it reuses it after `guarded([target])`.
+       - The values go through the normal filter model, so they are bound parameters.
+       - A referenced table in another schema (PG) opens with its own `schema` and is titled `schema.table` in the tab bar.
+     - The **sidebar context menu** on a table offers Open data, Open structure, Copy name and Copy DDL. Copy DDL errors go to the sidebar error line.
+   - **Tests.**
+     - `testutil.SeedStructure` and `CheckStructure` (shared, like `CheckIntrospection`) run on PG 16, MySQL 8, MariaDB 11 and SQLite. The fixture includes:
+       - a composite PK, a composite FK with ON DELETE CASCADE / ON UPDATE SET NULL, and a self-referencing FK
+       - a cross-schema FK (PG `shop` → `geo`)
+       - unique, partial, expression (PG, SQLite, MySQL 8 functional) and GIN indexes
+       - checks, generated columns, identity, serial and auto_increment
+       - column and table comments, a non-default collation, an enum, triggers, views and a PG materialized view
+       - awkward names: `Weird "Q" Tbl`, `select`, `Mixed Col`, `Line Note`, and a comment with a quote and a backslash
+       - injection-shaped names, which are rejected with `ErrTableNotFound`
+     - PG adds the DDL round trip. MySQL/MariaDB add a `SHOW CREATE` sanity check: the `order_lines` DDL is re-executed under a new name and gives equivalent columns and FK.
+     - The MySQL seed sets `log_bin_trust_function_creators` as root, so the test user can create the trigger.
+     - Unit tests cover `buildDDL`, `triggerType`, `literal`, column detail mapping, `applyExtra`, `delimited`, `indexDefinition`, the SQLite trigger and predicate parsing, `FindTable` (exact names only), and the services.
+     - Vitest covers the store (lazy loading, errors, refresh, follow in a new tab, composite and cross-schema keys, NULL keys, tab reuse with the guard's cancel and discard), the structure view sections, the DDL copy and open-in-query actions, the toggle and its shortcuts, the grid links (icons, arrow, click, Mod+O, context menu), the TableTab wiring, the sidebar menu and the qualified tab titles. The keymap conflict test still passes.
+   - **Deviations.**
+     - SQLite reports no check constraints (they stay in the DDL) and no size.
+     - Column comments are not shown as grid header tooltips (optional; Glide has no header tooltip hook).
+     - When FK navigation reuses an open tab, its filters and page are replaced and it switches to the data view (after the guard when it has staged changes).
+     - The MySQL index `definition` is synthesised rather than taken from `SHOW CREATE`.
 7. **M6 Extras** — SSH tunnel, SSL options, export CSV/JSON/SQL, import CSV, quick-open palette, connection colors, dark/light theme.
 8. **M7 Packaging** — `wails3 package` per OS, built natively on each OS in the CI matrix: Linux AppImage + `.deb`/`.rpm`; Windows NSIS installer with WebView2 bootstrapper; macOS universal `.dmg` with signing + notarization (when Apple credentials are available). App icon set (`.png`/`.ico`/`.icns`) and auto-update check (GitHub Releases) optional.
 

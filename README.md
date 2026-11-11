@@ -69,7 +69,12 @@ locally, run `go test -run XXX -fuzz FuzzSplit -fuzztime 60s ./internal/sqlsplit
 Integration tests share a fixture, `testutil.SeedBrowse`. It holds every
 value type, a view, tables with no or a composite primary key, and a table
 and columns with awkward names. Run it against each engine (SQLite always;
-PostgreSQL, MySQL and MariaDB when Docker is available).
+PostgreSQL, MySQL and MariaDB when Docker is available). The structure tests
+add `testutil.SeedStructure`: composite and self-referencing foreign keys, a
+cross-schema key (PostgreSQL), partial, expression and GIN indexes, checks,
+generated and identity columns, comments, triggers and views. On PostgreSQL,
+the reconstructed DDL is executed in a fresh schema and must give the same
+structure back.
 
 ## Browsing tables
 
@@ -167,6 +172,40 @@ nothing is saved. The failing row is highlighted, and your changes stay staged.
 **Preview SQL** shows a readable rendering of the statements, with a copy
 button. Changing the page, sort or filter, refreshing, closing the tab,
 switching database or disconnecting asks you to commit or discard first.
+
+## Table structure
+
+Every table tab has a **Data | Structure** switch at the bottom (**Mod+E**).
+The structure view is read-only. Its header shows the table comment, the
+estimated row count and the size (plus the engine and collation on
+MySQL/MariaDB). It has these sections:
+
+- **Columns**: type, nullable, default, auto-increment/identity/generated, collation, comment
+- **Indexes**, including partial and expression indexes
+- **Foreign keys** and **Referenced by**: click a table name to open it
+- **Checks** (not reported by SQLite) and **Triggers**
+- **DDL**: read-only, with **Copy** and **Open in new query tab**
+
+Mod+R reloads the structure.
+
+The DDL comes from `SHOW CREATE TABLE`/`VIEW` on MySQL/MariaDB and from
+`sqlite_master` on SQLite. PostgreSQL has no built-in equivalent, so the
+statement is rebuilt from the catalog. It covers columns, defaults,
+identity, generated columns, serial columns, constraints, indexes, triggers
+and comments. It leaves out ownership, grants, policies, storage options and
+partitions; see PLAN.md for the full list.
+
+**Foreign keys in the grid.** Foreign key columns have a link icon in their
+header, and every non-NULL key cell shows a **→**. To open the referenced
+row, click the arrow, press **Mod+O**, or choose **Open referenced row** from
+the right-click menu. The referenced table opens in a tab, filtered by
+`column = value` for each column of the key. The values are bound
+parameters, like any filter. If that table's tab is already open, it is
+reused, and you are asked to commit or discard first if it has staged
+changes. A table in another schema opens as `schema.table`.
+
+Right-click a table in the sidebar for **Open data**, **Open structure**,
+**Copy name** and **Copy DDL**.
 
 ## Safe mode
 

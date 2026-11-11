@@ -107,6 +107,8 @@ type Introspector interface {
 	// in one query, ordered by table and position (for SQL editor
 	// autocompletion). It returns an empty slice for unknown schemas.
 	SchemaColumns(ctx context.Context, db *sql.DB, schema string) ([]TableColumn, error)
+	// Structure: TableInfo and TableDDL (see structure.go).
+	Structure
 }
 
 // TableColumn is one column returned by SchemaColumns.

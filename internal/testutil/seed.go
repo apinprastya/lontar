@@ -126,11 +126,18 @@ func SeedBrowse(t testing.TB, engine string, target DB, db *sql.DB) {
 		t.Fatalf("%v", err)
 		return
 	}
+	seedOnce(t, "browse", engine, target, db, stmts)
+}
+
+// seedOnce runs stmts once per fixture name and DSN per test binary.
+func seedOnce(t testing.TB, name, engine string, target DB, db *sql.DB, stmts []string) {
+	t.Helper()
 	seedMu.Lock()
-	e, ok := seedDone[target.DSN]
+	key := name + "\x00" + target.DSN
+	e, ok := seedDone[key]
 	if !ok {
 		e = &seedEntry{}
-		seedDone[target.DSN] = e
+		seedDone[key] = e
 	}
 	seedMu.Unlock()
 	e.once.Do(func() {
@@ -138,7 +145,7 @@ func SeedBrowse(t testing.TB, engine string, target DB, db *sql.DB) {
 		defer cancel()
 		for _, s := range stmts {
 			if _, err := db.ExecContext(ctx, s); err != nil {
-				e.err = fmt.Errorf("seed %s: %w\n%s", engine, err, s)
+				e.err = fmt.Errorf("seed %s %s: %w\n%s", name, engine, err, s)
 				return
 			}
 		}

@@ -56,6 +56,21 @@ export function ListTables(sessionID: string, schema: string): $CancellablePromi
 }
 
 /**
+ * TableDDL returns the CREATE statement(s) of a table or view.
+ */
+export function TableDDL(sessionID: string, schema: string, table: string): $CancellablePromise<string> {
+    return $Call.ByID(2143832056, sessionID, schema, table);
+}
+
+/**
+ * TableInfo returns the structure of a table or view: detailed columns,
+ * indexes, foreign keys (both directions), checks, triggers and metadata.
+ */
+export function TableInfo(sessionID: string, schema: string, table: string): $CancellablePromise<driver$0.TableDetail | null> {
+    return $Call.ByID(3651447392, sessionID, schema, table);
+}
+
+/**
  * UseDatabase switches the session to another database (the session ID is
  * unchanged) and returns the new location.
  */

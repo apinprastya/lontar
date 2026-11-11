@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { copyText } from '../../lib/clipboard'
 import { MatViewIcon, RefreshIcon, TableIcon, ViewIcon } from '../../components/icons'
 import { useWorkspace } from '../../stores/workspace'
 import { KIND_LABELS, type Kind } from '../connections/types'
@@ -13,7 +14,52 @@ export interface SidebarProps {
   badge?: React.ReactNode
 }
 
-function TableItem({ t, active }: { t: TableInfo; active: boolean }) {
+/** Open context menu of a sidebar table. */
+interface TableMenuState {
+  t: TableInfo
+  x: number
+  y: number
+}
+
+/** Right-click menu of a table: open data / structure, copy name / DDL. */
+export function TableMenu({ menu, onClose }: { menu: TableMenuState; onClose(): void }) {
+  const openTableView = useWorkspace((s) => s.openTableView)
+  const copyDDL = useWorkspace((s) => s.copyDDL)
+  const act = (fn: () => void) => () => {
+    fn()
+    onClose()
+  }
+  const { t } = menu
+  return (
+    <div className="context-menu-backdrop" onMouseDown={onClose} onContextMenu={(e) => (e.preventDefault(), onClose())}>
+      <ul
+        className="context-menu"
+        role="menu"
+        aria-label={`${t.name} actions`}
+        style={{ left: menu.x, top: menu.y }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      >
+        {(
+          [
+            ['Open data', () => openTableView(t.schema, t.name, 'data')],
+            ['Open structure', () => openTableView(t.schema, t.name, 'structure')],
+            ['Copy name', () => void copyText(t.name).catch(() => {})],
+            ['Copy DDL', () => void copyDDL(t.schema, t.name)],
+          ] as const
+        ).map(([label, fn]) => (
+          <li role="none" key={label}>
+            <button type="button" role="menuitem" autoFocus={label === 'Open data'} onClick={act(fn)}>
+              <span>{label}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function TableItem({ t, active, onMenu }: { t: TableInfo; active: boolean; onMenu(m: TableMenuState): void }) {
   const openTable = useWorkspace((s) => s.openTable)
   const Icon = t.type === 'table' ? TableIcon : t.type === 'view' ? ViewIcon : MatViewIcon
   return (
@@ -25,6 +71,10 @@ function TableItem({ t, active }: { t: TableInfo; active: boolean }) {
         title={`${t.schema}.${t.name} (${t.type}) — double-click to keep the tab open`}
         onClick={() => openTable(t, false)}
         onDoubleClick={() => openTable(t, true)}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          onMenu({ t, x: e.clientX, y: e.clientY })
+        }}
       >
         <Icon className={`icon table-icon table-icon-${t.type.replace(' ', '-')}`} />
         <span className="table-name">{t.name}</span>
@@ -42,6 +92,7 @@ export default function Sidebar({ name, kind, color, badge }: SidebarProps) {
   const s = useWorkspace((st) => st)
   const active = s.tabs.find((t) => t.id === s.activeTabId)
   const groups = useMemo(() => groupTables(s.tables, s.search), [s.tables, s.search])
+  const [menu, setMenu] = useState<TableMenuState | null>(null)
   // MySQL: database == schema, so only the database switcher is shown.
   const showDatabases = kind !== 'sqlite'
   const showSchemas = kind === 'postgres' || (kind === 'sqlite' && s.schemas.length > 1)
@@ -120,7 +171,7 @@ export default function Sidebar({ name, kind, color, badge }: SidebarProps) {
               </h3>
               <ul>
                 {groups[g].map((t) => (
-                  <TableItem key={t.name} t={t} active={isActive(t)} />
+                  <TableItem key={t.name} t={t} active={isActive(t)} onMenu={setMenu} />
                 ))}
               </ul>
             </section>
@@ -131,6 +182,7 @@ export default function Sidebar({ name, kind, color, badge }: SidebarProps) {
         )}
         {!s.tablesLoading && !s.sidebarError && s.schema && s.tables.length === 0 && <p className="muted">No tables.</p>}
       </div>
+      {menu && <TableMenu menu={menu} onClose={() => setMenu(null)} />}
     </aside>
   )
 }

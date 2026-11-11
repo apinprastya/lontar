@@ -7,7 +7,13 @@ export {
 } from "./models.js";
 
 export type {
+    Check,
     Column,
+    ColumnDetail,
+    ForeignKey,
+    Index,
     Info,
-    Table
+    Table,
+    TableDetail,
+    Trigger
 } from "./models.js";

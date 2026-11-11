@@ -1,5 +1,6 @@
 import { BrowseService, SchemaService } from '../../../bindings/dbedit/internal/services'
 import type { Cell, FetchRequest, Location, Page, TableInfo } from './types'
+import { normalizeDetail, type TableDetail } from '../structure/types'
 
 type BindingRequest = Parameters<typeof BrowseService.FetchTable>[2]
 
@@ -13,6 +14,8 @@ export interface WorkspaceApi {
   fetchTable(sessionId: string, requestId: string, req: FetchRequest): Promise<Page>
   countRows(sessionId: string, requestId: string, req: FetchRequest): Promise<number>
   cancel(requestId: string): Promise<boolean>
+  tableInfo(sessionId: string, schema: string, table: string): Promise<TableDetail>
+  tableDDL(sessionId: string, schema: string, table: string): Promise<string>
 }
 
 /** Typed wrapper around the generated SchemaService/BrowseService bindings. */
@@ -47,5 +50,13 @@ export const workspaceApi: WorkspaceApi = {
   },
   async cancel(requestId) {
     return BrowseService.CancelFetch(requestId)
+  },
+  async tableInfo(sessionId, schema, table) {
+    const d = await SchemaService.TableInfo(sessionId, schema, table)
+    if (!d) throw new Error('empty response')
+    return normalizeDetail(d as unknown as TableDetail)
+  },
+  async tableDDL(sessionId, schema, table) {
+    return SchemaService.TableDDL(sessionId, schema, table)
   },
 }

@@ -186,6 +186,8 @@ func CheckIntrospectionErrors(t testing.TB, in driver.Introspector, closed *sql.
 	_, errs["Columns"] = in.Columns(ctx, closed, "x", "y")
 	_, errs["PrimaryKey"] = in.PrimaryKey(ctx, closed, "x", "y")
 	_, errs["SchemaColumns"] = in.SchemaColumns(ctx, closed, "x")
+	_, errs["TableInfo"] = in.TableInfo(ctx, closed, "x", "y")
+	_, errs["TableDDL"] = in.TableDDL(ctx, closed, "x", "y")
 	for name, err := range errs {
 		if err == nil {
 			t.Errorf("%s on a closed DB should fail", name)

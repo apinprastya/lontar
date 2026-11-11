@@ -14,6 +14,7 @@ import {
   type QueryTabState,
 } from './queryTabs'
 import { createWorkspaceStore, type TabState, type WorkspaceStore } from './workspace'
+import { makeDetail } from '../test/structure'
 
 function fakeApi(): WorkspaceApi {
   return {
@@ -25,6 +26,8 @@ function fakeApi(): WorkspaceApi {
     fetchTable: vi.fn(async (_s, _r, req) => ({ columns: [], rows: [], offset: req.offset, limit: req.limit, hasMore: false, totalCount: 0, elapsedMs: 1 })),
     countRows: vi.fn(async () => 0),
     cancel: vi.fn(async () => true),
+    tableInfo: vi.fn(async () => makeDetail()),
+    tableDDL: vi.fn(async () => ''),
   }
 }
 

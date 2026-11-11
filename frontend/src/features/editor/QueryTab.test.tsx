@@ -26,6 +26,7 @@ import type { QueryTabState } from '../../stores/queryTabs'
 import { execResult, fakeEditorApi, resultSet, stmt } from '../../test/fakeEditorApi'
 import type { WorkspaceApi } from '../workspace/api'
 import QueryTab, { HIGHLIGHT_DELAY } from './QueryTab'
+import { makeDetail } from '../../test/structure'
 
 const wsApi: WorkspaceApi = {
   current: vi.fn(async () => ({ database: 'shop', schema: 'public' })),
@@ -36,6 +37,8 @@ const wsApi: WorkspaceApi = {
   fetchTable: vi.fn(),
   countRows: vi.fn(),
   cancel: vi.fn(async () => true),
+  tableInfo: vi.fn(async () => makeDetail()),
+  tableDDL: vi.fn(async () => ''),
 }
 
 describe('QueryTab', () => {

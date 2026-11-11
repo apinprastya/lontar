@@ -38,7 +38,22 @@ export interface DataGridProps {
   onToggleDetail(): void
   /** Editing (table tabs of editable tables); absent = read-only grid. */
   editing?: GridEditing
+  /** Foreign key navigation (table tabs); absent = no links. */
+  links?: GridLinks
 }
+
+/** Foreign key affordances of a table grid. Rows/cols are grid indexes. */
+export interface GridLinks {
+  /** Per column: part of a foreign key (link icon in the header). */
+  fkColumns: boolean[]
+  /** Whether the cell holds a reference that can be followed (non-NULL key). */
+  canFollow(row: number, col: number): boolean
+  /** Opens the referenced row. */
+  onFollow(row: number, col: number): void
+}
+
+/** Width of the clickable "→" at the right edge of a foreign key cell. */
+export const LINK_HIT_WIDTH = 18
 
 /** Callbacks and state of an editable grid. Rows/cols are grid indexes. */
 export interface GridEditing {
@@ -152,8 +167,9 @@ export function gridTheme(): Partial<Theme> {
   }
 }
 
-/** Header icon by column type. */
-export function columnIcon(column: ResultColumn): string {
+/** Header icon by column type (foreign keys get a link). */
+export function columnIcon(column: ResultColumn, fk = false): string {
+  if (fk) return column.isPK ? 'pkfk' : 'fk'
   if (column.isPK) return 'pk'
   const t = column.type.toLowerCase()
   if (/int|num|dec|float|double|real|serial|money/.test(t)) return GridColumnIcon.HeaderNumber
@@ -164,10 +180,25 @@ export function columnIcon(column: ResultColumn): string {
   return GridColumnIcon.HeaderString
 }
 
-/** Key icon for primary-key columns. */
+/** Key icon for primary-key columns, link icons for foreign keys. */
 export const headerIcons = {
   pk: () =>
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><circle cx="7" cy="10" r="3.5" fill="none" stroke="#d29922" stroke-width="2"/><path d="M10.5 10h7m-2 0v3m-2.5-3v2" stroke="#d29922" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
+  fk: () =>
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><g fill="none" stroke="#4c82f0" stroke-width="2" stroke-linecap="round"><path d="M8.5 11.5l3-3"/><path d="M10 6l1.5-1.5a3 3 0 0 1 4.2 4.2L14 10.2"/><path d="M10 14l-1.5 1.5a3 3 0 0 1-4.2-4.2L6 9.8"/></g></svg>',
+  pkfk: () =>
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><circle cx="5.5" cy="7" r="3" fill="none" stroke="#d29922" stroke-width="2"/><path d="M8.5 7h5" stroke="#d29922" stroke-width="2" stroke-linecap="round"/><g fill="none" stroke="#4c82f0" stroke-width="2" stroke-linecap="round"><path d="M11 16l3-3"/><path d="M13 12l1-1a2.1 2.1 0 0 1 3 3l-1 1"/><path d="M12 17l-1 1a2.1 2.1 0 0 1-3-3l1-1"/></g></svg>',
+}
+
+/** Draws the "→" of a followable foreign key cell at the right edge. */
+export function drawLink(ctx: { save(): void; restore(): void; fillStyle: unknown; font: string; textAlign: string; textBaseline: string; fillText(t: string, x: number, y: number): void }, rect: { x: number; y: number; width: number; height: number }, color: string) {
+  ctx.save()
+  ctx.fillStyle = color
+  ctx.font = 'bold 13px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('→', rect.x + rect.width - LINK_HIT_WIDTH / 2, rect.y + rect.height / 2)
+  ctx.restore()
 }
 
 /** Glide cell for a value. */
@@ -238,7 +269,7 @@ export function selectedRowOf(sel: GridSelection): number | null {
  * are unit-testable with a mocked DataEditor.
  */
 export default function DataGrid(props: DataGridProps) {
-  const { columns, rows, offset, sort, columnWidths, platform, onHeaderClick, onColumnResize, onSelectRow, onToggleDetail, editing } = props
+  const { columns, rows, offset, sort, columnWidths, platform, onHeaderClick, onColumnResize, onSelectRow, onToggleDetail, editing, links } = props
   const [selection, setSelection] = useState<GridSelection>(emptySelection)
   const [edit, setEditState] = useState<EditingCell | null>(null)
   // Synchronous view of the open editor: keys can reach the grid before
@@ -261,22 +292,25 @@ export default function DataGrid(props: DataGridProps) {
     if (!editing) setEdit(null)
   }, [editing])
 
+  const fkColumns = links?.fkColumns
   const gridColumns = useMemo<GridColumn[]>(
     () =>
-      columns.map((c) => ({
+      columns.map((c, i) => ({
         id: c.name,
         title: headerTitle(c, sort),
         width: columnWidths[c.name] ?? defaultColumnWidth(c),
-        icon: columnIcon(c),
+        icon: columnIcon(c, Boolean(fkColumns?.[i])),
       })),
-    [columns, sort, columnWidths],
+    [columns, sort, columnWidths, fkColumns],
   )
 
   const rowStates = editing?.rowStates
   const failed = editing?.failed ?? null
   const getCellContent = useCallback(
     ([col, row]: Item): GridCell => {
-      const cell = toGridCell(rows[row]?.[col], muted)
+      let cell = toGridCell(rows[row]?.[col], muted)
+      // The "→" sits at the right edge: keep key values clear of it.
+      if (links?.canFollow(row, col)) cell = { ...cell, contentAlign: 'left' } as GridCell
       if (!rowStates) return cell
       const look = cellLook(rowStates[row], col, failed)
       const override: Partial<Theme> = { ...(cell.themeOverride ?? {}) }
@@ -285,12 +319,14 @@ export default function DataGrid(props: DataGridProps) {
       if (look.isDefault) override.baseFontStyle = 'italic 12px'
       return Object.keys(override).length ? { ...cell, themeOverride: override } : cell
     },
-    [rows, muted, rowStates, failed],
+    [rows, muted, rowStates, failed, links],
   )
 
+  const accent = theme.accentColor as string
   const drawCell = useCallback<DrawCellCallback>(
     (args, drawContent) => {
       drawContent()
+      if (links?.canFollow(args.row, args.col)) drawLink(args.ctx, args.rect, accent)
       const look = cellLook(rowStates?.[args.row], args.col, failed)
       const { ctx, rect } = args
       if (look.strike) {
@@ -305,7 +341,7 @@ export default function DataGrid(props: DataGridProps) {
       }
       if (look.locked && rowStates) drawLock(ctx, rect.x + rect.width - 12, rect.y + rect.height / 2, muted)
     },
-    [rowStates, failed, muted],
+    [rowStates, failed, muted, links, accent],
   )
 
   const canEditCell = (col: number, row: number) => {
@@ -352,6 +388,10 @@ export default function DataGrid(props: DataGridProps) {
   /** Grid key handling; returns true when the key was consumed. */
   const handleKey = (e: ModifierEvent): boolean => {
     if (editing && handleEditKey(e)) return true
+    if (links && matchesShortcut(e, platform, 'o')) {
+      if (current && links.canFollow(current[1], current[0])) links.onFollow(current[1], current[0])
+      return true
+    }
     if (matchesShortcut(e, platform, 'c')) {
       const tsv = selectionToTSV(columns, rows, toSelectionSpec(selection))
       if (!tsv) return false
@@ -442,10 +482,17 @@ export default function DataGrid(props: DataGridProps) {
           if (c) onHeaderClick(c.name, e.shiftKey)
         }}
         onColumnResize={(col, width) => onColumnResize(String(col.id ?? col.title), width)}
-        drawCell={editing ? drawCell : undefined}
+        drawCell={editing || links ? drawCell : undefined}
+        onCellClicked={
+          links
+            ? ([col, row], e) => {
+                if (e.localEventX >= e.bounds.width - LINK_HIT_WIDTH && links.canFollow(row, col)) links.onFollow(row, col)
+              }
+            : undefined
+        }
         onCellActivated={editing ? ([col, row]) => startEdit(col, row) : undefined}
         onCellContextMenu={
-          editing
+          editing || links
             ? ([col, row], e) => {
                 e.preventDefault()
                 setMenu({ col, row, x: e.bounds.x + e.localEventX, y: e.bounds.y + e.localEventY })
@@ -501,7 +548,7 @@ export default function DataGrid(props: DataGridProps) {
           />
         </div>
       )}
-      {menu && editing && (
+      {menu && (editing || links) && (
         <div className="context-menu-backdrop" onMouseDown={() => setMenu(null)} onContextMenu={(e) => (e.preventDefault(), setMenu(null))}>
           <ul
             className="context-menu"
@@ -510,14 +557,27 @@ export default function DataGrid(props: DataGridProps) {
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.key === 'Escape' && setMenu(null)}
           >
-            <MenuItem label="Edit cell" hint="Enter" disabled={!canEditCell(menu.col, menu.row)} onClick={menuAction(() => startEdit(menu.col, menu.row))} />
-            <MenuItem label="Set NULL" hint={mod('N', true)} onClick={menuAction(() => editing.onSetCells(menuCells(menu), { kind: 'null' }))} />
-            <MenuItem label="Set DEFAULT" onClick={menuAction(() => editing.onSetCells(menuCells(menu), { kind: 'default' }))} />
-            <MenuItem label="Set empty string" onClick={menuAction(() => editing.onSetCells(menuCells(menu), { kind: 'value', text: '' }))} />
-            <li role="separator" />
-            <MenuItem label="Insert row" hint={mod('N')} onClick={menuAction(editing.onInsertRow)} />
-            <MenuItem label="Duplicate row" hint={mod('D')} onClick={menuAction(() => editing.onDuplicateRow(menu.row))} />
-            <MenuItem label="Delete row" hint="Del" onClick={menuAction(() => editing.onDeleteRows(menuRows(menu)))} />
+            {links && (
+              <MenuItem
+                label="Open referenced row"
+                hint={mod('O')}
+                disabled={!links.canFollow(menu.row, menu.col)}
+                onClick={menuAction(() => links.onFollow(menu.row, menu.col))}
+              />
+            )}
+            {links && editing && <li role="separator" />}
+            {editing && (
+              <>
+                <MenuItem label="Edit cell" hint="Enter" disabled={!canEditCell(menu.col, menu.row)} onClick={menuAction(() => startEdit(menu.col, menu.row))} />
+                <MenuItem label="Set NULL" hint={mod('N', true)} onClick={menuAction(() => editing.onSetCells(menuCells(menu), { kind: 'null' }))} />
+                <MenuItem label="Set DEFAULT" onClick={menuAction(() => editing.onSetCells(menuCells(menu), { kind: 'default' }))} />
+                <MenuItem label="Set empty string" onClick={menuAction(() => editing.onSetCells(menuCells(menu), { kind: 'value', text: '' }))} />
+                <li role="separator" />
+                <MenuItem label="Insert row" hint={mod('N')} onClick={menuAction(editing.onInsertRow)} />
+                <MenuItem label="Duplicate row" hint={mod('D')} onClick={menuAction(() => editing.onDuplicateRow(menu.row))} />
+                <MenuItem label="Delete row" hint="Del" onClick={menuAction(() => editing.onDeleteRows(menuRows(menu)))} />
+              </>
+            )}
           </ul>
         </div>
       )}

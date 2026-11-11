@@ -2,7 +2,10 @@ import { useMemo } from 'react'
 import { canEdit, readOnlyReason, useWorkspace, type TabState } from '../../stores/workspace'
 import { displayRows, stagedValue, type CellChange, type DisplayRow } from '../../stores/pending'
 import FilterBar from '../filters/FilterBar'
-import DataGrid, { type GridEditing } from '../grid/DataGrid'
+import DataGrid, { type GridEditing, type GridLinks } from '../grid/DataGrid'
+import StructureView from '../structure/StructureView'
+import { fkByColumn, referenceFilters } from '../structure/fk'
+import { shortcutLabel } from '../../lib/mod'
 import { initialText } from '../edits/editors'
 import type { EditValue } from '../edits/types'
 import { LockIcon } from '../../components/icons'
@@ -23,7 +26,23 @@ export function pasteChanges(tab: Pick<TabState, 'columns'>, rows: DisplayRow[],
   return out
 }
 
-/** Content of a table tab: filter bar, grid, inline errors. */
+/** Data / Structure switch at the bottom of a table tab. */
+export function ViewToggle({ tab, platform }: { tab: TabState; platform?: string }) {
+  const setTabView = useWorkspace((st) => st.setTabView)
+  const hint = shortcutLabel(platform, 'E')
+  return (
+    <div className="view-toggle" role="group" aria-label="View">
+      {(['data', 'structure'] as const).map((v) => (
+        <button key={v} type="button" aria-pressed={tab.view === v} title={`Switch view (${hint})`} onClick={() => setTabView(tab.id, v)}>
+          {v === 'data' ? 'Data' : 'Structure'}
+        </button>
+      ))}
+      <span className="hint muted">{hint}</span>
+    </div>
+  )
+}
+
+/** Content of a table tab: filter bar, grid, inline errors; or the structure. */
 export default function TableTab({ tab, platform }: { tab: TabState; platform?: string }) {
   const s = useWorkspace((st) => st)
   const safeMode = useWorkspace((st) => st.safeMode)
@@ -71,6 +90,33 @@ export default function TableTab({ tab, platform }: { tab: TabState; platform?: 
       onPaste: (row, col, values) => s.stageCells(tab.id, pasteChanges(tab, rows, row, col, values)),
     }
   }, [editable, rows, tab, kind, s])
+
+  const fks = tab.structure?.foreignKeys
+  const links = useMemo<GridLinks | undefined>(() => {
+    if (!fks || fks.length === 0) return undefined
+    const byCol = fkByColumn(fks, tab.columns)
+    const fkAt = (col: number) => byCol[col] ?? null
+    return {
+      fkColumns: byCol.map((fk) => fk !== null),
+      canFollow: (row, col) => {
+        const fk = fkAt(col)
+        return fk !== null && referenceFilters(fk, tab.columns, cells[row]) !== null
+      },
+      onFollow: (row, col) => {
+        const fk = fkAt(col)
+        if (fk && cells[row]) s.followReference(tab.id, fk, cells[row])
+      },
+    }
+  }, [fks, tab.columns, tab.id, cells, s])
+
+  if (tab.view === 'structure') {
+    return (
+      <div className="table-tab" role="tabpanel" aria-label={tab.table}>
+        <StructureView tab={tab} />
+        <ViewToggle tab={tab} platform={platform} />
+      </div>
+    )
+  }
 
   return (
     <div className="table-tab" role="tabpanel" aria-label={tab.table}>
@@ -122,6 +168,7 @@ export default function TableTab({ tab, platform }: { tab: TabState; platform?: 
             onSelectRow={(row) => s.selectRow(tab.id, row)}
             onToggleDetail={s.toggleDetail}
             editing={editing}
+            links={links}
           />
         )}
         {tab.loading && (
@@ -136,6 +183,7 @@ export default function TableTab({ tab, platform }: { tab: TabState; platform?: 
           <p className="grid-empty muted">{filtered ? 'No rows match the filter.' : 'This table is empty.'}</p>
         )}
       </div>
+      <ViewToggle tab={tab} platform={platform} />
     </div>
   )
 }

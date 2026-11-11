@@ -19,7 +19,7 @@ export function isTextTarget(target: EventTarget | null | undefined): boolean {
  *   Mod+Enter run statement/selection · Mod+Shift+Enter run all ·
  *   Esc stop a running query ·
  *   table tabs: Mod+S commit · Mod+Z / Mod+Shift+Z undo/redo staged edits ·
- *   Mod+N insert row (see keymap.ts for the full list)
+ *   Mod+N insert row · Mod+E data / structure (see keymap.ts for the full list)
  *
  * Keys handled by the focused SQL editor itself (CodeMirror marks them
  * defaultPrevented) never reach this function; the caller filters them.
@@ -48,7 +48,11 @@ export function handleShortcut(e: ModifierEvent, platform: string | undefined, s
       else s.undoEdit(tab.id)
       return true
     }
-    if (!inText && key === 'n' && !e.shiftKey && canEdit(tab, s.safeMode)) {
+    if (key === 'e' && !e.shiftKey) {
+      s.toggleTabView(tab.id)
+      return true
+    }
+    if (!inText && key === 'n' && !e.shiftKey && tab.view !== 'structure' && canEdit(tab, s.safeMode)) {
       s.addRow(tab.id)
       return true
     }
@@ -71,7 +75,11 @@ export function handleShortcut(e: ModifierEvent, platform: string | undefined, s
     case 'f':
       if (!tab) return false
       if (tab.kind === 'query') s.requestEditor(tab.id, { type: 'search' })
-      else s.toggleFilterBar(tab.id)
+      else if (tab.view === 'structure') {
+        // The filter bar belongs to the data view.
+        s.setTabView(tab.id, 'data')
+        s.toggleFilterBar(tab.id, true)
+      } else s.toggleFilterBar(tab.id)
       return true
     case 'i':
       s.toggleDetail()
