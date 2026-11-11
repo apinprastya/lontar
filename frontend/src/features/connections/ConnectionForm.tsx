@@ -81,11 +81,16 @@ export function validateDraft(d: Draft): Errors {
   return errors
 }
 
+/** JSON form of Go's zero time.Time; "" fails to unmarshal. */
+export const GO_ZERO_TIME = '0001-01-01T00:00:00Z'
+
 function toConnection(d: Draft, initial: Connection | undefined): Connection {
   const file = isFileBased(d.kind)
   return {
     // Keep fields the form does not edit (options, ssh, ssl, timestamps).
-    ...(initial ?? { id: '', hasPassword: false, createdAt: '', updatedAt: '' }),
+    // New connections use Go's zero time: the backend decodes these into
+    // time.Time, which rejects "" (the Store sets the real values on save).
+    ...(initial ?? { id: '', hasPassword: false, createdAt: GO_ZERO_TIME, updatedAt: GO_ZERO_TIME }),
     name: d.name.trim(),
     kind: d.kind,
     host: file ? '' : d.host.trim(),

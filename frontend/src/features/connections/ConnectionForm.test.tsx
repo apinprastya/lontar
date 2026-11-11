@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DRIVERS, makeConnection } from '../../test/mockBindings'
-import ConnectionForm, { ConnectionFormProps, validateDraft } from './ConnectionForm'
+import ConnectionForm, { ConnectionFormProps, GO_ZERO_TIME, validateDraft } from './ConnectionForm'
 import type { Connection } from './types'
 
 function setup(over: Partial<ConnectionFormProps> = {}) {
@@ -42,6 +42,30 @@ describe('ConnectionForm', () => {
       null,
     )
     expect(props.onClose).toHaveBeenCalled()
+  })
+
+  it('sends parseable zero timestamps for a new connection on Save and Test', async () => {
+    const { props, user } = setup()
+    await user.type(field('Name'), 'New')
+    await user.type(field('User'), 'me')
+    await user.click(screen.getByRole('button', { name: 'Test' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    const zero = expect.objectContaining({ createdAt: GO_ZERO_TIME, updatedAt: GO_ZERO_TIME })
+    expect(props.onTest).toHaveBeenCalledWith(zero, null)
+    expect(props.onSave).toHaveBeenCalledWith(zero, null)
+    // Must be a valid RFC 3339 timestamp (Go's time.Time rejects "").
+    expect(Number.isNaN(Date.parse(GO_ZERO_TIME))).toBe(false)
+  })
+
+  it('keeps existing timestamps when editing', async () => {
+    const initial = makeConnection()
+    const { props, user } = setup({ initial })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ createdAt: initial.createdAt, updatedAt: initial.updatedAt }),
+      null,
+    )
   })
 
   it('switches fields and default port with the driver', async () => {
