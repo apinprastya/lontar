@@ -1,0 +1,114 @@
+:root {
+  --bg: #f6f6f7;
+  --bg-sidebar: #ececee;
+  --bg-status: #e4e4e7;
+  --text: #1c1c21;
+  --muted: #6b6b76;
+  --border: #d4d4d8;
+  --danger: #c22f2f;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Noto Sans', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #18191e;
+    --bg-sidebar: #1f2026;
+    --bg-status: #24252c;
+    --text: #e6e6ea;
+    --muted: #9a9aa6;
+    --border: #33343c;
+    --danger: #ff6b6b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    'sidebar workspace'
+    'status status';
+  height: 100%;
+}
+
+.sidebar {
+  grid-area: sidebar;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  padding: 12px;
+}
+
+/* Leave room for the inset traffic lights of the macOS title bar. */
+.app-shell[data-platform='darwin'] .sidebar {
+  padding-top: 40px;
+  --wails-draggable: drag;
+}
+
+.sidebar-header {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.sidebar-empty {
+  color: var(--muted);
+  margin: 0;
+}
+
+.workspace {
+  grid-area: workspace;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.welcome {
+  text-align: center;
+}
+
+.welcome h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.welcome p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.statusbar {
+  grid-area: status;
+  display: flex;
+  gap: 16px;
+  padding: 4px 12px;
+  background: var(--bg-status);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.statusbar-error {
+  color: var(--danger);
+}

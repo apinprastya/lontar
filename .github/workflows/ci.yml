@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  WAILS_VERSION: v3.0.0
+  NODE_VERSION: "24"
+
+jobs:
+  build:
+    name: Build & unit tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux webview dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # Wails v3.0 builds against GTK4 + WebKitGTK 6.0 by default; the
+          # GTK3 + WebKit2GTK 4.1 stack is needed for `-tags gtk3` builds.
+          sudo apt-get install -y build-essential pkg-config \
+            libgtk-4-dev libwebkitgtk-6.0-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend tests (Vitest, coverage thresholds 80%)
+        working-directory: frontend
+        run: npx vitest run --coverage
+
+      - name: Build frontend (embedded by main.go)
+        working-directory: frontend
+        run: npm run build
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Go unit tests (-short, no Docker)
+        run: go test -short ./...
+
+      - name: wails3 build
+        run: wails3 build
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbedit-${{ runner.os }}
+          path: bin/
+          if-no-files-found: error
+
+  integration:
+    name: Go integration tests + coverage gate (Docker, Linux)
+    # Hosted macOS/Windows runners cannot run Linux containers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux webview dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Go tests incl. testcontainers (PostgreSQL 16, MySQL 8, MariaDB 11)
+        run: go test ./... -coverprofile=coverage.out
+
+      - name: Coverage gate (>= 80%)
+        run: wails3 task cover
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: coverage.out
+          if-no-files-found: ignore

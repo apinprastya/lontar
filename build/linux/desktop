@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=dbedit
+Comment=A fast, lightweight desktop database client
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/dbedit %u
+Terminal=false
+Type=Application
+Icon=dbedit
+Categories=Utility;
+StartupWMClass=dbedit
+
+ 

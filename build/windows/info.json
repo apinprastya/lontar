@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.0.1"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.0.1",
+			"CompanyName": "dbedit",
+			"FileDescription": "A fast, lightweight desktop database client",
+			"LegalCopyright": "(c) 2026, dbedit contributors",
+			"ProductName": "dbedit",
+			"Comments": "PostgreSQL, MySQL/MariaDB and SQLite client"
+		}
+	}
+}
