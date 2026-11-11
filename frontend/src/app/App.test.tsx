@@ -1,21 +1,20 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { Version, Platform } = vi.hoisted(() => ({
-  Version: vi.fn<() => Promise<string>>(),
-  Platform: vi.fn<() => Promise<string>>(),
-}))
+vi.mock('../../bindings/dbedit/internal/services', () => import('../test/mockBindings'))
 
-vi.mock('../../bindings/dbedit/internal/services', () => ({
-  AppService: { Version, Platform },
-}))
-
+import { initialConnectionsState, useConnections } from '../stores/connections'
+import { AppService, ConnectionService, makeConnection, makeSession, resetBindings } from '../test/mockBindings'
 import App, { platformLabel } from './App'
+
+const { Version, Platform } = AppService
 
 describe('App shell', () => {
   beforeEach(() => {
+    resetBindings()
     Version.mockReset()
     Platform.mockReset()
+    useConnections.setState(initialConnectionsState)
   })
   afterEach(cleanup)
 
@@ -25,8 +24,9 @@ describe('App shell', () => {
 
     const { container } = render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'dbedit' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Sidebar')).toHaveTextContent('No connections')
+    expect(screen.getByLabelText('Sidebar')).toHaveTextContent('dbedit')
+    expect(screen.getByLabelText('Sidebar')).toHaveTextContent('Not connected')
+    expect(screen.getByRole('heading', { name: 'Connections' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Loading')
 
     expect(await screen.findByTestId('app-version')).toHaveTextContent('v1.2.3')
@@ -34,6 +34,27 @@ describe('App shell', () => {
     expect(container.querySelector('.app-shell')).toHaveAttribute('data-platform', 'linux')
     expect(Version).toHaveBeenCalledTimes(1)
     expect(Platform).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('status')).toHaveTextContent('Shortcuts use Ctrl')
+  })
+
+  it('switches to the workspace when a session is open', async () => {
+    Version.mockResolvedValue('1.0.0')
+    Platform.mockResolvedValue('darwin')
+    useConnections.setState({ session: makeSession(), connections: [makeConnection({ id: 'c1', color: '#39c5cf' })] })
+    render(<App />)
+    expect(screen.getByLabelText('Workspace')).toBeInTheDocument()
+    expect(screen.getByLabelText('Sidebar')).toHaveTextContent('Production')
+    expect(screen.getByTestId('statusbar-session')).toHaveTextContent('PostgreSQL 16.4')
+    expect(await screen.findByText('Shortcuts use ⌘')).toBeInTheDocument()
+    expect(ConnectionService.List).not.toHaveBeenCalled()
+  })
+
+  it('shows the sidebar session without a matching connection', () => {
+    Version.mockResolvedValue('1.0.0')
+    Platform.mockResolvedValue('linux')
+    useConnections.setState({ session: makeSession({ connectionId: 'gone', kind: 'mariadb' }) })
+    render(<App />)
+    expect(screen.getByLabelText('Sidebar')).toHaveTextContent('MariaDB')
   })
 
   it('shows an error when the backend call fails', async () => {

@@ -63,6 +63,38 @@ systemctl --user start podman.socket
 export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock
 ```
 
+## Saved connections and passwords
+
+Connections are stored as JSON (schema-versioned, written atomically, file
+mode `0600` in a `0700` directory) in the per-user config directory:
+
+| OS | Location |
+|---|---|
+| Linux | `$XDG_CONFIG_HOME/dbedit/connections.json` (default `~/.config/dbedit/`) |
+| Windows | `%AppData%\dbedit\connections.json` |
+| macOS | `~/Library/Application Support/dbedit/connections.json` |
+
+**Passwords are never written to `connections.json`** and are never sent back
+to the UI (it only learns whether one is saved). They are kept in the OS
+keychain via [go-keyring](https://github.com/zalando/go-keyring), under the
+service `dbedit` with the connection ID as the account:
+
+- macOS: Keychain
+- Windows: Credential Manager
+- Linux: Secret Service (gnome-keyring, KWallet, KeePassXC, ...)
+
+**Linux fallback.** If no Secret Service is reachable (e.g. a minimal window
+manager or a headless session), passwords are stored in `secrets.enc` in the
+same directory, encrypted with AES-256-GCM. The key lives next to it in
+`secrets.key` (mode `0600`). **This is weaker than an OS keychain:** anyone
+who can read your files can decrypt it. It only keeps passwords out of
+`connections.json` and out of casual view. Start a Secret Service to avoid
+the fallback; passwords saved later go to the keychain, and the stale
+fallback copy is then removed. On macOS and Windows there is no fallback, and
+keychain errors are reported.
+
+Deleting a connection also deletes its saved password.
+
 ## Build
 
 ```sh
