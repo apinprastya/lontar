@@ -1,4 +1,7 @@
 import { useEffect, useMemo } from 'react'
+import { activeResultView } from '../../stores/queryTabs'
+import { editorApi, type EditorApi } from '../editor/api'
+import QueryTab from '../editor/QueryTab'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { useConnections } from '../../stores/connections'
 import { WorkspaceContext, createWorkspaceStore, useActiveTab, useWorkspace, type WorkspaceStore } from '../../stores/workspace'
@@ -15,11 +18,12 @@ import TableTab from './TableTab'
 
 export interface WorkspaceProps {
   platform?: string
-  /** Backend adapter; tests may inject a fake. */
+  /** Backend adapters; tests may inject fakes. */
   api?: WorkspaceApi
+  editor?: EditorApi
 }
 
-function WorkspaceView({ platform, store }: { platform?: string; store: WorkspaceStore }) {
+function WorkspaceView({ platform, store, editor }: { platform?: string; store: WorkspaceStore; editor: EditorApi }) {
   const session = useConnections((s) => s.session)
   const connection = useConnections((s) => s.connections.find((c) => c.id === s.session?.connectionId))
   const disconnect = useConnections((s) => s.disconnect)
@@ -31,15 +35,27 @@ function WorkspaceView({ platform, store }: { platform?: string; store: Workspac
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Keys the SQL editor (or another widget) already handled.
+      if (e.defaultPrevented) return
       if (handleShortcut(e, platform, store.getState())) e.preventDefault()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [platform, store])
 
+  const q = tab?.kind === 'query' ? tab : null
+  const [qResult, qActive, qSorts] = [q?.result ?? null, q?.activeResult ?? '', q?.sorts ?? null]
+  const queryView = useMemo(
+    () => (qSorts ? activeResultView({ result: qResult, activeResult: qActive, sorts: qSorts }) : null),
+    [qResult, qActive, qSorts],
+  )
+
   if (!session) return null
   const color = connection ? connectionColor(connection) : ''
-  const detailRow = tab && tab.selectedRow !== null ? (tab.rows[tab.selectedRow] ?? null) : null
+  const detailColumns = tab?.kind === 'table' ? tab.columns : (queryView?.set.columns ?? [])
+  const detailRows = tab?.kind === 'table' ? tab.rows : (queryView?.rows ?? [])
+  const detailRow = tab && tab.selectedRow !== null ? (detailRows[tab.selectedRow] ?? null) : null
+  const rowOffset = tab?.kind === 'table' ? tab.offset : 0
 
   return (
     <section className="ws" aria-label="Workspace" style={color ? { borderTopColor: color } : undefined}>
@@ -54,7 +70,10 @@ function WorkspaceView({ platform, store }: { platform?: string; store: Workspac
               <button type="button" onClick={() => void refresh()} title={`Refresh (${shortcutLabel(platform, 'R')})`}>
                 <RefreshIcon /> Refresh
               </button>
-              {tab && (
+              <button type="button" onClick={() => store.getState().newQueryTab()} title={`New SQL query (${shortcutLabel(platform, 'T')})`}>
+                New query
+              </button>
+              {tab?.kind === 'table' && (
                 <button
                   type="button"
                   aria-pressed={tab.filterOpen}
@@ -73,12 +92,13 @@ function WorkspaceView({ platform, store }: { platform?: string; store: Workspac
               </button>
             </div>
             <TabBar platform={platform} />
-            {tab ? (
-              <TableTab key={tab.id} tab={tab} platform={platform} />
-            ) : (
+            {tab?.kind === 'table' && <TableTab key={tab.id} tab={tab} platform={platform} />}
+            {tab?.kind === 'query' && <QueryTab key={tab.id} tab={tab} platform={platform} api={editor} />}
+            {!tab && (
               <div className="ws-empty muted">
                 <p>Select a table in the sidebar to browse its rows.</p>
                 <p className="hint">Click to preview · double-click to keep it open</p>
+                <p className="hint">{shortcutLabel(platform, 'T')} opens a new SQL query</p>
               </div>
             )}
           </div>
@@ -88,9 +108,9 @@ function WorkspaceView({ platform, store }: { platform?: string; store: Workspac
             <Separator className="resize-handle" />
             <Panel id="detail" defaultSize={300} minSize={200}>
               <RowDetail
-                columns={tab?.columns ?? []}
+                columns={detailColumns}
                 row={detailRow}
-                rowNumber={tab && tab.selectedRow !== null ? tab.offset + tab.selectedRow + 1 : null}
+                rowNumber={tab && tab.selectedRow !== null ? rowOffset + tab.selectedRow + 1 : null}
                 onClose={toggleDetail}
               />
             </Panel>
@@ -100,8 +120,8 @@ function WorkspaceView({ platform, store }: { platform?: string; store: Workspac
       <StatusBar
         tab={tab}
         serverVersion={session.serverVersion}
-        onPrev={() => tab && store.getState().prevPage(tab.id)}
-        onNext={() => tab && store.getState().nextPage(tab.id)}
+        onPrev={() => tab?.kind === 'table' && store.getState().prevPage(tab.id)}
+        onNext={() => tab?.kind === 'table' && store.getState().nextPage(tab.id)}
       />
     </section>
   )
@@ -111,11 +131,15 @@ function WorkspaceView({ platform, store }: { platform?: string; store: Workspac
  * Workspace for the open session: sidebar | table tabs | optional row
  * detail, with a status bar. Each session gets its own workspace store.
  */
-export default function Workspace({ platform, api = workspaceApi }: WorkspaceProps) {
+export default function Workspace({ platform, api = workspaceApi, editor = editorApi }: WorkspaceProps) {
   const session = useConnections((s) => s.session)
   const sessionId = session?.id
   const kind = session?.kind
-  const store = useMemo(() => (sessionId && kind ? createWorkspaceStore({ id: sessionId, kind }, api) : null), [sessionId, kind, api])
+  const connectionId = session?.connectionId
+  const store = useMemo(
+    () => (sessionId && kind ? createWorkspaceStore({ id: sessionId, kind, connectionId }, api, editor) : null),
+    [sessionId, kind, connectionId, api, editor],
+  )
 
   useEffect(() => {
     if (!store) return
@@ -126,7 +150,7 @@ export default function Workspace({ platform, api = workspaceApi }: WorkspacePro
   if (!store) return null
   return (
     <WorkspaceContext.Provider value={store}>
-      <WorkspaceView platform={platform} store={store} />
+      <WorkspaceView platform={platform} store={store} editor={editor} />
     </WorkspaceContext.Provider>
   )
 }

@@ -15,7 +15,10 @@ import {
   type TableType,
 } from '../features/workspace/types'
 import type { Kind } from '../features/connections/types'
+import { editorApi as defaultEditorApi, type EditorApi } from '../features/editor/api'
+import { cycleSort } from '../features/grid/sort'
 import { errorMessage } from '../lib/errors'
+import { createQueryActions, loadDrafts, newQueryTabState, type QueryState, type QueryTabState } from './queryTabs'
 
 /** One editable row of the filter bar. */
 export interface FilterRow extends Filter {
@@ -24,6 +27,7 @@ export interface FilterRow extends Filter {
 
 /** State of one table tab. */
 export interface TabState {
+  kind: 'table'
   id: string
   schema: string
   table: string
@@ -61,9 +65,14 @@ export interface TabState {
   columnWidths: Record<string, number>
 }
 
-export interface WorkspaceState {
+/** A tab of the workspace: a table or an SQL editor. */
+export type Tab = TabState | QueryTabState
+
+export interface WorkspaceState extends QueryState {
   sessionId: string
   kind: Kind
+  /** Saved connection ID (query drafts and history are kept per connection). */
+  connectionId: string
   databases: string[]
   database: string
   schemas: string[]
@@ -75,7 +84,7 @@ export interface WorkspaceState {
   sidebarError: string | null
   search: string
 
-  tabs: TabState[]
+  tabs: Tab[]
   activeTabId: string | null
   showDetail: boolean
 
@@ -91,7 +100,7 @@ export interface WorkspaceState {
   closeTab(id: string): void
   activateTab(id: string): void
   activateIndex(index: number): void
-  activeTab(): TabState | null
+  activeTab(): Tab | null
 
   loadTab(id: string): Promise<void>
   cancelLoad(id: string): void
@@ -123,19 +132,7 @@ export function newRequestId(prefix = 'req'): string {
   return `${prefix}-${Date.now().toString(36)}-${seq}`
 }
 
-/**
- * Next sort after clicking a column header. A plain click makes the column
- * the only sort key and cycles it asc → desc → none; with additive (Shift)
- * the column is cycled in place and other keys are kept, so it can become a
- * secondary key.
- */
-export function cycleSort(sort: SortSpec[], column: string, additive: boolean): SortSpec[] {
-  const existing = sort.find((s) => s.column === column)
-  const next: SortSpec | null = !existing ? { column, desc: false } : !existing.desc ? { column, desc: true } : null
-  if (!additive) return next ? [next] : []
-  if (!existing) return [...sort, next as SortSpec]
-  return next ? sort.map((s) => (s.column === column ? next : s)) : sort.filter((s) => s.column !== column)
-}
+export { cycleSort }
 
 /** Filters from the draft rows that are complete enough to send. */
 export function effectiveFilters(rows: FilterRow[]): Filter[] {
@@ -157,6 +154,7 @@ export function newFilterRow(column: string, op: FilterOp = '='): FilterRow {
 
 function newTab(t: TableInfo, pinned: boolean): TabState {
   return {
+    kind: 'table',
     id: newRequestId('tab'),
     schema: t.schema,
     table: t.name,
@@ -206,14 +204,28 @@ export function tabRequest(tab: TabState): FetchRequest {
   }
 }
 
-export function createWorkspaceStore(session: { id: string; kind: Kind }, api: WorkspaceApi): WorkspaceStore {
+export interface WorkspaceSession {
+  id: string
+  kind: Kind
+  connectionId?: string
+}
+
+export function createWorkspaceStore(session: WorkspaceSession, api: WorkspaceApi, editor: EditorApi = defaultEditorApi): WorkspaceStore {
   let disposed = false
+  const connectionId = session.connectionId ?? ''
+  // Query tabs of this connection from the previous visit.
+  const restored = (() => {
+    const tabs: QueryTabState[] = []
+    for (const d of loadDrafts(connectionId)) tabs.push({ ...newQueryTabState(d.title, d.sql), cursor: 0 })
+    return tabs
+  })()
 
   const store = createStore<WorkspaceState>()((set, get) => {
-    const findTab = (id: string) => get().tabs.find((t) => t.id === id)
+    /** A table tab by ID (query tabs are handled in queryTabs.ts). */
+    const findTab = (id: string) => get().tabs.find((t): t is TabState => t.id === id && t.kind === 'table')
     const patchTab = (id: string, patch: Partial<TabState> | ((t: TabState) => Partial<TabState>)) => {
       set((s) => ({
-        tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...(typeof patch === 'function' ? patch(t) : patch) } : t)),
+        tabs: s.tabs.map((t) => (t.id === id && t.kind === 'table' ? { ...t, ...(typeof patch === 'function' ? patch(t) : patch) } : t)),
       }))
     }
     const cancelRequests = (tab: TabState | undefined) => {
@@ -256,14 +268,22 @@ export function createWorkspaceStore(session: { id: string; kind: Kind }, api: W
       }
     }
 
-    const closeAllTabs = () => {
-      for (const t of get().tabs) cancelRequests(t)
-      set({ tabs: [], activeTabId: null })
+    /** Closes the table tabs (they belong to the previous database); query tabs stay. */
+    const closeTableTabs = () => {
+      const { tabs, activeTabId } = get()
+      for (const t of tabs) if (t.kind === 'table') cancelRequests(t)
+      const rest = tabs.filter((t) => t.kind !== 'table')
+      set({ tabs: rest, activeTabId: rest.some((t) => t.id === activeTabId) ? activeTabId : (rest[0]?.id ?? null) })
     }
 
     return {
+      ...createQueryActions<WorkspaceState>(set, get, editor, () => disposed),
+      historyOpen: false,
+      completion: null,
+      completionLoading: false,
       sessionId: session.id,
       kind: session.kind,
+      connectionId,
       databases: [],
       database: '',
       schemas: [],
@@ -273,8 +293,8 @@ export function createWorkspaceStore(session: { id: string; kind: Kind }, api: W
       tablesLoading: false,
       sidebarError: null,
       search: '',
-      tabs: [],
-      activeTabId: null,
+      tabs: restored,
+      activeTabId: restored[0]?.id ?? null,
       showDetail: false,
 
       async init() {
@@ -305,9 +325,9 @@ export function createWorkspaceStore(session: { id: string; kind: Kind }, api: W
         set({ sidebarError: null, tablesLoading: true })
         try {
           const loc = await api.useDatabase(get().sessionId, database)
-          // Tabs belong to the previous database's pool.
-          closeAllTabs()
-          set({ database: loc.database, schema: loc.schema, tables: [] })
+          // Table tabs belong to the previous database's pool.
+          closeTableTabs()
+          set({ database: loc.database, schema: loc.schema, tables: [], completion: null })
         } catch (err) {
           set({ sidebarError: errorMessage(err), tablesLoading: false })
           return
@@ -316,7 +336,7 @@ export function createWorkspaceStore(session: { id: string; kind: Kind }, api: W
       },
 
       async selectSchema(schema) {
-        set({ schema, sidebarError: null })
+        set({ schema, sidebarError: null, completion: null })
         await loadTables()
       },
 
@@ -331,14 +351,14 @@ export function createWorkspaceStore(session: { id: string; kind: Kind }, api: W
 
       openTable(t, pin = false) {
         const { tabs } = get()
-        const existing = tabs.find((x) => x.schema === t.schema && x.table === t.name)
+        const existing = tabs.find((x): x is TabState => x.kind === 'table' && x.schema === t.schema && x.table === t.name)
         if (existing) {
           set({ activeTabId: existing.id })
           if (pin && !existing.pinned) patchTab(existing.id, { pinned: true })
           return
         }
         const tab = newTab(t, pin)
-        const preview = pin ? undefined : tabs.find((x) => !x.pinned)
+        const preview = pin ? undefined : tabs.find((x): x is TabState => x.kind === 'table' && !x.pinned)
         if (preview) {
           cancelRequests(preview)
           set({ tabs: tabs.map((x) => (x.id === preview.id ? tab : x)), activeTabId: tab.id })
@@ -356,11 +376,13 @@ export function createWorkspaceStore(session: { id: string; kind: Kind }, api: W
         const { tabs, activeTabId } = get()
         const i = tabs.findIndex((t) => t.id === id)
         if (i < 0) return
-        cancelRequests(tabs[i])
+        const tab = tabs[i]
         const rest = tabs.filter((t) => t.id !== id)
         let active = activeTabId
         if (activeTabId === id) active = (rest[i] ?? rest[i - 1])?.id ?? null
         set({ tabs: rest, activeTabId: active })
+        if (tab.kind === 'table') cancelRequests(tab)
+        else get().releaseQueryTab(tab)
       },
 
       activateTab(id) {
@@ -417,7 +439,9 @@ export function createWorkspaceStore(session: { id: string; kind: Kind }, api: W
 
       async refresh() {
         const tab = get().activeTab()
-        if (tab) {
+        if (tab?.kind === 'query') {
+          await Promise.all([get().refreshTables(), get().completion ? get().loadCompletion(true) : Promise.resolve()])
+        } else if (tab) {
           patchTab(tab.id, { totalCount: null })
           await Promise.all([get().refreshTables(), get().loadTab(tab.id)])
         } else {
@@ -509,7 +533,10 @@ export function createWorkspaceStore(session: { id: string; kind: Kind }, api: W
 
       dispose() {
         disposed = true
-        for (const t of get().tabs) cancelRequests(t)
+        for (const t of get().tabs) {
+          if (t.kind === 'table') cancelRequests(t)
+          else if (t.requestId) void editor.cancel(t.requestId).catch(() => {})
+        }
       },
     }
   })
@@ -526,6 +553,6 @@ export function useWorkspace<T>(selector: (s: WorkspaceState) => T): T {
 }
 
 /** The active tab of the enclosing Workspace. */
-export function useActiveTab(): TabState | null {
+export function useActiveTab(): Tab | null {
   return useWorkspace((s) => s.tabs.find((t) => t.id === s.activeTabId) ?? null)
 }

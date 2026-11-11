@@ -63,6 +63,9 @@ systemctl --user start podman.socket
 export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock
 ```
 
+The SQL splitter has a fuzz test. Normal runs use only its seed corpus; to fuzz
+locally, run `go test -run XXX -fuzz FuzzSplit -fuzztime 60s ./internal/sqlsplit`.
+
 Integration tests share a fixture, `testutil.SeedBrowse`. It holds every
 value type, a view, tables with no or a composite primary key, and a table
 and columns with awkward names. Run it against each engine (SQLite always;
@@ -90,6 +93,47 @@ Click a column header to sort it (ascending, then descending, then off).
 Shift-click adds a secondary sort. Filter values are always sent as bound
 parameters. The filter bar's **Raw SQL** mode instead takes a WHERE
 condition you type, and uses it verbatim against your database.
+
+## SQL editor
+
+**Mod+T** (or **New query**) opens an SQL tab next to the table tabs. Double-click
+a tab to rename it. Each tab has its own database connection, kept from the first
+run until the tab is closed. That means `BEGIN`/`COMMIT`, `SET`, `USE`,
+`SET search_path` and temporary tables carry over from one run to the next. The
+connection is also released when you disconnect or switch databases in the
+sidebar, and after 30 minutes without a run. An open transaction is rolled back
+whenever the connection is released. The toolbar shows **Transaction open**
+while one is active. On MySQL, MariaDB and SQLite this is inferred from the
+statements you run, so it is marked "(guess)".
+
+| Shortcut | Action |
+|---|---|
+| Mod+Enter | Run the selection, or the statement under the cursor (highlighted) |
+| Mod+Shift+Enter | Run the whole script |
+| Esc | Stop the running query |
+| Mod+F | Search in the editor (in a table tab it opens the filter bar) |
+| Ctrl+Space / typing | Autocomplete tables, `table.column`, `alias.column` and keywords |
+
+Scripts are split client-side the way each engine's CLI does it: quotes,
+comments, PostgreSQL `$$` bodies, the MySQL `DELIMITER` command and SQLite
+trigger bodies are all handled. Each statement that returns rows gets a result tab, and
+**Messages** lists every statement with its status, row count, time and any
+error. Click a message to select that statement, or jump to the error
+position. A run stops at the first error unless **Continue on error** is on.
+Results show the first *Max rows* rows (1,000 by default, up to 50,000).
+**Load more** fetches the next rows of the last statement's result from the
+still-open cursor, so the query is never run twice.
+
+Cancelling a PostgreSQL query keeps the tab's session. MySQL and MariaDB close
+the connection when a query is cancelled. The next run then reconnects and tells
+you that the session state (transaction, temporary tables, variables) is gone.
+
+The text of each tab is saved per connection in the app's local storage and
+comes back the next time you open that connection. Query history (every run, with time,
+duration, rows and errors, but never passwords) is stored in `history.db`
+next to `connections.json`, with the newest 10,000 runs kept per connection. Open
+it with **History**: click an entry to insert it, double-click to open it in a
+new tab.
 
 ## Saved connections and passwords
 

@@ -11,14 +11,17 @@ func TestAppOptions(t *testing.T) {
 	if opts.Name != "dbedit" {
 		t.Fatalf("Name = %q, want dbedit", opts.Name)
 	}
-	if len(opts.Services) != 4 {
-		t.Fatalf("expected 4 bound services, got %d", len(opts.Services))
+	if len(opts.Services) != 6 {
+		t.Fatalf("expected 6 bound services, got %d", len(opts.Services))
 	}
 	if opts.Services[1].Instance() != b.connections {
 		t.Fatal("ConnectionService not registered")
 	}
 	if opts.Services[2].Instance() != b.schema || opts.Services[3].Instance() != b.browse {
 		t.Fatal("SchemaService/BrowseService not registered")
+	}
+	if opts.Services[4].Instance() != b.editor || opts.Services[5].Instance() != b.history {
+		t.Fatal("EditorService/HistoryService not registered")
 	}
 	if opts.Assets.Handler == nil {
 		t.Fatal("asset handler must be set")
@@ -30,7 +33,7 @@ func TestAppOptions(t *testing.T) {
 
 func TestNewBackend(t *testing.T) {
 	b := newBackend(t.TempDir())
-	if b.schema == nil || b.browse == nil {
+	if b.schema == nil || b.browse == nil || b.editor == nil || b.history == nil {
 		t.Fatal("services missing")
 	}
 	svc := b.connections
@@ -42,6 +45,9 @@ func TestNewBackend(t *testing.T) {
 		t.Fatalf("List() = %+v, %v", list, err)
 	}
 	if err := svc.ServiceShutdown(); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.editor.ServiceShutdown(); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -41,6 +41,25 @@ export const BrowseService = {
   CancelFetch: vi.fn<(requestId: string) => Promise<boolean>>(),
 }
 
+export const EditorService = {
+  OpenEditor: vi.fn<(sessionId: string) => Promise<string>>(),
+  CloseEditor: vi.fn<(editorId: string) => Promise<void>>(),
+  Execute: vi.fn<(editorId: string, requestId: string, sql: string, opts: unknown) => Promise<unknown>>(),
+  Cancel: vi.fn<(requestId: string) => Promise<boolean>>(),
+  FetchMore: vi.fn<(editorId: string, requestId: string, resultId: string, n: number) => Promise<unknown>>(),
+  TxState: vi.fn<(editorId: string) => Promise<unknown>>(),
+  Split: vi.fn<(kind: string, sql: string) => Promise<unknown>>(),
+  StatementAt: vi.fn<(kind: string, sql: string, cursor: number) => Promise<unknown>>(),
+  CompletionSchema: vi.fn<(sessionId: string, schema: string, refresh: boolean) => Promise<unknown>>(),
+  CompletionColumns: vi.fn<(sessionId: string, schema: string, table: string) => Promise<unknown>>(),
+}
+
+export const HistoryService = {
+  List: vi.fn<(connectionId: string, search: string, limit: number, offset: number) => Promise<unknown>>(),
+  Delete: vi.fn<(id: number) => Promise<void>>(),
+  Clear: vi.fn<(connectionId: string) => Promise<number>>(),
+}
+
 export const DRIVERS: DriverInfo[] = [
   { kind: 'postgres', displayName: 'PostgreSQL', defaultPort: 5432, fileBased: false },
   { kind: 'mysql', displayName: 'MySQL', defaultPort: 3306, fileBased: false },
@@ -84,6 +103,8 @@ export function resetBindings() {
     ...Object.values(ConnectionService),
     ...Object.values(SchemaService),
     ...Object.values(BrowseService),
+    ...Object.values(EditorService),
+    ...Object.values(HistoryService),
   ])
     fn.mockReset()
   AppService.Version.mockResolvedValue('0.0.1')

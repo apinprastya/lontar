@@ -1,4 +1,6 @@
-import type { TabState } from '../../stores/workspace'
+import type { Tab, TabState } from '../../stores/workspace'
+import { activeResultView, type QueryTabState } from '../../stores/queryTabs'
+import { formatDuration, rowCountText } from '../editor/format'
 
 const fmt = (n: number) => n.toLocaleString('en-US')
 
@@ -18,7 +20,7 @@ export function rowRangeText(tab: Pick<TabState, 'offset' | 'rows' | 'totalCount
 }
 
 export interface StatusBarProps {
-  tab: TabState | null
+  tab: Tab | null
   serverVersion: string
   onPrev(): void
   onNext(): void
@@ -28,7 +30,8 @@ export interface StatusBarProps {
 export default function StatusBar({ tab, serverVersion, onPrev, onNext }: StatusBarProps) {
   return (
     <footer className="statusbar ws-statusbar" role="status">
-      {tab && (
+      {tab?.kind === 'query' && <QueryStatus tab={tab} />}
+      {tab?.kind === 'table' && (
         <>
           <span data-testid="row-range">{rowRangeText(tab)}</span>
           {tab.counting && <span className="muted">counting…</span>}
@@ -47,5 +50,21 @@ export default function StatusBar({ tab, serverVersion, onPrev, onNext }: Status
         {serverVersion}
       </span>
     </footer>
+  )
+}
+
+/** Status of an SQL tab: rows of the active result and the run's total time. */
+export function QueryStatus({ tab }: { tab: QueryTabState }) {
+  if (!tab.result) return tab.running ? <span>Running…</span> : null
+  const view = activeResultView(tab)
+  const n = tab.result.statements.length
+  return (
+    <>
+      <span data-testid="row-range">
+        {view ? rowCountText(view.set.rows.length, view.set.truncated) : `${n} statement${n === 1 ? '' : 's'}`}
+      </span>
+      <span data-testid="query-time">{formatDuration(tab.result.durationMs)}</span>
+      {tab.running && <span className="muted">running…</span>}
+    </>
   )
 }

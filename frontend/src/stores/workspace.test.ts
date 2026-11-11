@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceApi } from '../features/workspace/api'
 import type { FetchRequest, Page, TableInfo } from '../features/workspace/types'
-import { createWorkspaceStore, cycleSort, effectiveFilters, filterKey, newFilterRow, newRequestId, tabRequest, type WorkspaceStore } from './workspace'
+import { createWorkspaceStore, cycleSort, effectiveFilters, filterKey, newFilterRow, newRequestId, tabRequest, type TabState, type WorkspaceStore } from './workspace'
 
 const T = (name: string, type: TableInfo['type'] = 'table', estimatedRows: number | null = 1000): TableInfo => ({
   schema: 'public',
@@ -97,7 +97,7 @@ describe('workspace store', () => {
   let api: ReturnType<typeof fakeApi>
   let store: WorkspaceStore
   const st = () => store.getState()
-  const tab = () => st().activeTab()!
+  const tab = () => st().activeTab()! as TabState
 
   beforeEach(() => {
     api = fakeApi()
@@ -182,7 +182,7 @@ describe('workspace store', () => {
     expect(st().tabs).toHaveLength(1)
     expect(tab().pinned).toBe(true)
     st().openTable(T('users'))
-    expect(st().tabs.map((t) => [t.table, t.pinned])).toEqual([
+    expect(st().tabs.map((t) => [(t as TabState).table, t.pinned])).toEqual([
       ['orders', true],
       ['users', false],
     ])

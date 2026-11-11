@@ -47,3 +47,48 @@ describe('handleShortcut', () => {
     expect(handleShortcut(key('f'), 'linux', s)).toBe(false)
   })
 })
+
+describe('handleShortcut with SQL tabs', () => {
+  function queryState(running = false) {
+    return {
+      activeTab: () => ({ id: 'q1', kind: 'query', running }),
+      newQueryTab: vi.fn(),
+      runQuery: vi.fn(async () => {}),
+      cancelQuery: vi.fn(),
+      requestEditor: vi.fn(),
+      toggleFilterBar: vi.fn(),
+      closeTab: vi.fn(),
+    } as unknown as WorkspaceState & Record<string, ReturnType<typeof vi.fn>>
+  }
+
+  it('opens tabs, runs and stops queries', () => {
+    const s = queryState()
+    expect(handleShortcut(key('t'), 'linux', s)).toBe(true)
+    expect(s.newQueryTab).toHaveBeenCalled()
+    expect(handleShortcut(key('Enter'), 'linux', s)).toBe(true)
+    expect(s.runQuery).toHaveBeenLastCalledWith('q1', 'current')
+    expect(handleShortcut(key('Enter', { shiftKey: true }), 'linux', s)).toBe(true)
+    expect(s.runQuery).toHaveBeenLastCalledWith('q1', 'all')
+    expect(handleShortcut(key('Enter', { ctrlKey: false, metaKey: true }), 'darwin', s)).toBe(true)
+    // Esc only while running.
+    expect(handleShortcut(key('Escape', { ctrlKey: false }), 'linux', s)).toBe(false)
+    const running = queryState(true)
+    expect(handleShortcut(key('Escape', { ctrlKey: false }), 'linux', running)).toBe(true)
+    expect(running.cancelQuery).toHaveBeenCalledWith('q1')
+    expect(handleShortcut(key('Escape'), 'linux', running)).toBe(false) // Ctrl+Esc
+  })
+
+  it('sends Mod+F to the editor search in SQL tabs (no filter bar)', () => {
+    const s = queryState()
+    expect(handleShortcut(key('f'), 'linux', s)).toBe(true)
+    expect(s.requestEditor).toHaveBeenCalledWith('q1', { type: 'search' })
+    expect(s.toggleFilterBar).not.toHaveBeenCalled()
+  })
+
+  it('ignores run keys outside SQL tabs', () => {
+    const s = fakeState()
+    expect(handleShortcut(key('Enter'), 'linux', s)).toBe(false)
+    expect(handleShortcut(key('Escape', { ctrlKey: false }), 'linux', s)).toBe(false)
+    expect(handleShortcut(key('t', { shiftKey: true }), 'linux', s)).toBe(false)
+  })
+})

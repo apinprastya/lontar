@@ -375,3 +375,36 @@ func (f fakeServerOpen) Open(ctx context.Context, cfg driver.Config, pw string) 
 	}
 	return f.lite.Open(ctx, driver.Config{Kind: driver.SQLite, FilePath: f.path, CreateIfMissing: true}, pw)
 }
+
+func TestSessionEvents(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "x.db")
+	reg := driver.NewRegistry(fakeServerOpen{fakeServer: fakeServer{Driver: sqlite.New(), dbs: []string{"one", "two"}}, path: path, lite: sqlite.New()})
+	m := NewManager(newFakeSource(store.Connection{ID: "p", Name: "pg", Kind: driver.Postgres, Host: "h", Database: "one"}), reg)
+	var (
+		mu     sync.Mutex
+		events []Event
+	)
+	m.Subscribe(func(ev Event) {
+		mu.Lock()
+		events = append(events, ev)
+		mu.Unlock()
+	})
+	a, _ := m.Connect(ctx, "p")
+	b, _ := m.Connect(ctx, "p")
+	if _, err := m.UseDatabase(ctx, a, "two"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Disconnect(a); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.DisconnectAll(); err != nil {
+		t.Fatal(err)
+	}
+	want := []Event{{a, DatabaseChanged}, {a, SessionClosed}, {b, SessionClosed}}
+	mu.Lock()
+	defer mu.Unlock()
+	if fmt.Sprint(events) != fmt.Sprint(want) {
+		t.Fatalf("events = %v, want %v", events, want)
+	}
+}

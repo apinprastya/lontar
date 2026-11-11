@@ -148,3 +148,14 @@ func (d *Driver) PrimaryKey(ctx context.Context, db *sql.DB, schema, table strin
 	}
 	return out, nil
 }
+
+// SchemaColumns implements driver.Introspector.
+func (d *Driver) SchemaColumns(ctx context.Context, db *sql.DB, schema string) ([]driver.TableColumn, error) {
+	out, err := driver.ScanTableColumns(ctx, db,
+		`SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS
+		 WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME, ORDINAL_POSITION`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("%s: list schema columns: %w", d.kind, err)
+	}
+	return out, nil
+}

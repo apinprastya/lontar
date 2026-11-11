@@ -6,6 +6,77 @@
 import * as values$0 from "../values/models.js";
 
 /**
+ * ExecError describes a failed statement.
+ */
+export interface ExecError {
+    "message": string;
+
+    /**
+     * Code is the engine's error code: the SQLSTATE on PostgreSQL, the
+     * error number on MySQL/MariaDB, the result code name on SQLite.
+     */
+    "code": string;
+
+    /**
+     * SQLState is MySQL's SQLSTATE (PostgreSQL's is in Code).
+     */
+    "sqlState"?: string;
+    "detail"?: string;
+    "hint"?: string;
+
+    /**
+     * Position is the error position in the editor (UTF-16 offset,
+     * BaseOffset applied), when the engine reports one.
+     */
+    "position": number | null;
+}
+
+/**
+ * ExecOptions controls Execute.
+ */
+export interface ExecOptions {
+    /**
+     * MaxRows caps the rows returned per result set (0: DefaultMaxRows;
+     * at most MaxMaxRows).
+     */
+    "maxRows": number;
+
+    /**
+     * ContinueOnError runs the remaining statements after one fails.
+     */
+    "continueOnError": boolean;
+
+    /**
+     * BaseOffset is the position of the SQL text inside the editor (in
+     * UTF-16 code units, i.e. JavaScript string indices); it is added to
+     * every reported offset.
+     */
+    "baseOffset": number;
+}
+
+/**
+ * ExecResult is the outcome of Execute.
+ */
+export interface ExecResult {
+    "statements": StatementResult[] | null;
+    "durationMs": number;
+    "tx": TxInfo;
+
+    /**
+     * Notices are messages for the user (e.g. the session was reset).
+     */
+    "notices": string[] | null;
+
+    /**
+     * SessionReset reports that the editor's connection had to be
+     * replaced, so transactions, temporary tables and session settings
+     * from earlier runs are gone.
+     */
+    "sessionReset": boolean;
+    "cancelled": boolean;
+}
+
+/**
  * Filter is one condition. Value is the operand; Value2 is the upper bound
  * for between. For in/notIn, Value is a comma-separated list (items are
  * trimmed).
@@ -97,9 +168,84 @@ export interface ResultColumn {
 }
 
 /**
+ * ResultSet is one set of rows returned by a statement (a MySQL CALL can
+ * return several).
+ */
+export interface ResultSet {
+    "id": string;
+    "columns": ResultColumn[] | null;
+    "rows": (values$0.Cell[] | null)[] | null;
+
+    /**
+     * Truncated reports that more rows exist than were returned.
+     */
+    "truncated": boolean;
+
+    /**
+     * CanLoadMore reports that the cursor is still open, so FetchMore can
+     * return the next rows (only for the last result of a run).
+     */
+    "canLoadMore": boolean;
+}
+
+/**
  * Sort orders by one column.
  */
 export interface Sort {
     "column": string;
     "desc": boolean;
 }
+
+/**
+ * StatementResult is the outcome of one statement.
+ */
+export interface StatementResult {
+    "index": number;
+    "sql": string;
+
+    /**
+     * Start and End delimit the statement in the editor (UTF-16 offsets,
+     * BaseOffset applied).
+     */
+    "start": number;
+    "end": number;
+    "status": string;
+    "resultSets": ResultSet[] | null;
+
+    /**
+     * RowsAffected is set for statements that do not return rows.
+     */
+    "rowsAffected": number | null;
+    "durationMs": number;
+    "error": ExecError | null;
+}
+
+/**
+ * TxInfo is an editor's transaction state and how it was determined.
+ */
+export interface TxInfo {
+    "state": TxState;
+    "source": string;
+}
+
+/**
+ * TxState is the transaction state of an editor's connection.
+ */
+export enum TxState {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * Transaction states.
+     */
+    TxIdle = "idle",
+    TxActive = "active",
+
+    /**
+     * PostgreSQL: aborted, needs ROLLBACK
+     */
+    TxFailed = "failed",
+    TxUnknown = "unknown",
+};

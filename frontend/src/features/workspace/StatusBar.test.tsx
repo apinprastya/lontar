@@ -7,6 +7,7 @@ import StatusBar, { rowRangeText } from './StatusBar'
 const rows = (n: number) => Array.from({ length: n }, () => [])
 
 const base = {
+  kind: "table" as const,
   offset: 0,
   rows: rows(300),
   totalCount: null as number | null,
@@ -55,5 +56,26 @@ describe('StatusBar', () => {
     render(<StatusBar tab={null} serverVersion="SQLite 3" onPrev={() => {}} onNext={() => {}} />)
     expect(screen.queryByTestId('row-range')).toBeNull()
     expect(screen.getByRole('status')).toHaveTextContent('SQLite 3')
+  })
+})
+
+describe('StatusBar for SQL tabs', () => {
+  it('shows rows of the active result and the run time', async () => {
+    const { newQueryTabState } = await import('../../stores/queryTabs')
+    const { execResult, resultSet, stmt } = await import('../../test/fakeEditorApi')
+    const tab = newQueryTabState('Query 1')
+    const { rerender } = render(<StatusBar tab={tab} serverVersion="v" onPrev={() => {}} onNext={() => {}} />)
+    expect(screen.queryByTestId('row-range')).not.toBeInTheDocument()
+    rerender(<StatusBar tab={{ ...tab, running: true }} serverVersion="v" onPrev={() => {}} onNext={() => {}} />)
+    expect(screen.getByText('Running…')).toBeInTheDocument()
+    const result = execResult([stmt(0, 'x', { resultSets: [resultSet('r1', 1000, { truncated: true })] }), stmt(1, 'y')])
+    rerender(<StatusBar tab={{ ...tab, result, activeResult: 'r1' }} serverVersion="v" onPrev={() => {}} onNext={() => {}} />)
+    expect(screen.getByTestId('row-range')).toHaveTextContent('1,000+ rows')
+    expect(screen.getByTestId('query-time')).toHaveTextContent('3.25 ms')
+    rerender(<StatusBar tab={{ ...tab, result, activeResult: 'messages', running: true }} serverVersion="v" onPrev={() => {}} onNext={() => {}} />)
+    expect(screen.getByTestId('row-range')).toHaveTextContent('2 statements')
+    expect(screen.getByText('running…')).toBeInTheDocument()
+    rerender(<StatusBar tab={{ ...tab, result: execResult([stmt(0, 'x')]), activeResult: 'messages' }} serverVersion="v" onPrev={() => {}} onNext={() => {}} />)
+    expect(screen.getByTestId('row-range')).toHaveTextContent('1 statement')
   })
 })

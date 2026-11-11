@@ -25,7 +25,8 @@ var ErrDuplicateRequest = errors.New("a request with this ID is already running"
 // the server; go-sql-driver/mysql and modernc SQLite abort the statement on
 // the client side (MySQL closes the connection).
 type Runner struct {
-	// Timeout bounds each query; zero means DefaultTimeout.
+	// Timeout bounds each query; zero means DefaultTimeout and a negative
+	// value means no timeout (the SQL editor: only Cancel stops a query).
 	Timeout time.Duration
 
 	mu      sync.Mutex
@@ -36,7 +37,7 @@ type Runner struct {
 func NewRunner() *Runner { return &Runner{} }
 
 func (r *Runner) timeout() time.Duration {
-	if r.Timeout > 0 {
+	if r.Timeout != 0 {
 		return r.Timeout
 	}
 	return DefaultTimeout
@@ -65,7 +66,10 @@ func (r *Runner) Run(ctx context.Context, requestID string, fn func(context.Cont
 			r.mu.Unlock()
 		}()
 	}
-	tctx, tcancel := context.WithTimeout(ctx, r.timeout())
+	tctx, tcancel := ctx, context.CancelFunc(func() {})
+	if r.timeout() > 0 {
+		tctx, tcancel = context.WithTimeout(ctx, r.timeout())
+	}
 	defer tcancel()
 
 	err := fn(tctx)

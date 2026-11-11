@@ -159,6 +159,20 @@ func CheckIntrospection(t testing.TB, engine string, in driver.Introspector, db 
 	pk, err = in.PrimaryKey(ctx, db, schema, SeedOdd)
 	must(err)
 	check(slices.Equal(pk, []string{"order"}), "odd pk = %v", pk)
+
+	// All columns of the schema at once (editor autocompletion).
+	all, err := in.SchemaColumns(ctx, db, schema)
+	must(err)
+	byTable := map[string][]string{}
+	for _, c := range all {
+		byTable[c.Table] = append(byTable[c.Table], c.Name)
+		check(c.DataType != "" || c.Table == SeedView, "schema column without type: %+v", c)
+	}
+	check(slices.Equal(byTable[SeedOdd], oddNames), "schema columns of odd = %v", byTable[SeedOdd])
+	check(len(byTable[SeedItems]) == len(cols) && len(byTable[SeedView]) == 2, "schema columns = %v", byTable)
+	none2, err := in.SchemaColumns(ctx, db, "no such schema")
+	must(err)
+	check(len(none2) == 0, "unknown schema columns = %+v", none2)
 }
 
 // CheckIntrospectionErrors asserts every Introspector method fails on a
@@ -171,6 +185,7 @@ func CheckIntrospectionErrors(t testing.TB, in driver.Introspector, closed *sql.
 	_, errs["ListTables"] = in.ListTables(ctx, closed, "x")
 	_, errs["Columns"] = in.Columns(ctx, closed, "x", "y")
 	_, errs["PrimaryKey"] = in.PrimaryKey(ctx, closed, "x", "y")
+	_, errs["SchemaColumns"] = in.SchemaColumns(ctx, closed, "x")
 	for name, err := range errs {
 		if err == nil {
 			t.Errorf("%s on a closed DB should fail", name)

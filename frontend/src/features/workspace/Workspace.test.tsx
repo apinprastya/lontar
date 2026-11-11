@@ -51,6 +51,8 @@ import { ConnectionService, makeConnection, makeSession, resetBindings } from '.
 import type { WorkspaceApi } from './api'
 import type { FetchRequest, Page, TableInfo } from './types'
 import Workspace from './Workspace'
+import { draftKey } from '../../stores/queryTabs'
+import { execResult, fakeEditorApi, resultSet, stmt } from '../../test/fakeEditorApi'
 
 const tables: TableInfo[] = [
   { schema: 'public', name: 'users', type: 'table', estimatedRows: 12345 },
@@ -95,6 +97,7 @@ describe('Workspace', () => {
 
   beforeEach(() => {
     resetBindings()
+    window.localStorage.clear()
     api = fakeApi()
     useConnections.setState({ ...initialConnectionsState, session: makeSession(), connections: [makeConnection({ id: 'c1', tag: 'prod' })] })
   })
@@ -305,5 +308,101 @@ describe('Workspace', () => {
     expect(await screen.findByText('No tables.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Database')).toBeNull()
     expect(screen.queryByLabelText('Schema')).toBeNull()
+  })
+})
+
+describe('Workspace SQL tabs', () => {
+  let api: ReturnType<typeof fakeApi>
+  let editor: ReturnType<typeof fakeEditorApi>
+
+  beforeEach(() => {
+    resetBindings()
+    window.localStorage.clear()
+    api = fakeApi()
+    editor = fakeEditorApi()
+    useConnections.setState({ ...initialConnectionsState, session: makeSession(), connections: [makeConnection({ id: 'c1' })] })
+  })
+  afterEach(() => {
+    cleanup()
+    window.localStorage.clear()
+  })
+
+  it('opens, runs, renames and closes query tabs with shortcuts', async () => {
+    const user = userEvent.setup()
+    render(<Workspace api={api} editor={editor} platform="linux" />)
+    await screen.findByRole('button', { name: /^users/ })
+    expect(screen.getByText('Ctrl+T opens a new SQL query')).toBeInTheDocument()
+    act(() => {
+      fireEvent.keyDown(window, { key: 't', ctrlKey: true })
+    })
+    expect(screen.getByRole('tab', { name: /Query 1/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('SQL editor')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'New query' }))
+    expect(screen.getByRole('tab', { name: /Query 2/ })).toHaveAttribute('aria-selected', 'true')
+
+    // Rename by double-click.
+    await user.dblClick(screen.getByRole('tab', { name: /Query 2/ }))
+    const input = screen.getByLabelText('Tab name')
+    fireEvent.change(input, { target: { value: 'Report' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByRole('tab', { name: /Report/ })).toBeInTheDocument()
+    await user.dblClick(screen.getByRole('tab', { name: /Report/ }))
+    fireEvent.change(screen.getByLabelText('Tab name'), { target: { value: 'x' } })
+    fireEvent.keyDown(screen.getByLabelText('Tab name'), { key: 'Escape' })
+    expect(screen.getByRole('tab', { name: /Report/ })).toBeInTheDocument()
+    await user.dblClick(screen.getByRole('tab', { name: /Report/ }))
+    fireEvent.blur(screen.getByLabelText('Tab name'))
+    expect(screen.queryByLabelText('Tab name')).not.toBeInTheDocument()
+
+    // Mod+F opens the editor search, not the filter bar.
+    act(() => {
+      fireEvent.keyDown(window, { key: 'f', ctrlKey: true })
+    })
+    await waitFor(() => expect(document.querySelector('.cm-search')).not.toBeNull())
+    expect(screen.queryByRole('search', { name: 'Filters' })).not.toBeInTheDocument()
+
+    act(() => {
+      fireEvent.keyDown(window, { key: 'w', ctrlKey: true })
+    })
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
+  })
+
+  it('restores drafts, runs with Mod+Enter and shows results in the status bar and row detail', async () => {
+    window.localStorage.setItem(draftKey('c1'), JSON.stringify([{ title: 'Saved', sql: 'SELECT * FROM users' }]))
+    editor.execute.mockResolvedValue(execResult([stmt(0, 'SELECT * FROM users', { resultSets: [resultSet('r1', 2, { truncated: true })] })]))
+    render(<Workspace api={api} editor={editor} platform="linux" />)
+    expect(screen.getByRole('tab', { name: /Saved/ })).toHaveAttribute('aria-selected', 'true')
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true })
+    })
+    await waitFor(() => expect(screen.getByTestId('row-range')).toHaveTextContent('2+ rows'))
+    expect(editor.execute).toHaveBeenCalledWith('ed-1', expect.any(String), 'SELECT * FROM users', expect.objectContaining({ baseOffset: 0 }))
+    expect(screen.getByTestId('query-time')).toHaveTextContent('3.25 ms')
+
+    // Row detail of the selected result row.
+    fireEvent.click(screen.getAllByRole('row')[1])
+    act(() => {
+      fireEvent.keyDown(window, { key: 'i', ctrlKey: true })
+    })
+    expect(screen.getByLabelText('Row detail')).toHaveTextContent('Row 2')
+    expect(screen.getByLabelText('Row detail')).toHaveTextContent('n2')
+
+    // Run all, and Esc stops a running query.
+    let finish: (v: unknown) => void = () => {}
+    editor.execute.mockImplementationOnce(() => new Promise((r) => (finish = r)) as never)
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true, shiftKey: true })
+    })
+    await waitFor(() => expect(screen.getByText('Stop')).toBeEnabled())
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Escape' })
+    })
+    expect(editor.cancel).toHaveBeenCalled()
+    await act(async () => finish(execResult([])))
+    await waitFor(() => expect(screen.getByTestId('row-range')).toHaveTextContent('0 statements'))
+    // Escape with nothing running is not consumed.
+    const ev = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(false)
   })
 })

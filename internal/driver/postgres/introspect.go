@@ -145,3 +145,19 @@ func (*Driver) PrimaryKey(ctx context.Context, db *sql.DB, schema, table string)
 	}
 	return out, nil
 }
+
+// SchemaColumns implements driver.Introspector.
+func (*Driver) SchemaColumns(ctx context.Context, db *sql.DB, schema string) ([]driver.TableColumn, error) {
+	out, err := driver.ScanTableColumns(ctx, db,
+		`SELECT c.relname, a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod)
+		 FROM pg_catalog.pg_attribute a
+		 JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+		 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		 WHERE n.nspname = $1 AND c.relkind IN ('r', 'p', 'f', 'v', 'm')
+		   AND a.attnum > 0 AND NOT a.attisdropped
+		 ORDER BY c.relname, a.attnum`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list schema columns: %w", err)
+	}
+	return out, nil
+}

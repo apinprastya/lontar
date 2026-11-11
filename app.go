@@ -5,6 +5,7 @@ import (
 
 	"dbedit/internal/conn"
 	"dbedit/internal/driver/all"
+	"dbedit/internal/history"
 	"dbedit/internal/query"
 	"dbedit/internal/services"
 	"dbedit/internal/store"
@@ -20,20 +21,25 @@ type backend struct {
 	connections *services.ConnectionService
 	schema      *services.SchemaService
 	browse      *services.BrowseService
+	editor      *services.EditorService
+	history     *services.HistoryService
 }
 
 // newBackend wires the connection store (JSON + OS keychain, with the
-// encrypted-file fallback on Linux), the session manager and the driver
-// registry, keeping everything under configDir. All services share one
-// session manager.
+// encrypted-file fallback on Linux), the session manager, the driver
+// registry and the query history (history.db), keeping everything under
+// configDir. All services share one session manager.
 func newBackend(configDir string) backend {
 	st := store.New(configDir, store.NewSecretStore(configDir))
 	drivers := all.Registry()
 	sessions := conn.NewManager(st, drivers)
+	hist := history.New(configDir)
 	return backend{
 		connections: services.NewConnectionService(st, sessions, drivers),
 		schema:      services.NewSchemaService(sessions, drivers),
 		browse:      services.NewBrowseService(sessions, drivers, query.NewRunner()),
+		editor:      services.NewEditorService(sessions, drivers, hist),
+		history:     services.NewHistoryService(hist),
 	}
 }
 
@@ -50,6 +56,8 @@ func appOptions(assets fs.FS, b backend) application.Options {
 			application.NewService(b.connections),
 			application.NewService(b.schema),
 			application.NewService(b.browse),
+			application.NewService(b.editor),
+			application.NewService(b.history),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

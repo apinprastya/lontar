@@ -14,6 +14,15 @@
   --bg-selected: #dce6fa;
   --bg-dialog: #ffffff;
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  --warning: #9a6700;
+  --stmt-bg: rgba(59, 111, 214, 0.1);
+  --error-bg: rgba(194, 47, 47, 0.12);
+  --search-bg: rgba(210, 153, 34, 0.25);
+  --syn-keyword: #8a3ab9;
+  --syn-string: #1a7f37;
+  --syn-number: #b35900;
+  --syn-type: #0a6c8a;
+  --syn-ident: #2d5bb8;
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Noto Sans', sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace;
   color-scheme: light dark;
@@ -35,6 +44,15 @@
     --bg-selected: #23345a;
     --bg-dialog: #23242b;
     --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    --warning: #d29922;
+    --stmt-bg: rgba(76, 130, 240, 0.16);
+    --error-bg: rgba(255, 107, 107, 0.16);
+    --search-bg: rgba(210, 153, 34, 0.3);
+    --syn-keyword: #c792ea;
+    --syn-string: #a5d6a7;
+    --syn-number: #f78c6c;
+    --syn-type: #7fdbca;
+    --syn-ident: #82aaff;
   }
 }
 
@@ -926,4 +944,348 @@ input[type='checkbox'] {
 .pager button {
   padding: 0 8px;
   line-height: 16px;
+}
+
+/* ---- SQL editor tabs ---------------------------------------------------- */
+
+.tab-sql-icon {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: var(--bg-selected);
+  color: var(--accent);
+}
+
+.tab-rename {
+  width: 120px;
+  font: inherit;
+  padding: 0 4px;
+}
+
+.tab-running {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.query-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.query-toolbar {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.query-toolbar button[aria-pressed='true'] {
+  background: var(--bg-selected);
+}
+
+.toolbar-check,
+.toolbar-select {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.query-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.query-body > [data-group] {
+  flex: 1;
+}
+
+.resize-handle-h {
+  height: 4px;
+  width: auto;
+  cursor: row-resize;
+}
+
+.sql-editor {
+  height: 100%;
+  overflow: hidden;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.tx-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--warning);
+  border: 1px solid currentColor;
+  margin-left: 6px;
+}
+
+.tx-indicator.tx-failed {
+  color: var(--danger);
+}
+
+.tx-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.results {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.results-empty {
+  padding: 12px;
+}
+
+.result-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  flex: none;
+  overflow-x: auto;
+}
+
+.result-tabs button {
+  border: none;
+  background: none;
+  padding: 4px 10px;
+  border-radius: 5px 5px 0 0;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.result-tabs button[aria-selected='true'] {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.result-tab-errors {
+  color: var(--danger);
+}
+
+.result-running {
+  margin-left: 8px;
+}
+
+.results-error,
+.truncated-banner {
+  margin: 6px 8px 0;
+}
+
+.truncated-banner {
+  color: var(--warning);
+}
+
+.truncated-banner span {
+  color: var(--text);
+}
+
+.banner.warning {
+  color: var(--warning);
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.messages-notice {
+  margin-bottom: 6px;
+}
+
+.message {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 5px 6px;
+  border-radius: 5px;
+  color: var(--text);
+  font: inherit;
+}
+
+.message:hover {
+  background: var(--bg-hover);
+}
+
+.message-icon {
+  width: 14px;
+  flex: none;
+  font-weight: 700;
+}
+
+.message-ok .message-icon {
+  color: var(--ok);
+}
+
+.message-error .message-icon,
+.message-cancelled .message-icon {
+  color: var(--danger);
+}
+
+.message-skipped {
+  color: var(--muted);
+}
+
+.message-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.message-sql {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.message-error {
+  color: var(--danger);
+  font-size: 12px;
+  white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.message-code {
+  font-family: var(--font-mono);
+}
+
+.message-detail {
+  display: block;
+  color: var(--muted);
+}
+
+.messages-total {
+  margin: 8px 6px;
+  font-size: 12px;
+}
+
+.history-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border);
+  min-width: 0;
+}
+
+.history-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.history-search {
+  margin: 6px 8px;
+}
+
+.history-error {
+  margin: 0 8px 6px;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.history-item {
+  display: flex;
+  align-items: flex-start;
+  border-radius: 5px;
+}
+
+.history-item:hover {
+  background: var(--bg-hover);
+}
+
+.history-entry {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 5px 6px;
+  color: var(--text);
+  font: inherit;
+}
+
+.history-sql {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.history-err {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.history-delete {
+  visibility: hidden;
+}
+
+.history-item:hover .history-delete {
+  visibility: visible;
+}
+
+.history-empty {
+  padding: 12px 6px;
 }

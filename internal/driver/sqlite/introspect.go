@@ -155,3 +155,24 @@ func (*Driver) PrimaryKey(ctx context.Context, db *sql.DB, schema, table string)
 	}
 	return out, nil
 }
+
+// SchemaColumns implements driver.Introspector, joining pragma_table_list
+// with pragma_table_info (both with bound arguments).
+func (*Driver) SchemaColumns(ctx context.Context, db *sql.DB, schema string) ([]driver.TableColumn, error) {
+	if ok, err := schemaExists(ctx, db, schema); err != nil || !ok {
+		if err != nil {
+			return nil, fmt.Errorf("sqlite: list schema columns: %w", err)
+		}
+		return []driver.TableColumn{}, nil
+	}
+	out, err := driver.ScanTableColumns(ctx, db,
+		`SELECT t.name, c.name, c.type
+		 FROM pragma_table_list AS t, pragma_table_info(t.name, t.schema) AS c
+		 WHERE t.schema = ? AND t.type IN ('table', 'view', 'virtual')
+		   AND t.name NOT LIKE 'sqlite\_%' ESCAPE '\'
+		 ORDER BY t.name, c.cid`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: list schema columns: %w", err)
+	}
+	return out, nil
+}

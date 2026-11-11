@@ -100,6 +100,35 @@ type Introspector interface {
 	// PrimaryKey returns the primary key columns in key order (empty when
 	// the table has none).
 	PrimaryKey(ctx context.Context, db *sql.DB, schema, table string) ([]string, error)
+	// SchemaColumns lists the columns of every table and view of schema
+	// in one query, ordered by table and position (for SQL editor
+	// autocompletion). It returns an empty slice for unknown schemas.
+	SchemaColumns(ctx context.Context, db *sql.DB, schema string) ([]TableColumn, error)
+}
+
+// TableColumn is one column returned by SchemaColumns.
+type TableColumn struct {
+	Table    string `json:"table"`
+	Name     string `json:"name"`
+	DataType string `json:"dataType"`
+}
+
+// ScanTableColumns runs a (table, column, type) query.
+func ScanTableColumns(ctx context.Context, db *sql.DB, query string, args ...any) ([]TableColumn, error) {
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []TableColumn{}
+	for rows.Next() {
+		var c TableColumn
+		if err := rows.Scan(&c.Table, &c.Name, &c.DataType); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func limitOffset(limit, offset int) string {

@@ -6,6 +6,41 @@
 import * as driver$0 from "../driver/models.js";
 
 /**
+ * CompletionColumn is a column offered by the editor's autocompletion.
+ */
+export interface CompletionColumn {
+    "name": string;
+    "type": string;
+}
+
+/**
+ * CompletionSchema is what the SQL editor autocompletes: the tables (with
+ * their columns) of the current schema, plus the schema names.
+ */
+export interface CompletionSchema {
+    "database": string;
+    "schema": string;
+    "schemas": string[] | null;
+    "tables": CompletionTable[] | null;
+
+    /**
+     * ColumnsLoaded is false for schemas with more than
+     * CompletionTableLimit tables: columns are then fetched per table.
+     */
+    "columnsLoaded": boolean;
+}
+
+/**
+ * CompletionTable is a table or view offered by autocompletion. Columns
+ * is null when not loaded (see CompletionSchema.ColumnsLoaded).
+ */
+export interface CompletionTable {
+    "name": string;
+    "type": driver$0.TableType;
+    "columns": CompletionColumn[] | null;
+}
+
+/**
  * Location is the database and default schema a session is browsing.
  */
 export interface Location {
@@ -23,4 +58,19 @@ export interface SessionInfo {
     "kind": driver$0.Kind;
     "serverVersion": string;
     "connectedAt": string;
+}
+
+/**
+ * Statement is a statement of an editor script. Offsets are UTF-16 code
+ * units (JavaScript string indices) into the script.
+ */
+export interface Statement {
+    "text": string;
+    "start": number;
+    "end": number;
+
+    /**
+     * DelimEnd is the offset after the statement's delimiter.
+     */
+    "delimEnd": number;
 }

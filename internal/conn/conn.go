@@ -74,11 +74,12 @@ type Manager struct {
 	// PingTimeout bounds Connect and Test. Zero means DefaultPingTimeout.
 	PingTimeout time.Duration
 
-	mu       sync.Mutex
-	sessions map[string]*Session
-	closed   bool
-	newID    func() string
-	now      func() time.Time
+	mu        sync.Mutex
+	sessions  map[string]*Session
+	closed    bool
+	listeners []func(Event)
+	newID     func() string
+	now       func() time.Time
 }
 
 // NewManager returns a Manager that loads connections from src and opens
@@ -90,6 +91,42 @@ func NewManager(src Source, drivers *driver.Registry) *Manager {
 		sessions: map[string]*Session{},
 		newID:    uuid.NewString,
 		now:      time.Now,
+	}
+}
+
+// EventKind says what happened to a session.
+type EventKind int
+
+// Session events.
+const (
+	// SessionClosed: the session was disconnected (its pool is about to
+	// be closed).
+	SessionClosed EventKind = iota + 1
+	// DatabaseChanged: UseDatabase replaced the session's pool.
+	DatabaseChanged
+)
+
+// Event is delivered to Subscribe listeners.
+type Event struct {
+	SessionID string
+	Kind      EventKind
+}
+
+// Subscribe registers fn to be called (synchronously, without the
+// manager's lock) for every session event. Listeners use it to release
+// resources tied to a session, such as SQL editor connections.
+func (m *Manager) Subscribe(fn func(Event)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.listeners = append(m.listeners, fn)
+}
+
+func (m *Manager) emit(ev Event) {
+	m.mu.Lock()
+	ls := append([]func(Event){}, m.listeners...)
+	m.mu.Unlock()
+	for _, fn := range ls {
+		fn(ev)
 	}
 }
 
@@ -259,6 +296,7 @@ func (m *Manager) Disconnect(sessionID string) error {
 	if !ok {
 		return ErrSessionNotFound
 	}
+	m.emit(Event{SessionID: sessionID, Kind: SessionClosed})
 	return s.DB.Close()
 }
 
@@ -273,6 +311,7 @@ func (m *Manager) DisconnectAll() error {
 
 	var errs []error
 	for _, s := range sessions {
+		m.emit(Event{SessionID: s.ID, Kind: SessionClosed})
 		if err := s.DB.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close %s: %w", s.Name, err))
 		}
@@ -332,6 +371,7 @@ func (m *Manager) UseDatabase(ctx context.Context, sessionID, database string) (
 	}
 	m.sessions[sessionID] = &next
 	m.mu.Unlock()
+	m.emit(Event{SessionID: sessionID, Kind: DatabaseChanged})
 	_ = cur.DB.Close()
 	return &next, nil
 }

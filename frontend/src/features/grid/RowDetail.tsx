@@ -43,7 +43,7 @@ export default function RowDetail({ columns, row, rowNumber, onClose }: RowDetai
           {columns.map((c, i) => {
             const cell = row[i] ?? { k: 'null' }
             return (
-              <div key={c.name} className="row-detail-item">
+              <div key={`${i}:${c.name}`} className="row-detail-item">
                 <dt>
                   {c.isPK && <KeyIcon className="icon pk-icon" title="Primary key" />}
                   <span className="row-detail-name">{c.name}</span>

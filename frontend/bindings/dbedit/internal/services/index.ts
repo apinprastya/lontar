@@ -4,15 +4,23 @@
 import * as AppService from "./appservice.js";
 import * as BrowseService from "./browseservice.js";
 import * as ConnectionService from "./connectionservice.js";
+import * as EditorService from "./editorservice.js";
+import * as HistoryService from "./historyservice.js";
 import * as SchemaService from "./schemaservice.js";
 export {
     AppService,
     BrowseService,
     ConnectionService,
+    EditorService,
+    HistoryService,
     SchemaService
 };
 
 export type {
+    CompletionColumn,
+    CompletionSchema,
+    CompletionTable,
     Location,
-    SessionInfo
+    SessionInfo,
+    Statement
 } from "./models.js";

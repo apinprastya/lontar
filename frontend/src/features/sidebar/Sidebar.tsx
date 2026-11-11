@@ -43,7 +43,7 @@ export default function Sidebar({ name, kind, color }: SidebarProps) {
   // MySQL: database == schema, so only the database switcher is shown.
   const showDatabases = kind !== 'sqlite'
   const showSchemas = kind === 'postgres' || (kind === 'sqlite' && s.schemas.length > 1)
-  const isActive = (t: TableInfo) => active?.schema === t.schema && active?.table === t.name
+  const isActive = (t: TableInfo) => active?.kind === 'table' && active.schema === t.schema && active.table === t.name
 
   return (
     <aside className="ws-sidebar" aria-label="Sidebar">

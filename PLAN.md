@@ -122,6 +122,63 @@ Workspace: left sidebar | main area with tabs (each tab = table data, structure,
    - **Shortcuts.** Mod+W, Mod+1..9 (9 = last tab), Mod+R (refresh the tab and list), Mod+F (filter bar), Mod+I or Space in the grid (row detail), Mod+C (copy TSV).
    - **Tests.** `testutil.SeedBrowse` builds a shared fixture with every value type, a view, a PG materialized view, a no-PK table, a composite-PK table and a table named `Odd "Name" Tbl` with columns `order`, `Mixed Case` and `quote"col`. `testutil.CheckIntrospection` is the cross-engine assertion set run by each driver package.
 4. **M3 SQL editor** — `sqlsplit`, `query` execute/cancel/fetch-more, CodeMirror with autocomplete fed from `schema`, multiple result tabs, query history.
+   *As built:*
+   - **`internal/sqlsplit`.** One byte scanner, with the dialect picked by `driver.Kind`. It returns `Statement{Text, Start, End, DelimEnd}` byte offsets; `Text` is `script[Start:End]`, with leading comments and the delimiter excluded.
+     - It handles `''` and `""` doubling, MySQL backslash escapes (also in `"…"` strings), PG `E'…'`, backticks (MySQL, SQLite), `[…]` (SQLite), `--` (MySQL needs a blank after it), `#` (MySQL), `/* */` (nested on PG), MySQL `/*! */` and `/*+ */` (kept as code), PG `$tag$` quoting, the MySQL client `DELIMITER` line (a custom delimiter also ends a statement mid-word, as in `END$$`), SQLite `CREATE TRIGGER … BEGIN … END` (with `CASE … END` nesting) and PG `BEGIN ATOMIC … END`.
+     - Unterminated tokens run to the end; the scanner never fails.
+     - `StatementAt(kind, script, cursor)` picks the statement containing the cursor (delimiter included), otherwise the one before it, otherwise the first. `Words` returns the bare keywords, used for classification and transaction tracking.
+     - `OffsetMap`/`ByteOffset` convert to and from UTF-16 offsets. **Every offset the frontend sees is UTF-16** (JS string index).
+     - Tests: table tests on all dialects plus `FuzzSplit` (seed corpus in normal runs; checks no panic, offsets in range and monotonic, `Text` matches, and UTF-8 is never split). A 90 s local `-fuzz` run found one bad test invariant and no scanner bug.
+   - **Pinned connections (`query.Editors`, `editor.go`).**
+     - `OpenEditor` creates an editor with no connection. The first run takes a `*sql.Conn` from the session pool and keeps it, so `BEGIN`/`COMMIT`, `SET`, `USE`, `search_path` and temp tables persist across runs.
+     - Pinned connections do not starve browsing: the pool's `MaxOpenConns` is raised to `conn.MaxOpenConns + pinned` and lowered again on release.
+     - **A pinned conn is never returned to the pool.** When it is released, an open transaction is rolled back (on PG only if `TxStatus != 'I'`; on the other engines a `ROLLBACK` is always sent, which is harmless), and the conn is discarded via `Raw` returning `driver.ErrBadConn`. Closing the conn rolls back server-side as well.
+     - Release happens on `CloseEditor`; on disconnect, through a new `conn.Manager.Subscribe` event `SessionClosed` that closes the session's editors; and on a database switch (`DatabaseChanged`), where the editors stay but reconnect, and the next run says so. A **janitor** (every minute) releases conns idle ≥ 30 min and cursors idle ≥ 5 min.
+     - A run on an editor whose pool changed underneath also reconnects. Runs on one editor are serialised; a concurrent run gets `ErrEditorBusy`.
+   - **Execute.**
+     - It splits, then runs the statements in order. Each statement runs under its own context, detached from the call but cancelled with it, so a kept cursor survives the call.
+     - **Row vs non-row statements: classified by keyword, not by `QueryContext` for everything.** `database/sql` cannot report rows affected for a `Query`, and pgx/MySQL drop the command tag. So `SELECT/WITH/VALUES/TABLE/SHOW/EXPLAIN/DESC(RIBE)/PRAGMA/CALL/FETCH/EXECUTE/HELP/CHECK/ANALYZE/OPTIMIZE/REPAIR/CHECKSUM/XA`, and anything containing `RETURNING`, run as `QueryContext` and walk `NextResultSet`; this covers MySQL `CALL` with several result sets. Everything else runs as `ExecContext`, and `RowsAffected` is reported for DML keywords only.
+     - A wrong guess never runs anything twice. A row statement run as Exec loses its rows; a Query that returns no columns shows "OK".
+     - PG statements use `QueryExecModeExec`: an unnamed statement, no statement cache, so there are no "cached plan" errors after DDL.
+     - Results: columns (name, lower-cased wire type), `values.Cell` rows capped at `maxRows` (default 1000, max 50,000; one row is read ahead to set `truncated`), duration, and UTF-16 statement offsets plus `BaseOffset`. Statement status is ok/error/cancelled/skipped.
+     - The run stops at the first error unless `continueOnError`. A cancel always stops it.
+     - **Errors.** PG `PgError` gives SQLSTATE, detail, hint, and position (characters → bytes → UTF-16). MySQL gives the error number and SQLSTATE; the position comes from "near '…' at line N". SQLite gives the result-code name; the position comes from `near "x"` or `no such column/table/function: x`.
+   - **Cancel.** It goes through a `query.Runner` with `Timeout: -1` (new: a negative timeout means none, so the editor has no 60 s limit).
+     - **PG driver change:** `postgres.OpenConfig` sets pgx's `CancelRequestContextWatcherHandler`, which sends a server cancel request and only closes the conn after 5 s. pgx's default closed the connection. Verified: cancelling `pg_sleep(30)` takes ~0.1 s and the session survives. Inside a transaction, PG then reports `failed`, which is correct server behaviour.
+     - On MySQL/MariaDB the driver kills the conn. After any cancel the conn is pinged; if it is dead it is dropped, the cancelled run carries a notice, and the next run re-pins with `sessionReset: true` and a notice. A conn that died while idle (`ErrBadConn`/`ErrConnDone`, nothing sent) is re-pinned and the statement retried once, with a notice.
+   - **Load more: option (a), an open cursor.** The rows of a truncated result stay open on the pinned conn, with the read-ahead row held, and `FetchMore(editorID, resultID, n)` continues them.
+     - Re-running is unsafe for non-idempotent queries, and raising the cap re-executes.
+     - Only the *last* statement's result can stay open, since later statements need the conn, and never a `CALL`'s. Earlier truncated results report `canLoadMore: false`, and the UI says "run again with a higher row limit".
+     - The cursor closes on the next run, at exhaustion, on cursor idle (5 min) or when the editor is released.
+     - **Closing early:** draining a huge result would read everything. So on PG outside a transaction the rest is cancelled server-side. Inside a transaction (a cancel would abort it), and on MySQL (where a cancel kills the conn) and SQLite (instant), it is drained.
+   - **Transaction state.** On PG it is exact: pgx `PgConn().TxStatus()` via `conn.Raw` after every run, with no round trip (`idle`/`active`/`failed`). On MySQL/MariaDB/SQLite it is a **heuristic** (`source: "heuristic"`, shown as "(guess)"):
+     - `BEGIN`/`START TRANSACTION` (and SQLite `SAVEPOINT`) open a transaction.
+     - `COMMIT`/`END`/`ROLLBACK` (but not `ROLLBACK TO`) close it.
+     - On MySQL, DDL/`LOCK`/`GRANT`… commit implicitly (`… TEMPORARY` does not), `SET autocommit=0` makes later statements open one, and error 1213 (deadlock) closes it.
+     - `TxState(editorID)` returns the cached value, so it never waits on a running query.
+   - **History (`internal/history`).** It lives in `history.db` (modernc SQLite, WAL, created 0600) in the config dir; the dir is injected (`history.New(dir)`, `newBackend(configDir)`).
+     - Each `Execute` call with at least one statement is recorded **once per run (the script as run)**, not per statement. The entry holds the connection ID, current database, SQL (capped at 256 KiB, `truncated`), start, duration, rows returned, summed rows affected, and the first error. Never credentials.
+     - `List(connectionID, search, limit, offset)` uses a bound `LIKE … ESCAPE '!'`; an empty connection ID lists all. There are also `Delete(id)` and `Clear(connectionID)`.
+     - Each connection is pruned to the newest 10,000 after every insert.
+   - **Services.** `EditorService` provides `OpenEditor`, `CloseEditor`, `Execute` (also records history), `Cancel`, `FetchMore`, `TxState`, `Split`, `StatementAt` (UTF-16 in and out), `CompletionSchema(sessionID, schema, refresh)` and `CompletionColumns`. `HistoryService` provides `List`, `Delete` and `Clear`. Both are registered in `app.go`. `ServiceShutdown` closes all editors (rolling back) and the history DB.
+     - `CompletionSchema` returns the schema names plus the current schema's tables with columns, using a new bulk `Introspector.SchemaColumns(ctx, db, schema)` (one query per engine). Above 2,000 tables it returns names only, and columns come per table on demand.
+     - The completion cache is per session+schema. It is invalidated by `refresh`, a database switch and disconnect.
+   - **Frontend.**
+     - `stores/queryTabs.ts` holds the query-tab state and actions, merged into the workspace store; tabs are now a `TabState | QueryTabState` union. `features/editor/` holds `SqlEditor` (CodeMirror 6), `cm.ts` (dialect mapping, `toSqlNamespace`, lazy-columns source, current-statement and error decorations, run keymap, theme), `QueryTab`, `ResultsPanel`, `Messages`, `HistoryPanel` and `TxIndicator`. `grid/sort.ts` holds `cycleSort` (moved) and client-side `sortRows`.
+     - Tabs are named "Query N" (one more than the highest in use) and are renamed by double-click. Table tabs are closed on a database switch, but query tabs stay.
+     - **Drafts:** `localStorage["dbedit.queryDrafts.<connectionId>"]` holds `[{title, sql}]`, written on every change inside try/catch, and is restored when the workspace for that connection is created. Results are not persisted.
+     - **Autocomplete:** lang-sql's own schema completion is fed a namespace `{schema: {table: {self, children: columns}}, otherSchema: …}` with `defaultSchema`, so plain tables, `schema.table`, `table.col` and alias `a.col` all complete, as do keywords (upper case). Columns of big schemas load when "t." is typed.
+     - **Current statement:** `StatementAt` is called from Go, debounced 120 ms after each cursor or text change, and highlighted. Run-current also asks Go, so there is one splitter.
+     - **Keys:** CodeMirror's `Prec.highest` keymap handles Mod+Enter, Mod+Shift+Enter and Esc when the editor is focused. The window handler does the same when it is not, and it skips events that are already `defaultPrevented`. Mod+F opens the CodeMirror search panel in a query tab and the filter bar in a table tab. Mod+T opens a new tab.
+     - **Results:** one tab per result set, plus Messages, which shows notices, ✓/✗/⊘/–, the first line, rows, duration, and `[code] message` with detail and hint. Clicking a message selects the statement, or puts the cursor on the error position, which gets a wavy mark. A run that has an error opens Messages and jumps to the first error position.
+     - Results reuse `DataGrid` with client-side sort and per-result column widths. Row detail and the status bar (rows of the active result, plus the run's total time) work for query results too.
+     - **History panel:** it debounces search, reloads after every run, and has delete, and clear with confirmation. Click waits 250 ms so that a double-click (open in a new tab) does not also insert.
+   - **Deviations.**
+     - Statements are classified by keyword rather than with `QueryContext` for everything (see above).
+     - History has one entry per run, not per statement.
+     - The MySQL/MariaDB/SQLite tx state is heuristic. `@@in_transaction` (MariaDB) is not used.
+     - There is no explicit "close result" call; a cursor closes on the next run or when idle.
+     - `CompletionSchema` takes the schema from the UI rather than asking the server.
 5. **M4 Editing** — cell editors by type, insert/delete rows, staged change set, preview SQL dialog, commit in tx, safe mode.
 6. **M5 Structure** — columns/indexes/FKs views, DDL view (PG via catalog query, MySQL `SHOW CREATE TABLE`, SQLite `sqlite_master`), FK click-through navigation.
 7. **M6 Extras** — SSH tunnel, SSL options, export CSV/JSON/SQL, import CSV, quick-open palette, connection colors, dark/light theme.

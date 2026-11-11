@@ -9,12 +9,27 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"time"
 
 	"dbedit/internal/driver"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgconn/ctxwatch"
 	"github.com/jackc/pgx/v5/stdlib"
 )
+
+// CancelDeadline is how long a cancelled query may take to stop after the
+// server-side cancel request before the connection is closed.
+const CancelDeadline = 5 * time.Second
+
+// cancelHandler makes a cancelled context send a PostgreSQL cancel request
+// (like pressing Ctrl+C in psql) instead of pgx's default of closing the
+// connection, so a cancelled query keeps its connection and session (the
+// SQL editor's pinned connection with its transaction and settings).
+func cancelHandler(c *pgconn.PgConn) ctxwatch.Handler {
+	return &pgconn.CancelRequestContextWatcherHandler{Conn: c, DeadlineDelay: CancelDeadline}
+}
 
 // DefaultPort is PostgreSQL's default TCP port.
 const DefaultPort = 5432
@@ -87,7 +102,14 @@ func (d *Driver) Open(_ context.Context, cfg driver.Config, password string) (*s
 	if err != nil {
 		return nil, fmt.Errorf("postgres: invalid connection settings: %w", err)
 	}
-	return stdlib.OpenDB(*pc), nil
+	return OpenConfig(pc), nil
+}
+
+// OpenConfig opens a pool for a parsed pgx configuration, with cancelled
+// contexts sending a server-side cancel request (see cancelHandler).
+func OpenConfig(pc *pgx.ConnConfig) *sql.DB {
+	pc.BuildContextWatcherHandler = cancelHandler
+	return stdlib.OpenDB(*pc)
 }
 
 // ServerVersion implements driver.Driver.
