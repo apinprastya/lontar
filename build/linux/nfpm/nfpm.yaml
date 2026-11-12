@@ -23,15 +23,22 @@ description: |-
   Desktop client with a connection list, table browser, spreadsheet-like grid
   with staged edits, SQL editor, SSH tunnels, TLS and CSV/JSON/SQL export.
 vendor: "Lontar contributors"
-# TODO(license): no license has been chosen yet. Set the SPDX id here (and in
-# README/config.yml) once it is decided.
-license: ""
+# SPDX id of LICENSE (Apache License 2.0); see also NOTICE.
+license: "Apache-2.0"
 
 contents:
   - src: "./bin/lontar"
     dst: "/usr/bin/lontar"
     file_info:
       mode: 0755
+  - src: "./LICENSE"
+    dst: "/usr/share/doc/lontar/LICENSE"
+    file_info:
+      mode: 0644
+  - src: "./NOTICE"
+    dst: "/usr/share/doc/lontar/NOTICE"
+    file_info:
+      mode: 0644
   - src: "./build/linux/lontar.desktop"
     dst: "/usr/share/applications/lontar.desktop"
     file_info:

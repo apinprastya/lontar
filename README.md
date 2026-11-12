@@ -2,7 +2,6 @@
 
 A fast, lightweight desktop database client for PostgreSQL, MySQL/MariaDB and
 SQLite, built with Go + [Wails 3](https://v3.wails.io) and React/TypeScript.
-See [PLAN.md](PLAN.md) for the design and milestones.
 
 Lontar are the palm-leaf manuscripts once used in Bali and Java to record knowledge.
 
@@ -233,8 +232,12 @@ The DDL comes from `SHOW CREATE TABLE`/`VIEW` on MySQL/MariaDB and from
 `sqlite_master` on SQLite. PostgreSQL has no built-in equivalent, so the
 statement is rebuilt from the catalog. It covers columns, defaults,
 identity, generated columns, serial columns, constraints, indexes, triggers
-and comments. It leaves out ownership, grants, policies, storage options and
-partitions; see PLAN.md for the full list.
+and comments. It leaves out ownership, grants, row-level security policies,
+tablespaces, storage parameters, identity sequence options (start,
+increment), inheritance, partitions (rendered as plain tables without
+`PARTITION OF`), foreign-table servers and options, view options
+(`security_barrier`, `CHECK OPTION`), index comments, and the definitions of
+referenced types, sequences and functions.
 
 **Foreign keys in the grid.** Foreign key columns have a link icon in their
 header, and every non-NULL key cell shows a **→**. To open the referenced
@@ -566,7 +569,7 @@ Identity (name, publisher `Lontar contributors`, bundle id `dev.lontar.app`,
 description, copyright) is set in `build/config.yml`. After changing it run
 `wails3 task common:update:build-assets`, then re-apply what that command
 overwrites from the Wails templates: `build/linux/nfpm/nfpm.yaml` (Lontar's
-dependencies, icons, license TODO) and the hand-added keys in
+dependencies, icons, `Apache-2.0` license and the LICENSE/NOTICE files) and the hand-added keys in
 `build/darwin/Info*.plist` (the comment block, `LSApplicationCategoryType`,
 `LSMinimumSystemVersion` 12.0, the boolean `NSHighResolutionCapable`, and
 `CFBundleDisplayName` "Lontar"); restore `build/darwin/entitlements.plist`,
@@ -624,10 +627,26 @@ the dmg (`build/darwin/sign-notarize.sh`). With the certificate but no Apple
 ID secrets the dmg is signed but not notarized. The `.app` targets macOS 12
 (`LSMinimumSystemVersion`, matching `-mmacosx-version-min=12.0`).
 
-**License:** not chosen yet (TODO). The packages carry an empty license field
-until it is.
+**License:** [Apache License 2.0](LICENSE) (SPDX `Apache-2.0`). See also
+[NOTICE](NOTICE). The Linux packages carry the SPDX id and install both files
+under `/usr/share/doc/lontar/`.
 
 **Database logos:** the PostgreSQL, MySQL, MariaDB and SQLite logos shown next
 to connections come from [Simple Icons](https://simpleicons.org) (`simple-icons`,
 CC0-1.0). The logos are trademarks of their respective owners and are used only
 to identify the database engine of a connection.
+
+## License
+
+Copyright 2026 Lontar contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this project except in compliance with the License. You may obtain a copy
+of the License in [LICENSE](LICENSE) or at
+<https://www.apache.org/licenses/LICENSE-2.0>.
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+License for the specific language governing permissions and limitations under
+the License.

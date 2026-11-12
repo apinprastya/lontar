@@ -14,7 +14,8 @@ info:
   # Baseline only. Every build and package is stamped with the version from
   # `git describe` / LONTAR_VERSION (see VERSION in the root Taskfile.yml).
   version: "0.0.0"
-  # License: TODO — not chosen yet. nfpm.yaml carries the matching TODO.
+  # License: Apache-2.0 (LICENSE and NOTICE at the repository root;
+  # nfpm.yaml sets the SPDX id and installs both files).
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension
   #                               # If not set and Assets.car exists, defaults to "appicon"
