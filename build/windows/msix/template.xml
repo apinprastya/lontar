@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- MSIX is not built in M7; identity mirrors build/config.yml. The
+     PublisherName must match the subject of the signing certificate. -->
 <MsixPackagingToolTemplate
     xmlns="http://schemas.microsoft.com/msix/packaging/msixpackagingtool/template/2022">
     <Settings
@@ -8,27 +10,27 @@
         AllowPromptForPassword="false">
     </Settings>
     <Installer
-        Path="dbedit"
+        Path="dbedit.exe"
         Arguments=""
-        InstallLocation="C:\Program Files\My Company\My Product">
+        InstallLocation="C:\Program Files\dbedit">
     </Installer>
     <PackageInformation
-        PackageName="My Product"
-        PackageDisplayName="My Product"
-        PublisherName="CN=My Company"
-        PublisherDisplayName="My Company"
-        Version="0.1.0.0"
-        PackageDescription="A dbedit application">
+        PackageName="dbedit"
+        PackageDisplayName="dbedit"
+        PublisherName="CN=dbedit contributors"
+        PublisherDisplayName="dbedit contributors"
+        Version="0.0.0.0"
+        PackageDescription="Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite">
         <Capabilities>
             <Capability Name="runFullTrust" />
             
         </Capabilities>
         <Applications>
             <Application
-                Id="com.example.dbedit"
-                Description="A dbedit application"
-                DisplayName="My Product"
-                ExecutableName="dbedit"
+                Id="dbedit"
+                Description="Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite"
+                DisplayName="dbedit"
+                ExecutableName="dbedit.exe"
                 EntryPoint="Windows.FullTrustApplication">
                 
             </Application>
@@ -41,9 +43,9 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>My Product</DisplayName>
-            <PublisherDisplayName>My Company</PublisherDisplayName>
-            <Description>A dbedit application</Description>
+            <DisplayName>dbedit</DisplayName>
+            <PublisherDisplayName>dbedit contributors</PublisherDisplayName>
+            <Description>Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>

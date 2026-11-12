@@ -8,15 +8,15 @@
   IgnorableNamespaces="uap3">
   
   <Identity 
-    Name="com.example.dbedit"
-    Publisher="CN=My Company"
-    Version="0.1.0.0" 
+    Name="dev.dbedit.app"
+    Publisher="CN=dbedit contributors"
+    Version="0.0.0.0" 
     ProcessorArchitecture="x64" />
   
   <Properties>
-    <DisplayName>My Product</DisplayName>
-    <PublisherDisplayName>My Company</PublisherDisplayName>
-    <Description>A dbedit application</Description>
+    <DisplayName>dbedit</DisplayName>
+    <PublisherDisplayName>dbedit contributors</PublisherDisplayName>
+    <Description>Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite</Description>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
   
@@ -29,10 +29,10 @@
   </Resources>
   
   <Applications>
-    <Application Id="com.example.dbedit" Executable="dbedit" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="dbedit" Executable="dbedit.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="My Product"
-        Description="A dbedit application"
+        DisplayName="dbedit"
+        Description="Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
@@ -41,7 +41,7 @@
       </uap:VisualElements>
       
       <Extensions>
-        <desktop:Extension Category="windows.fullTrustProcess" Executable="dbedit" />
+        <desktop:Extension Category="windows.fullTrustProcess" Executable="dbedit.exe" />
         
         
       </Extensions>

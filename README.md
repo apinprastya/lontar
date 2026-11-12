@@ -45,11 +45,12 @@ standalone `task` binary works too):
 
 | Task | What it does |
 |---|---|
-| `wails3 task test` | Go + frontend tests |
+| `wails3 task test` | Go + frontend + `tools/` tests |
 | `wails3 task test:go` | `go test ./... -coverprofile=coverage.out`, including container integration tests (needs Docker) |
 | `wails3 task test:go:short` | Go unit tests only (`-short`, no Docker) |
 | `wails3 task test:fe` | `vitest run --coverage` (fails below 80%) |
 | `wails3 task cover` | Prints Go coverage and fails if the total (excluding `main.go`) is below 80% |
+| `wails3 task test:tools` | Tests the build helpers in `tools/` (a separate Go module; also part of `test`) |
 
 SSH tests use an in-process SSH server (`internal/sshtest`) and never touch
 `~/.ssh`. TLS tests start their own PostgreSQL and MySQL containers with
@@ -397,9 +398,153 @@ Deleting a connection also deletes its saved passwords. `connections.json` is
 at schema version 3 (M6). Older files are upgraded on the next save, and a file
 from a newer dbedit is refused rather than overwritten.
 
+## Installing
+
+Download the file for your OS from the project's GitHub Releases page. Check
+it against `SHA256SUMS` from the same release (`sha256sum -c SHA256SUMS
+--ignore-missing` on Linux, `shasum -a 256 -c SHA256SUMS --ignore-missing` on
+macOS, `Get-FileHash` on Windows).
+
+| OS | File | Notes |
+|---|---|---|
+| Linux (Debian 13+, Ubuntu 24.04+) | `dbedit-<version>-linux-amd64.deb` | `sudo apt install ./dbedit-*.deb` pulls in GTK4 (`libgtk-4-1`) and WebKitGTK 6.0 (`libwebkitgtk-6.0-4`). |
+| Linux (Fedora 39+) | `dbedit-<version>-linux-x86_64.rpm` | `sudo dnf install ./dbedit-*.rpm` pulls in `gtk4` and `webkitgtk6.0`. |
+| Linux (any, x86_64) | `dbedit-<version>-linux-x86_64.AppImage` | `chmod +x dbedit-*.AppImage && ./dbedit-*.AppImage`. Self-contained (GTK and WebKitGTK bundled), so it is large (~130 MB). |
+| Windows 10/11 (x64) | `dbedit-<version>-windows-amd64-setup.exe` | Per-user installer, see below. |
+| Windows (portable) | `dbedit-<version>-windows-amd64-portable.zip` | Just `dbedit.exe`; needs the WebView2 runtime (built into Windows 11). |
+| macOS 12+ (Apple silicon and Intel) | `dbedit-<version>-macos-universal.dmg` | Open it and drag dbedit to Applications. |
+
+The packages install `dbedit` to `/usr/bin`, a desktop entry
+(`Development;Database;`) and the icon in the `hicolor` theme. The optional
+`gnome-keyring` recommendation provides the Secret Service; without one,
+dbedit stores passwords in its encrypted file instead (see "Saved connections
+and passwords").
+
+**Windows installer.** It installs **per user** into
+`%LOCALAPPDATA%\Programs\dbedit` (no administrator prompt), adds a Start-menu
+and a desktop shortcut and an "Apps & features" entry with an uninstaller.
+If the Microsoft Edge WebView2 runtime is missing it runs Microsoft's
+Evergreen bootstrapper, which downloads the runtime (**internet access
+needed** for that step only; Windows 11 and current Windows 10 already have
+it). Uninstalling removes the program and the WebView2 cache
+(`%AppData%\dbedit.exe`) but keeps your connections, history and settings in
+`%AppData%\dbedit` and the passwords in Credential Manager.
+
+**Unsigned builds.** Releases are only code-signed when the maintainers'
+signing secrets are configured (see "Releasing"). Unsigned builds work, but
+the OS warns first:
+
+- **Windows:** SmartScreen shows "Windows protected your PC". Click
+  **More info → Run anyway**.
+- **macOS:** Gatekeeper says the app "cannot be opened because the developer
+  cannot be verified" (or that it is "damaged"). Either right-click (Control-
+  click) dbedit in Applications, choose **Open** and confirm **Open**
+  (on macOS 15+: try to open it once, then **System Settings → Privacy &
+  Security → Open Anyway**), or remove the quarantine flag:
+  `xattr -dr com.apple.quarantine /Applications/dbedit.app`.
+- **Linux:** packages are not GPG-signed; verify them with `SHA256SUMS`.
+
 ## Build
 
 ```sh
-wails3 build          # production binary in bin/
-wails3 package        # OS installer/package (see PLAN.md, milestone M7)
+wails3 build          # production binary in bin/ (version-stamped)
+wails3 task version   # the version builds are stamped with
 ```
+
+### Versioning
+
+Every build and package task stamps the same version (`VERSION` in the root
+`Taskfile.yml`) into the Go binary (`-ldflags -X
+dbedit/internal/services.Version=…`, shown in the status bar), the macOS
+`Info.plist`, the Windows VERSIONINFO resource and installer, and the
+`.deb`/`.rpm` metadata. It comes from:
+
+1. `DBEDIT_VERSION` if set (a leading `v` is dropped), e.g.
+   `DBEDIT_VERSION=v1.2.3 wails3 task package:linux`; otherwise
+2. `git describe --tags --always --dirty`: tag `v1.2.3` → `1.2.3`,
+   `v1.2.3-4-gabc1234` → `1.2.3-4-gabc1234`, an untagged commit →
+   `0.0.0-dev+<hash>[-dirty]`; otherwise
+3. `0.0.0-dev` (no git), which is also the default of a plain `go build`.
+
+Fields that only take numbers (`CFBundleVersion`, Windows file version, NSIS)
+get the `X.Y.Z` core. `build/config.yml`'s `version` is only a baseline.
+
+### Building packages
+
+Packages are built natively on each OS (the release workflow does this on
+GitHub's runners). Output goes to `bin/`.
+
+| Task | Host | Output | Extra tools |
+|---|---|---|---|
+| `wails3 task package:linux` | Linux | `dbedit-x86_64.AppImage`, `dbedit.deb`, `dbedit.rpm`, `dbedit.pkg.tar.zst` | none: nfpm is built into `wails3`; the AppImage step downloads linuxdeploy (internet). |
+| `wails3 task package:windows` | Windows (or Linux with `GOOS=windows`) | `dbedit-amd64-installer.exe` | [NSIS](https://nsis.sourceforge.io) `makensis` on `PATH`; the WebView2 bootstrapper is downloaded. `INSTALL_SCOPE=machine` builds a per-machine (Program Files, UAC) installer instead. |
+| `wails3 task package:darwin` | macOS | universal `dbedit.app` + `dbedit.dmg` | Xcode command line tools. The app is ad-hoc signed only. |
+
+`GOOS=windows wails3 build` cross-compiles `bin/dbedit.exe` (with icon,
+manifest and version resource) from Linux or macOS, since the Windows build
+needs no cgo. The macOS and Linux GUI builds need cgo and so their own OS (or
+the `wails3 task setup:docker` cross-compile image).
+
+Identity (name, publisher `dbedit contributors`, bundle id `dev.dbedit.app`,
+description, copyright) is set in `build/config.yml`. After changing it run
+`wails3 task common:update:build-assets`, then re-apply what that command
+overwrites from the Wails templates: `build/linux/nfpm/nfpm.yaml` (dbedit's
+dependencies, icons, license TODO) and the hand-added keys in
+`build/darwin/Info*.plist` (`LSApplicationCategoryType`,
+`LSMinimumSystemVersion`); delete the `build/ios` and `build/linux/desktop`
+files it recreates (unused). `build/linux/dbedit.desktop` is maintained by
+hand.
+
+### Regenerating the icon
+
+`build/appicon.svg` is the only source of the icon. After editing it run:
+
+```sh
+wails3 task icons:render
+```
+
+This renders it with `tools/iconrender` (pure Go, `oksvg`; keep to paths,
+basic shapes and gradients) into `build/appicon.png` (1024²), the Linux
+`hicolor` PNGs (16–512) and scalable SVG, the favicon
+(`frontend/public/favicon.svg`) and the dmg icon/background, then rebuilds
+`build/windows/icon.ico` and `build/darwin/icons.icns` with `wails3 generate
+icons`. Commit the results; builds do not re-render.
+
+## Releasing
+
+1. Make sure CI is green on `main`.
+2. Tag and push: `git tag v1.2.3 && git push origin v1.2.3`.
+3. `.github/workflows/release.yml` runs the short tests on Linux, Windows and
+   macOS, builds every package stamped with `1.2.3`, signs what it has
+   secrets for, and creates a **draft** GitHub Release with the files and
+   `SHA256SUMS` (versions with a `-` are marked pre-release).
+4. Review the draft and publish it.
+
+The workflow can also be started by hand (**Actions → Release → Run
+workflow**) with an optional version; the draft then targets that commit
+with tag `v<version>`. `wails3 task release:checksums DIR=dist` writes the
+same `SHA256SUMS` locally.
+
+Signing is optional; each step is skipped when its secrets are missing:
+
+| Secret | Used for |
+|---|---|
+| `WINDOWS_CERT_PFX` | Base64 of the Authenticode code-signing certificate (`.pfx`) |
+| `WINDOWS_CERT_PASSWORD` | Its password |
+| `MACOS_CERT_P12` | Base64 of the "Developer ID Application" certificate + key (`.p12`) |
+| `MACOS_CERT_PASSWORD` | Its password |
+| `APPLE_ID` | Apple ID used for notarization |
+| `APPLE_TEAM_ID` | The Apple Developer team ID |
+| `APPLE_APP_PASSWORD` | An app-specific password for that Apple ID |
+
+Windows signs `dbedit.exe` before it goes into the installer, then the
+installer (`build/windows/sign.ps1`, signtool, SHA-256 + RFC 3161 timestamp).
+macOS signs the app with the hardened runtime and
+`build/darwin/entitlements.plist` (only `com.apple.security.network.client`,
+Wails' production preset), then signs, notarizes (`notarytool`) and staples
+the dmg (`build/darwin/sign-notarize.sh`). With the certificate but no Apple
+ID secrets the dmg is signed but not notarized. The `.app` targets macOS 12
+(`LSMinimumSystemVersion`, matching `-mmacosx-version-min=12.0`).
+
+**License:** not chosen yet (TODO). The packages carry an empty license field
+until it is.

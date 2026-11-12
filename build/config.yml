@@ -5,13 +5,16 @@ version: '3'
 
 # This information is used to generate the build assets.
 info:
-  companyName: "dbedit" # The name of the company
+  companyName: "dbedit contributors" # Publisher (Windows VERSIONINFO/NSIS, nfpm vendor)
   productName: "dbedit" # The name of the application
-  productIdentifier: "dev.dbedit.app" # The unique product identifier
-  description: "A fast, lightweight desktop database client" # The application description
-  copyright: "(c) 2026, dbedit contributors" # Copyright text
-  comments: "PostgreSQL, MySQL/MariaDB and SQLite client" # Comments
-  version: "0.0.1" # The application version
+  productIdentifier: "dev.dbedit.app" # Bundle id (macOS CFBundleIdentifier, Windows manifest/MSIX)
+  description: "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite" # The application description
+  copyright: "© 2026 dbedit contributors" # Copyright text
+  comments: "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite" # Comments
+  # Baseline only. Every build and package is stamped with the version from
+  # `git describe` / DBEDIT_VERSION (see VERSION in the root Taskfile.yml).
+  version: "0.0.0"
+  # License: TODO — not chosen yet. nfpm.yaml carries the matching TODO.
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension
   #                               # If not set and Assets.car exists, defaults to "appicon"
@@ -69,6 +72,3 @@ fileAssociations:
 #    role: Editor
 #    mimeType: image/jpeg  # (optional)
 
-# Other data
-other:
-  - name: My Other Data

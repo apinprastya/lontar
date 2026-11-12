@@ -5,9 +5,15 @@ package services
 
 import "runtime"
 
-// Version is the application version. It is overridable at build time with
-// -ldflags "-X dbedit/internal/services.Version=1.2.3".
-var Version = "0.0.1"
+// DevVersion is the version of a binary built without version stamping
+// (plain `go build`/`go run`, tests).
+const DevVersion = "0.0.0-dev"
+
+// Version is the application version. Every Taskfile build and package
+// stamps it with -ldflags "-X dbedit/internal/services.Version=<VERSION>",
+// where VERSION comes from `git describe` or DBEDIT_VERSION (see the root
+// Taskfile.yml).
+var Version = DevVersion
 
 // AppService exposes basic application metadata to the frontend.
 type AppService struct {

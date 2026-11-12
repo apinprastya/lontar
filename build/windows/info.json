@@ -1,15 +1,15 @@
 {
 	"fixed": {
-		"file_version": "0.0.1"
+		"file_version": "0.0.0"
 	},
 	"info": {
 		"0409": {
-			"ProductVersion": "0.0.1",
-			"CompanyName": "dbedit",
-			"FileDescription": "A fast, lightweight desktop database client",
-			"LegalCopyright": "(c) 2026, dbedit contributors",
+			"ProductVersion": "0.0.0",
+			"CompanyName": "dbedit contributors",
+			"FileDescription": "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite",
+			"LegalCopyright": "© 2026 dbedit contributors",
 			"ProductName": "dbedit",
-			"Comments": "PostgreSQL, MySQL/MariaDB and SQLite client"
+			"Comments": "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite"
 		}
 	}
 }

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  dbedit .dmg window background (original artwork, © 2026 dbedit contributors).
+  540 x 380, matching the Finder window size used by `darwin:create:dmg`.
+  The app icon sits at x = 28 % and the Applications link at x = 72 % of the
+  width; the arrow points from one to the other. Rendered to
+  dmg-background.png by `wails3 task icons:render`.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="380" viewBox="0 0 540 380">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6f8fd"/>
+      <stop offset="1" stop-color="#e2e9f7"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="540" height="380" fill="url(#bg)"/>
+  <!-- Arrow from the app icon to /Applications -->
+  <path d="M 222 166 L 302 166" fill="none" stroke="#3b6fd6" stroke-width="8" stroke-linecap="round"/>
+  <path d="M 296 148 L 322 166 L 296 184 Z" fill="#3b6fd6"/>
+  <!-- Footer band in the app accent -->
+  <rect x="0" y="352" width="540" height="28" fill="#3b6fd6" fill-opacity="0.12"/>
+</svg>

@@ -1,79 +1,109 @@
-# Feel free to remove those if you don't want/need to use them.
-# Make sure to check the documentation at https://nfpm.goreleaser.com
+# nfpm config for the dbedit .deb / .rpm / Arch packages, built by
+# `wails3 task package:linux` (linux:generate:deb|rpm|aur → `wails3 tool package`).
+# See https://nfpm.goreleaser.com.
 #
-# The lines below are called `modelines`. See `:help modeline`
+# Identity mirrors build/config.yml. NOTE: `wails3 task common:update:build-assets`
+# rewrites this file from the Wails template; re-apply this version afterwards.
+#
+# DBEDIT_PKG_VERSION and GOARCH are set by the Linux Taskfile (VERSION from the
+# root Taskfile: git describe / DBEDIT_VERSION). nfpm maps a semver
+# pre-release such as 0.0.0-dev+abc1234 to each format's rules.
 
 name: "dbedit"
 arch: ${GOARCH}
 platform: "linux"
-version: "0.0.1"
-section: "default"
-priority: "extra"
-maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "A fast, lightweight desktop database client"
-vendor: "dbedit"
-license: "MIT"
+version: ${DBEDIT_PKG_VERSION}
+version_schema: semver
 release: "1"
+section: "database"
+priority: "optional"
+maintainer: "dbedit contributors"
+description: |-
+  Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite
+  Desktop client with a connection list, table browser, spreadsheet-like grid
+  with staged edits, SQL editor, SSH tunnels, TLS and CSV/JSON/SQL export.
+vendor: "dbedit contributors"
+# TODO(license): no license has been chosen yet. Set the SPDX id here (and in
+# README/config.yml) once it is decided.
+license: ""
 
 contents:
   - src: "./bin/dbedit"
-    dst: "/usr/local/bin/dbedit"
-  - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/dbedit.png"
+    dst: "/usr/bin/dbedit"
+    file_info:
+      mode: 0755
   - src: "./build/linux/dbedit.desktop"
     dst: "/usr/share/applications/dbedit.desktop"
+    file_info:
+      mode: 0644
+  # hicolor theme icons (PNG 16–512 + scalable SVG), rendered from
+  # build/appicon.svg by `wails3 task icons:render`. Listed one by one (not
+  # `type: tree`) so the package never claims the shared hicolor directories.
+  - src: "./build/linux/icons/hicolor/16x16/apps/dbedit.png"
+    dst: "/usr/share/icons/hicolor/16x16/apps/dbedit.png"
+    file_info:
+      mode: 0644
+  - src: "./build/linux/icons/hicolor/24x24/apps/dbedit.png"
+    dst: "/usr/share/icons/hicolor/24x24/apps/dbedit.png"
+    file_info:
+      mode: 0644
+  - src: "./build/linux/icons/hicolor/32x32/apps/dbedit.png"
+    dst: "/usr/share/icons/hicolor/32x32/apps/dbedit.png"
+    file_info:
+      mode: 0644
+  - src: "./build/linux/icons/hicolor/48x48/apps/dbedit.png"
+    dst: "/usr/share/icons/hicolor/48x48/apps/dbedit.png"
+    file_info:
+      mode: 0644
+  - src: "./build/linux/icons/hicolor/64x64/apps/dbedit.png"
+    dst: "/usr/share/icons/hicolor/64x64/apps/dbedit.png"
+    file_info:
+      mode: 0644
+  - src: "./build/linux/icons/hicolor/128x128/apps/dbedit.png"
+    dst: "/usr/share/icons/hicolor/128x128/apps/dbedit.png"
+    file_info:
+      mode: 0644
+  - src: "./build/linux/icons/hicolor/256x256/apps/dbedit.png"
+    dst: "/usr/share/icons/hicolor/256x256/apps/dbedit.png"
+    file_info:
+      mode: 0644
+  - src: "./build/linux/icons/hicolor/512x512/apps/dbedit.png"
+    dst: "/usr/share/icons/hicolor/512x512/apps/dbedit.png"
+    file_info:
+      mode: 0644
+  - src: "./build/linux/icons/hicolor/scalable/apps/dbedit.svg"
+    dst: "/usr/share/icons/hicolor/scalable/apps/dbedit.svg"
+    file_info:
+      mode: 0644
 
-# Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
+# GTK4 + WebKitGTK 6.0 (Wails v3 default). Debian 13+ / Ubuntu 24.04+ names:
 depends:
   - libgtk-4-1
   - libwebkitgtk-6.0-4
+recommends:
+  # Secret Service for the OS keychain; without it dbedit falls back to its
+  # encrypted file store.
+  - gnome-keyring
 
-# Distribution-specific overrides for different package formats
 overrides:
-  # RPM packages for Fedora / RHEL / AlmaLinux / Rocky Linux
+  # Fedora 39+ (RHEL/Alma/Rocky 10 via EPEL where available)
   rpm:
     depends:
       - gtk4
       - webkitgtk6.0
-
-  # Arch Linux packages
+    recommends:
+      - gnome-keyring
+  # Arch Linux
   archlinux:
     depends:
       - gtk4
       - webkitgtk-6.0
+    recommends: []
 
-# scripts section to ensure desktop database is updated after install
+rpm:
+  group: "Development/Tools"
+  summary: "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite"
+
 scripts:
   postinstall: "./build/linux/nfpm/scripts/postinstall.sh"
-  # You can also add preremove, postremove if needed
-  # preremove: "./build/linux/nfpm/scripts/preremove.sh"
-  # postremove: "./build/linux/nfpm/scripts/postremove.sh"
-
-# If you build your app with -tags gtk3 (legacy WebKit2GTK 4.1 stack — supported through v3.0.x, removed in v3.1),
-# replace the depends/overrides above with these:
-#
-# depends:
-#   - libgtk-3-0
-#   - libwebkit2gtk-4.1-0
-# overrides:
-#   rpm:
-#     depends:
-#       - gtk3
-#       - webkit2gtk4.1
-#   archlinux:
-#     depends:
-#       - gtk3
-#       - webkit2gtk-4.1
-#
-# replaces:
-#   - foobar
-# provides:
-#   - bar
-# recommends:
-#   - whatever
-# suggests:
-#   - something-else
-# conflicts:
-#   - not-foo
-#   - not-bar
-# changelog: "changelog.yaml"
+  postremove: "./build/linux/nfpm/scripts/postremove.sh"

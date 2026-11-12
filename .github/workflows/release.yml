@@ -1,0 +1,299 @@
+name: Release
+
+# Builds signed (when secrets exist) packages for every OS and attaches them,
+# with SHA256SUMS, to a DRAFT GitHub Release. Publishing the draft is manual.
+#
+# - push of a tag v* (e.g. v1.2.3): version = the tag without "v".
+# - workflow_dispatch: version = the "version" input, or `git describe`
+#   (0.0.0-dev+<hash> without tags); the draft gets the tag v<version> on the
+#   dispatched commit when it is published.
+#
+# Optional secrets (each signing step is skipped when its secrets are absent):
+#   WINDOWS_CERT_PFX, WINDOWS_CERT_PASSWORD                      Authenticode
+#   MACOS_CERT_P12, MACOS_CERT_PASSWORD                          Developer ID
+#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD                  notarization
+#
+# Third-party code: none. GitHub's own actions are pinned to commit SHAs.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp, e.g. 1.2.3-rc.1 (empty: git describe)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  WAILS_VERSION: v3.0.0
+  NODE_VERSION: "24"
+  # Read by the root Taskfile (VERSION); empty means `git describe`.
+  DBEDIT_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+
+jobs:
+  linux:
+    name: Linux (AppImage, .deb, .rpm)
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # tags for git describe
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install build dependencies (GTK4 + WebKitGTK 6.0)
+        run: |
+          sudo apt-get update
+          # file: used by linuxdeploy while building the AppImage.
+          sudo apt-get install -y build-essential pkg-config file \
+            libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+
+      - name: Tests (frontend, Go -short, tools)
+        run: |
+          (cd frontend && npm ci && npx vitest run && npm run build)
+          go test -short ./...
+          (cd tools && go test ./...)
+
+      - id: version
+        name: Resolve version
+        run: |
+          v=$(wails3 task version 2>/dev/null | head -n1 | cut -d' ' -f1)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Version: $v"
+
+      - name: Build packages
+        run: wails3 task package:linux
+
+      - name: Collect artifacts
+        env:
+          V: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          cp bin/dbedit-x86_64.AppImage "dist/dbedit-$V-linux-x86_64.AppImage"
+          cp bin/dbedit.deb "dist/dbedit-$V-linux-amd64.deb"
+          cp bin/dbedit.rpm "dist/dbedit-$V-linux-x86_64.rpm"
+          dpkg-deb -I dist/*.deb
+          ls -l dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-linux
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows (NSIS installer, portable zip)
+    runs-on: windows-latest
+    env:
+      HAVE_WINDOWS_SIGNING: ${{ secrets.WINDOWS_CERT_PFX != '' && secrets.WINDOWS_CERT_PASSWORD != '' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            choco install nsis -y --no-progress
+          }
+          "${env:ProgramFiles(x86)}\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Tests (frontend, Go -short, tools)
+        run: |
+          (cd frontend && npm ci && npx vitest run && npm run build)
+          go test -short ./...
+          (cd tools && go test ./...)
+
+      - id: version
+        name: Resolve version
+        run: |
+          v=$(wails3 task version 2>/dev/null | head -n1 | cut -d' ' -f1)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Version: $v"
+
+      - name: Build dbedit.exe
+        run: wails3 task windows:build
+
+      - name: Sign dbedit.exe
+        if: env.HAVE_WINDOWS_SIGNING == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: ./build/windows/sign.ps1 bin/dbedit.exe
+
+      - name: Build NSIS installer (per-user, WebView2 bootstrapper)
+        # SKIP_BUILD keeps the (signed) exe from the previous steps.
+        run: wails3 task package:windows SKIP_BUILD=true
+
+      - name: Sign installer
+        if: env.HAVE_WINDOWS_SIGNING == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: ./build/windows/sign.ps1 bin/dbedit-amd64-installer.exe
+
+      - name: Collect artifacts
+        shell: pwsh
+        env:
+          V: ${{ steps.version.outputs.version }}
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item bin/dbedit-amd64-installer.exe "dist/dbedit-$env:V-windows-amd64-setup.exe"
+          Compress-Archive -Path bin/dbedit.exe -DestinationPath "dist/dbedit-$env:V-windows-amd64-portable.zip"
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-windows
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS (universal .dmg)
+    runs-on: macos-latest
+    env:
+      HAVE_MACOS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' && secrets.MACOS_CERT_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+
+      - name: Tests (frontend, Go -short, tools)
+        run: |
+          (cd frontend && npm ci && npx vitest run && npm run build)
+          go test -short ./...
+          (cd tools && go test ./...)
+
+      - id: version
+        name: Resolve version
+        run: |
+          v=$(wails3 task version 2>/dev/null | head -n1 | cut -d' ' -f1)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Version: $v"
+
+      - name: Build universal dbedit.app (amd64 + arm64)
+        run: |
+          wails3 task darwin:package:universal
+          lipo -archs bin/dbedit.app/Contents/MacOS/dbedit
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' bin/dbedit.app/Contents/Info.plist
+
+      - name: Sign dbedit.app (Developer ID, hardened runtime)
+        if: env.HAVE_MACOS_SIGNING == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: build/darwin/sign-notarize.sh app bin/dbedit.app
+
+      - name: Build .dmg
+        run: wails3 task darwin:create:dmg
+
+      - name: Sign and notarize .dmg
+        if: env.HAVE_MACOS_SIGNING == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: build/darwin/sign-notarize.sh dmg bin/dbedit.dmg
+
+      - name: Remove signing keychain
+        if: always() && env.HAVE_MACOS_SIGNING == 'true'
+        run: build/darwin/sign-notarize.sh cleanup
+
+      - name: Collect artifacts
+        env:
+          V: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          cp bin/dbedit.dmg "dist/dbedit-$V-macos-universal.dmg"
+          ls -l dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-macos
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Draft GitHub Release
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum -- * > ../SHA256SUMS
+          mv ../SHA256SUMS SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          V: ${{ needs.linux.outputs.version }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then tag="v$V"; fi
+          flags=(--draft --title "dbedit $V" --generate-notes --target "$GITHUB_SHA")
+          case "$V" in *-*) flags+=(--prerelease) ;; esac
+          gh release create "$tag" "${flags[@]}" dist/*

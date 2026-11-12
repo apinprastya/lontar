@@ -1,10 +1,13 @@
 [Desktop Entry]
 Type=Application
+Version=1.5
 Name=dbedit
+GenericName=Database Client
+Comment=Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite
 Exec=dbedit
 Icon=dbedit
-Categories=Development;
 Terminal=false
-Keywords=wails
-Version=1.0
-StartupNotify=false
+Categories=Development;Database;
+Keywords=database;sql;postgresql;postgres;mysql;mariadb;sqlite;
+StartupNotify=true
+StartupWMClass=dbedit

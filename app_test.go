@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"testing"
 	"testing/fstest"
 )
@@ -36,6 +37,12 @@ func TestAppOptions(t *testing.T) {
 	}
 	if !opts.Mac.ApplicationShouldTerminateAfterLastWindowClosed {
 		t.Fatal("app should quit when the last window closes on macOS")
+	}
+	if opts.Linux.ProgramName != "dbedit" {
+		t.Fatalf("Linux.ProgramName = %q, want dbedit (StartupWMClass in build/linux/dbedit.desktop)", opts.Linux.ProgramName)
+	}
+	if !bytes.HasPrefix(opts.Icon, []byte("\x89PNG\r\n\x1a\n")) {
+		t.Fatal("Icon must be the embedded build/appicon.png")
 	}
 }
 

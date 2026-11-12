@@ -9,6 +9,39 @@ vars:
   # by `wails3 build GOOS=...` (or the GOOS env var) for cross-compilation. The
   # tasks below dispatch to the matching platform Taskfile via this variable.
   GOOS: '{{.GOOS | default OS}}'
+  # Version stamped into every build and package (Go ldflags, Info.plist,
+  # Windows VERSIONINFO, NSIS, nfpm). DBEDIT_VERSION (e.g. the release tag)
+  # wins; otherwise `git describe --tags --always --dirty` is used: a tag
+  # such as v1.2.3 or v1.2.3-4-gabc1234 gives 1.2.3[-4-gabc1234], a bare
+  # commit gives 0.0.0-dev+<hash>, and no git at all gives 0.0.0-dev. A
+  # leading "v" is dropped, and anything but semver characters is refused.
+  # Only shell builtins are used, so this also works in Task's shell on
+  # Windows. Print it with `wails3 task version`.
+  VERSION:
+    sh: |
+      v="${DBEDIT_VERSION:-}"
+      if [ -z "$v" ]; then v=$(git describe --tags --always --dirty 2>/dev/null) || v=""; fi
+      v="${v#v}"
+      case "$v" in
+        # Only semver characters: VERSION ends up in -ldflags and file names.
+        *[!0-9A-Za-z.+-]*) echo "invalid version '$v' (allowed: 0-9 A-Z a-z . + -)" >&2; exit 1 ;;
+        "") echo "0.0.0-dev" ;;
+        [0-9]*.[0-9]*.[0-9]*) echo "$v" ;;
+        *) echo "0.0.0-dev+$v" ;;
+      esac
+  # The numeric X.Y.Z core of VERSION, for fields that only accept numbers
+  # (CFBundleVersion, Windows VERSIONINFO, NSIS VIProductVersion).
+  VERSION_NUM:
+    sh: |
+      n="{{.VERSION}}"
+      n="${n%%-*}"
+      n="${n%%+*}"
+      case "$n" in
+        *[!0-9.]*|"") echo "0.0.0" ;;
+        *) echo "$n" ;;
+      esac
+  # Linker flag that sets AppService.Version (internal/services/app.go).
+  VERSION_LDFLAGS: '-X dbedit/internal/services.Version={{.VERSION}}'
 
 includes:
   common: ./build/Taskfile.yml
@@ -36,6 +69,71 @@ tasks:
     summary: Runs the application in development mode
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  version:
+    summary: Prints the version that builds and packages are stamped with
+    cmds:
+      - 'echo "{{.VERSION}} (numeric {{.VERSION_NUM}})"'
+
+  # ---------------------------------------------------------------------------
+  # Packaging & release (see README "Building packages" / "Releasing")
+  # ---------------------------------------------------------------------------
+
+  package:linux:
+    summary: Builds the AppImage, .deb and .rpm (plus Arch .pkg.tar.zst) into bin/ (Linux host)
+    cmds:
+      - task: linux:package
+
+  package:windows:
+    summary: Builds the per-user NSIS installer (bin/dbedit-amd64-installer.exe; needs makensis)
+    cmds:
+      - task: windows:package
+        vars:
+          FORMAT: nsis
+          INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
+
+  package:darwin:
+    summary: Builds a universal (amd64 + arm64) bin/dbedit.app and bin/dbedit.dmg (macOS host)
+    cmds:
+      - task: darwin:package:universal
+      - task: darwin:create:dmg
+
+  release:checksums:
+    summary: Writes SHA256SUMS for every file in DIR (default dist)
+    vars:
+      DIR: '{{.DIR | default "dist"}}'
+    dir: '{{.DIR}}'
+    cmds:
+      - rm -f SHA256SUMS
+      - |
+        if command -v sha256sum >/dev/null 2>&1; then
+          sha256sum -- * > ../SHA256SUMS.tmp
+        else
+          shasum -a 256 -- * > ../SHA256SUMS.tmp
+        fi
+        mv ../SHA256SUMS.tmp SHA256SUMS
+      - cat SHA256SUMS
+
+  icons:render:
+    summary: Renders build/appicon.svg to every icon (PNG, hicolor, favicon, .ico, .icns) and the dmg background
+    desc: |
+      build/appicon.svg is the only source of the app icon. This renders it
+      with tools/iconrender (oksvg, a separate Go module) and regenerates the
+      Windows .ico and macOS .icns with `wails3 generate icons`. Commit the
+      results; builds do not re-render.
+    cmds:
+      - >-
+        go -C tools run ./iconrender -in ../build/appicon.svg
+        1024=../build/appicon.png
+        1024=../build/darwin/dmg-file-icon.png
+        {{range .HICOLOR_SIZES}}{{.}}=../build/linux/icons/hicolor/{{.}}x{{.}}/apps/{{$.APP_NAME}}.png {{end}}
+        svg=../build/linux/icons/hicolor/scalable/apps/{{.APP_NAME}}.svg
+        svg=../frontend/public/favicon.svg
+      - go -C tools run ./iconrender -in ../build/darwin/dmg-background.svg 540x380=../build/darwin/dmg-background.png
+      - wails3 generate icons -input build/appicon.png -macfilename build/darwin/icons.icns -windowsfilename build/windows/icon.ico
+      - wails3 tool cp build/darwin/icons.icns build/darwin/dmg-file-icon.icns
+    vars:
+      HICOLOR_SIZES: [16, 24, 32, 48, 64, 128, 256, 512]
 
   install:msix:tools:
     summary: Installs tools required for Windows MSIX packaging
@@ -72,10 +170,17 @@ tasks:
   # ---------------------------------------------------------------------------
 
   test:
-    summary: Runs Go (with Docker integration tests) and frontend tests with coverage
+    summary: Runs Go (with Docker integration tests), frontend and tools/ tests with coverage
     cmds:
       - task: test:go
       - task: test:fe
+      - task: test:tools
+
+  test:tools:
+    summary: Tests the build helpers in tools/ (icon renderer, version stamper; a separate Go module)
+    dir: tools
+    cmds:
+      - go test -cover ./...
 
   test:go:
     summary: Runs all Go tests, including testcontainers-based integration tests (needs Docker)

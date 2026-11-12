@@ -7,3 +7,9 @@ build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 coverage.out
 frontend/coverage
 coverage.filtered.out
+# M7 packaging outputs
+dist
+*.syso
+build/windows/info.stamped.json
+build/linux/appimage/dbedit
+build/linux/appimage/dbedit.png

@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,8 +18,17 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// appName is used for the application name and the main window title.
+// appName is used for the application name and the main window title. It
+// is also the Linux program name (WM_CLASS / Wayland app_id), which must
+// match StartupWMClass and the name of build/linux/dbedit.desktop.
 const appName = "dbedit"
+
+// appIcon is the application icon, rendered from build/appicon.svg. Wails
+// uses it for the macOS/Linux message dialogs; the window/taskbar icons come
+// from the platform packaging (Windows .syso, macOS .icns, Linux .desktop).
+//
+//go:embed build/appicon.png
+var appIcon []byte
 
 // backend holds the Wails-bound services.
 type backend struct {
@@ -85,7 +95,8 @@ func newBackend(configDir string) backend {
 func appOptions(assets fs.FS, b backend) application.Options {
 	return application.Options{
 		Name:        appName,
-		Description: "A fast, lightweight desktop database client",
+		Description: "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite",
+		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(services.NewAppService()),
 			application.NewService(b.connections),
@@ -104,6 +115,9 @@ func appOptions(assets fs.FS, b backend) application.Options {
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+		Linux: application.LinuxOptions{
+			ProgramName: appName,
 		},
 	}
 }

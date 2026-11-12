@@ -1,39 +1,33 @@
 Unicode true
 
 ####
-## Please note: Template replacements don't work in this file. They are provided with default defines like
-## mentioned underneath.
-## If the keyword is not defined, "wails_tools.nsh" will populate them.
-## If they are defined here, "wails_tools.nsh" will not touch them. This allows you to use this project.nsi manually
-## from outside of Wails for debugging and development of the installer.
-## 
-## For development first make a wails nsis build to populate the "wails_tools.nsh":
-## > wails build --target windows/amd64 --nsis
-## Then you can call makensis on this file with specifying the path to your binary:
-## For a AMD64 only installer:
-## > makensis -DARG_WAILS_AMD64_BINARY=..\..\bin\app.exe
-## For a ARM64 only installer:
-## > makensis -DARG_WAILS_ARM64_BINARY=..\..\bin\app.exe
-## For a installer with both architectures:
-## > makensis -DARG_WAILS_AMD64_BINARY=..\..\bin\app-amd64.exe -DARG_WAILS_ARM64_BINARY=..\..\bin\app-arm64.exe
-####
-## The following information is taken from the wails_tools.nsh file, but they can be overwritten here.
-####
-## !define INFO_PROJECTNAME    "my-project" # Default "dbedit"
-## !define INFO_COMPANYNAME    "My Company" # Default "My Company"
-## !define INFO_PRODUCTNAME    "My Product Name" # Default "My Product"
-## !define INFO_PRODUCTVERSION "1.0.0"     # Default "0.1.0"
-## !define INFO_COPYRIGHT      "(c) Now, My Company" # Default "© 2026, My Company"
-###
-## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
-## !define UNINST_KEY_NAME     "UninstKeyInRegistry"  # Default "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}"
-####
-## !define REQUEST_EXECUTION_LEVEL "admin"            # Default "admin"  see also https://nsis.sourceforge.io/Docs/Chapter4.html
-## !define WAILS_INSTALL_SCOPE     "user"             # Default "machine" - set to "user" for per-user install ($LOCALAPPDATA) without UAC prompt
-####
-## Include the wails tools
+## dbedit NSIS installer. Built by `wails3 task package:windows`
+## (windows:create:nsis:installer), which passes:
+##   -DARG_WAILS_AMD64_BINARY=<bin\dbedit.exe>   the binary to install
+##   -DINFO_PRODUCTVERSION=X.Y.Z                 numeric version (VERSION_NUM)
+##   -DDBEDIT_VERSION=<full version>             e.g. 1.2.3-rc.1 (VERSION)
+##   -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user
+##
+## Install scope: per-user by default (no UAC prompt), into
+## $LOCALAPPDATA\Programs\dbedit, with the uninstall entry under HKCU. Build
+## with INSTALL_SCOPE=machine for a per-machine install into Program Files.
+##
+## WebView2: the installer embeds Microsoft's Evergreen *bootstrapper*
+## (MicrosoftEdgeWebview2Setup.exe, downloaded by
+## `wails3 generate webview2bootstrapper`) and runs it only when no WebView2
+## runtime is registered. The bootstrapper downloads the runtime, so that
+## step needs internet access (Windows 11 and current Windows 10 already
+## ship the runtime).
+##
+## Identity defaults (company, product, copyright) live in wails_tools.nsh,
+## generated from build/config.yml by `wails3 task common:update:build-assets`.
+## Defines set before the include below win over those defaults.
 ####
 !include "wails_tools.nsh"
+
+!ifndef DBEDIT_VERSION
+    !define DBEDIT_VERSION "${INFO_PRODUCTVERSION}"
+!endif
 
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
@@ -41,7 +35,7 @@ VIFileVersion    "${INFO_PRODUCTVERSION}.0"
 
 VIAddVersionKey "CompanyName"     "${INFO_COMPANYNAME}"
 VIAddVersionKey "FileDescription" "${INFO_PRODUCTNAME} Installer"
-VIAddVersionKey "ProductVersion"  "${INFO_PRODUCTVERSION}"
+VIAddVersionKey "ProductVersion"  "${DBEDIT_VERSION}"
 VIAddVersionKey "FileVersion"     "${INFO_PRODUCTVERSION}"
 VIAddVersionKey "LegalCopyright"  "${INFO_COPYRIGHT}"
 VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
@@ -71,12 +65,12 @@ ManifestDPIAware true
 #!uninstfinalize 'signtool --file "%1"'
 #!finalize 'signtool --file "%1"'
 
-Name "${INFO_PRODUCTNAME}"
+Name "${INFO_PRODUCTNAME} ${DBEDIT_VERSION}"
 OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
 !if "${WAILS_INSTALL_SCOPE}" == "user"
     InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
 !else
-    InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}"
+    InstallDir "$PROGRAMFILES64\${INFO_PRODUCTNAME}"
 !endif
 ShowInstDetails show # This will always show the installation details.
 
@@ -105,7 +99,10 @@ SectionEnd
 Section "uninstall" 
     !insertmacro wails.setShellContext
 
-    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
+    # Remove the WebView2 cache (%AppData%\dbedit.exe). dbedit's own data
+    # (%AppData%\dbedit: connections, history, settings) is kept, and saved
+    # passwords stay in Windows Credential Manager.
+    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}"
 
     RMDir /r $INSTDIR
 

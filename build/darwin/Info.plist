@@ -1,30 +1,45 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Identity comes from build/config.yml (`wails3 task common:update:build-assets`).
+  The two version keys are placeholders: darwin:create:app:bundle stamps them
+  with the build version (tools/stamp). Keys added by hand for M7, which
+  update:build-assets does not write and must be kept if it is re-run:
+  LSApplicationCategoryType, LSMinimumSystemVersion 12.0 (matches
+  -mmacosx-version-min=12.0 in build/darwin/Taskfile.yml) and the boolean
+  NSHighResolutionCapable.
+-->
 <plist version="1.0">
 	<dict>
+		<key>CFBundleDevelopmentRegion</key>
+		<string>en</string>
+		<key>CFBundleDisplayName</key>
+		<string>dbedit</string>
 		<key>CFBundleExecutable</key>
 		<string>dbedit</string>
 		<key>CFBundleGetInfoString</key>
-		<string>PostgreSQL, MySQL/MariaDB and SQLite client</string>
+		<string>Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite</string>
 		<key>CFBundleIconFile</key>
 		<string>icons</string>
-		<key>CFBundleIconName</key>
-		<string>appicon</string>
 		<key>CFBundleIdentifier</key>
 		<string>dev.dbedit.app</string>
+		<key>CFBundleInfoDictionaryVersion</key>
+		<string>6.0</string>
 		<key>CFBundleName</key>
 		<string>dbedit</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
-		<string>0.0.1</string>
+		<string>0.0.0</string>
 		<key>CFBundleVersion</key>
-		<string>0.0.1</string>
+		<string>0.0.0</string>
+		<key>LSApplicationCategoryType</key>
+		<string>public.app-category.developer-tools</string>
 		<key>LSMinimumSystemVersion</key>
-		<string>12.0.0</string>
+		<string>12.0</string>
 		<key>NSHighResolutionCapable</key>
-		<string>true</string>
+		<true/>
 		<key>NSHumanReadableCopyright</key>
-		<string>(c) 2026, dbedit contributors</string>
+		<string>© 2026 dbedit contributors</string>
 	</dict>
 </plist>

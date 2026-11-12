@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  dbedit application icon (original artwork, © 2026 dbedit contributors).
+
+  A blue rounded tile holding a database cylinder whose body is divided into a
+  3 x 3 grid of cells, with the centre cell highlighted: a table you edit.
+  The tile follows the macOS icon grid (824 px body on a 1024 px canvas).
+
+  Rendered to build/appicon.png and every derived icon by
+  `wails3 task icons:render` (see README "Regenerating the icon"). The
+  renderer (tools/iconrender, oksvg) supports paths, rects, ellipses and
+  linear gradients; keep to those features when editing.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b90f7"/>
+      <stop offset="1" stop-color="#2a56b8"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e9effc"/>
+      <stop offset="0.45" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d7e2f8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Tile -->
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#tile)"/>
+
+  <!-- Soft shadow under the cylinder -->
+  <ellipse cx="512" cy="780" rx="250" ry="58" fill="#163a86" fill-opacity="0.35"/>
+
+  <!-- Cylinder body (sides + rounded bottom) -->
+  <path d="M 282 330 L 282 700 A 230 72 0 0 0 742 700 L 742 330 Z" fill="url(#body)"/>
+
+  <!-- Highlighted (edited) centre cell -->
+  <path d="M 387 513.5 A 230 72 0 0 0 637 513.5 L 637 637.5 A 230 72 0 0 1 387 637.5 Z" fill="#f7b538"/>
+
+  <!-- Grid: two row separators that follow the curve, two column lines -->
+  <g fill="none" stroke="#3466cc" stroke-width="16" stroke-linecap="butt">
+    <path d="M 290 453 A 222 72 0 0 0 734 453"/>
+    <path d="M 290 577 A 222 72 0 0 0 734 577"/>
+    <path d="M 387 380 L 387 752"/>
+    <path d="M 637 380 L 637 752"/>
+  </g>
+
+  <!-- Lid -->
+  <ellipse cx="512" cy="330" rx="230" ry="72" fill="#cfdcf7"/>
+  <ellipse cx="512" cy="330" rx="230" ry="72" fill="none" stroke="#ffffff" stroke-width="12"/>
+</svg>
