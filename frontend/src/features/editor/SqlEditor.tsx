@@ -1,7 +1,7 @@
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
+import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, completionStatus, startCompletion } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
-import { sql } from '@codemirror/lang-sql'
-import { bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/language'
+import { keywordCompletionSource } from '@codemirror/lang-sql'
+import { LanguageSupport, bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/language'
 import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorSelection, EditorState } from '@codemirror/state'
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
@@ -11,16 +11,16 @@ import type { EditorRequest, Range } from '../../stores/queryTabs'
 import {
   editorTheme,
   errorField,
-  lazyColumnsSource,
   runKeymap,
   setErrorMark,
   setStatement,
-  sqlConfig,
+  sqlDialect,
   sqlHighlightStyle,
   statementField,
   type RunHandlers,
 } from './cm'
 import type { CompletionSchema } from './types'
+import { completionSource } from './sqlComplete'
 
 export interface SqlEditorProps {
   value: string
@@ -40,9 +40,15 @@ export interface SqlEditorProps {
   onNeedColumns(table: string): void
 }
 
-function languageExtension(kind: Kind, cs: CompletionSchema | null, getCs: () => CompletionSchema | null, need: (t: string) => void) {
-  const lang = sql(sqlConfig(kind, cs))
-  return [lang, lang.language.data.of({ autocomplete: lazyColumnsSource(getCs, need) })]
+/**
+ * The SQL language of a kind with Lontar's context-aware completion (see
+ * sqlComplete.ts) in place of lang-sql's schema completion; the dialect's
+ * keywords are still offered, ranked below tables and columns.
+ */
+function languageExtension(kind: Kind, getCs: () => CompletionSchema | null, need: (t: string) => void) {
+  const dialect = sqlDialect(kind)
+  const source = completionSource({ kind, schema: getCs, need, keywords: keywordCompletionSource(dialect, true) })
+  return new LanguageSupport(dialect.language, [dialect.language.data.of({ autocomplete: source })])
 }
 
 /** Applies an editor request to a view. */
@@ -99,7 +105,7 @@ export default function SqlEditor(props: SqlEditorProps) {
         highlightSelectionMatches(),
         search({ top: true }),
         keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, ...completionKeymap, indentWithTab]),
-        language.current.of(languageExtension(p.kind, p.completion, getCs, need)),
+        language.current.of(languageExtension(p.kind, getCs, need)),
         statementField,
         errorField,
         editorTheme,
@@ -135,8 +141,15 @@ export default function SqlEditor(props: SqlEditorProps) {
   useEffect(() => {
     const getCs = () => latest.current.completion
     const need = (t: string) => latest.current.onNeedColumns(t)
-    view.current?.dispatch({ effects: language.current.reconfigure(languageExtension(props.kind, props.completion, getCs, need)) })
-  }, [props.kind, props.completion])
+    view.current?.dispatch({ effects: language.current.reconfigure(languageExtension(props.kind, getCs, need)) })
+  }, [props.kind])
+
+  // New completion data (e.g. a table's columns just loaded): refresh an
+  // open completion list so it shows them.
+  useEffect(() => {
+    const v = view.current
+    if (v && completionStatus(v.state) !== null) startCompletion(v)
+  }, [props.completion])
 
   useEffect(() => {
     view.current?.dispatch({ effects: setStatement.of(props.current) })

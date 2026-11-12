@@ -2,14 +2,12 @@
  * CodeMirror 6 building blocks of the SQL editor. Everything here works on
  * EditorState (no DOM), so it is unit-testable in jsdom.
  */
-import type { Completion, CompletionContext, CompletionResult, CompletionSource } from '@codemirror/autocomplete'
 import { HighlightStyle } from '@codemirror/language'
-import { MariaSQL, MySQL, PostgreSQL, SQLite, StandardSQL, type SQLConfig, type SQLDialect, type SQLNamespace } from '@codemirror/lang-sql'
+import { MariaSQL, MySQL, PostgreSQL, SQLite, StandardSQL, type SQLDialect } from '@codemirror/lang-sql'
 import { Prec, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
 import type { Kind } from '../connections/types'
-import type { CompletionSchema } from './types'
 
 /** The lang-sql dialect for a connection kind. */
 export function sqlDialect(kind: Kind): SQLDialect {
@@ -24,57 +22,6 @@ export function sqlDialect(kind: Kind): SQLDialect {
       return SQLite
   }
   return StandardSQL
-}
-
-/**
- * Maps CompletionSchema onto lang-sql's schema namespace: the current
- * schema's tables (with their columns, so "t." and aliases complete
- * columns) nested under the schema name, which is the default schema, so
- * tables complete with or without qualification; other schemas complete
- * as names only.
- */
-export function toSqlNamespace(cs: CompletionSchema | null): SQLNamespace {
-  if (!cs) return {}
-  const tables: Record<string, SQLNamespace> = {}
-  for (const tb of cs.tables) {
-    tables[tb.name] = {
-      self: { label: tb.name, type: tb.type === 'table' ? 'class' : 'interface', detail: tb.type } satisfies Completion,
-      children: (tb.columns ?? []).map((c): Completion => ({ label: c.name, type: 'property', detail: c.type })),
-    }
-  }
-  const ns: Record<string, SQLNamespace> = {}
-  for (const s of cs.schemas) {
-    if (s !== cs.schema) ns[s] = { self: { label: s, type: 'namespace' }, children: [] }
-  }
-  ns[cs.schema] = { self: { label: cs.schema, type: 'namespace' }, children: tables }
-  return ns
-}
-
-/** lang-sql configuration for a kind and completion data. */
-export function sqlConfig(kind: Kind, cs: CompletionSchema | null): SQLConfig {
-  return {
-    dialect: sqlDialect(kind),
-    schema: toSqlNamespace(cs),
-    defaultSchema: cs?.schema,
-    upperCaseKeywords: true,
-  }
-}
-
-/**
- * A completion source that asks for a table's columns when they are not
- * loaded yet (big schemas) and the user types "table." — it never returns
- * completions itself; lang-sql's source shows them once they arrive.
- */
-export function lazyColumnsSource(cs: () => CompletionSchema | null, need: (table: string) => void): CompletionSource {
-  return (ctx: CompletionContext): CompletionResult | null => {
-    const m = ctx.matchBefore(/[\w$]+\.[\w$]*$/)
-    const schema = cs()
-    if (!m || !schema || schema.columnsLoaded) return null
-    const table = m.text.slice(0, m.text.indexOf('.'))
-    const tb = schema.tables.find((x) => x.name === table)
-    if (tb && tb.columns === null) need(table)
-    return null
-  }
 }
 
 export interface Range {

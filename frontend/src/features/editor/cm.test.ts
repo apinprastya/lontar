@@ -1,80 +1,17 @@
-import { CompletionContext, type CompletionResult } from '@codemirror/autocomplete'
-import { MariaSQL, MySQL, PostgreSQL, SQLite, StandardSQL, schemaCompletionSource, sql } from '@codemirror/lang-sql'
+import { MariaSQL, MySQL, PostgreSQL, SQLite, StandardSQL } from '@codemirror/lang-sql'
 import { EditorState } from '@codemirror/state'
 import { EditorView, runScopeHandlers } from '@codemirror/view'
 import { describe, expect, it, vi } from 'vitest'
 import type { Kind } from '../connections/types'
-import { errorField, errorRange, lazyColumnsSource, runKeymap, setErrorMark, setStatement, sqlConfig, sqlDialect, statementField, toSqlNamespace } from './cm'
-import type { CompletionSchema } from './types'
+import { errorField, errorRange, runKeymap, setErrorMark, setStatement, sqlDialect, statementField } from './cm'
 
-const schema: CompletionSchema = {
-  database: 'shop',
-  schema: 'public',
-  schemas: ['public', 'audit'],
-  tables: [
-    { name: 'users', type: 'table', columns: [{ name: 'id', type: 'int4' }, { name: 'email', type: 'text' }] },
-    { name: 'v_users', type: 'view', columns: [{ name: 'email', type: 'text' }] },
-    { name: 'big', type: 'table', columns: null },
-  ],
-  columnsLoaded: true,
-}
-
-async function complete(doc: string, cs: CompletionSchema | null = schema): Promise<CompletionResult | null> {
-  const config = sqlConfig('postgres', cs)
-  const state = EditorState.create({ doc, extensions: [sql(config)] })
-  const ctx = new CompletionContext(state, doc.length, true)
-  return schemaCompletionSource(config)(ctx) as CompletionResult | null
-}
-
-const labels = (r: CompletionResult | null) => (r?.options ?? []).map((o) => o.label)
-
-describe('dialect and schema mapping', () => {
+describe('dialects', () => {
   it('maps kinds to lang-sql dialects', () => {
     expect(sqlDialect('postgres')).toBe(PostgreSQL)
     expect(sqlDialect('mysql')).toBe(MySQL)
     expect(sqlDialect('mariadb')).toBe(MariaSQL)
     expect(sqlDialect('sqlite')).toBe(SQLite)
     expect(sqlDialect('oracle' as Kind)).toBe(StandardSQL)
-  })
-
-  it('maps CompletionSchema onto a namespace', () => {
-    expect(toSqlNamespace(null)).toEqual({})
-    const ns = toSqlNamespace(schema) as Record<string, { self: { label: string; type: string }; children: unknown }>
-    expect(Object.keys(ns)).toEqual(['audit', 'public'])
-    expect(ns.audit.self).toEqual({ label: 'audit', type: 'namespace' })
-    const tables = ns.public.children as Record<string, { self: { label: string; type: string; detail: string }; children: { label: string; detail: string }[] }>
-    expect(tables.users.self).toEqual({ label: 'users', type: 'class', detail: 'table' })
-    expect(tables.v_users.self.type).toBe('interface')
-    expect(tables.users.children).toEqual([
-      { label: 'id', type: 'property', detail: 'int4' },
-      { label: 'email', type: 'property', detail: 'text' },
-    ])
-    expect(tables.big.children).toEqual([])
-    expect(sqlConfig('postgres', schema)).toMatchObject({ defaultSchema: 'public', upperCaseKeywords: true })
-  })
-
-  it('completes tables, qualified columns and aliases', async () => {
-    expect(labels(await complete('SELECT * FROM us'))).toEqual(expect.arrayContaining(['users', 'v_users', 'public', 'audit']))
-    expect(labels(await complete('SELECT users.'))).toEqual(['id', 'email'])
-    expect(labels(await complete('SELECT u. FROM users u'.slice(0, 9)))).toEqual([]) // alias unknown before FROM
-    expect(labels(await complete('SELECT * FROM public.'))).toEqual(expect.arrayContaining(['users', 'big']))
-    const aliased = 'SELECT * FROM users u WHERE u.'
-    expect(labels(await complete(aliased))).toEqual(['id', 'email'])
-  })
-
-  it('asks for missing columns of big schemas only', () => {
-    const need = vi.fn()
-    const big = { ...schema, columnsLoaded: false }
-    const ctx = (doc: string) => new CompletionContext(EditorState.create({ doc }), doc.length, false)
-    const src = lazyColumnsSource(() => big, need)
-    expect(src(ctx('SELECT big.'))).toBeNull()
-    expect(need).toHaveBeenCalledWith('big')
-    src(ctx('SELECT users.'))
-    src(ctx('SELECT x'))
-    expect(need).toHaveBeenCalledTimes(1)
-    lazyColumnsSource(() => schema, need)(ctx('SELECT big.'))
-    lazyColumnsSource(() => null, need)(ctx('SELECT big.'))
-    expect(need).toHaveBeenCalledTimes(1)
   })
 })
 

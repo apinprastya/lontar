@@ -130,7 +130,18 @@ statements you run, so it is marked "(guess)".
 | Mod+Shift+Enter | Run the whole script |
 | Esc | Stop the running query |
 | Mod+F | Search in the editor (in a table tab it opens the filter bar) |
-| Ctrl+Space / typing | Autocomplete tables, `table.column`, `alias.column` and keywords |
+| Ctrl+Space / typing | Autocomplete tables, columns, `alias.column` and keywords (see below) |
+
+Autocomplete follows the statement under the cursor. After `FROM`, `JOIN`,
+`UPDATE`, `INTO` or `TABLE` it lists tables (as soon as you type the space).
+In `SELECT`, `SET`, `WHERE`, `ON`, `ORDER BY`, `GROUP BY` and `HAVING` it lists
+the columns of the tables the statement uses, wherever they appear: for
+`UPDATE users SET … WHERE …` that is `users`' columns. After `alias.` or
+`table.` it lists that table's columns, even when the `FROM` comes later
+(`SELECT u.| FROM users u`). A column name shared by several joined tables is
+offered qualified (`u.id`, `o.id`). Inside `INSERT INTO t (…)` it lists `t`'s
+columns. Names that need quotes are inserted quoted. Tables, columns and keywords
+are ranked in that order. Strings and comments get no suggestions.
 
 Scripts are split client-side the way each engine's CLI does it: quotes,
 comments, PostgreSQL `$$` bodies, the MySQL `DELIMITER` command and SQLite
