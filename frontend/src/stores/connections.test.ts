@@ -163,4 +163,25 @@ describe('SSH host keys on connect', () => {
     await st().trustHostKey(info as never)
     expect(ConnectionService.AcceptHostKey).toHaveBeenLastCalledWith('b', 'SHA256:x')
   })
+
+  it('switches: the old session closes only after the new one connected', async () => {
+    useConnections.setState({ session: makeSession() }) // s1 for c1
+    // The same connection: nothing to do.
+    expect(await st().connect('c1')).toBe(true)
+    expect(ConnectionService.Connect).not.toHaveBeenCalled()
+
+    // A failed switch keeps the current session.
+    ConnectionService.Connect.mockRejectedValueOnce(new Error('no route to host'))
+    expect(await st().connect('c2')).toBe(false)
+    expect(st().session?.id).toBe('s1')
+    expect(ConnectionService.Disconnect).not.toHaveBeenCalled()
+
+    ConnectionService.Connect.mockResolvedValueOnce(makeSession({ id: 's2', connectionId: 'c2' }))
+    ConnectionService.Disconnect.mockRejectedValueOnce(new Error('already closed'))
+    expect(await st().connect('c2')).toBe(true)
+    expect(st().session?.id).toBe('s2')
+    expect(ConnectionService.Disconnect).toHaveBeenCalledWith('s1')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(st().error).toBe('already closed')
+  })
 })

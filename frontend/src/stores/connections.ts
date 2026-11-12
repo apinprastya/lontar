@@ -29,6 +29,10 @@ export interface ConnectionsState {
   duplicate(id: string): Promise<Connection | null>
   /** Returns the server version; throws on failure. */
   test(c: Connection, secrets: Secrets): Promise<string>
+  /**
+   * Opens a session. With a session already open this switches: the old
+   * session is closed once the new one is connected (on failure it stays).
+   */
   connect(id: string): Promise<boolean>
   /** Unknown SSH host key met by connect (shown as a dialog). */
   hostKey: HostKeyPrompt | null
@@ -104,10 +108,18 @@ export const useConnections = create<ConnectionsState>()((set, get) => ({
   },
 
   async connect(id) {
+    const prev = get().session
+    // Already connected to it: nothing to do.
+    if (prev?.connectionId === id) return true
     set({ connectingId: id, error: null })
     try {
       const session = await connectionApi.connect(id)
       set({ session, connectingId: null, hostKey: null })
+      // Switching: the new session is open, so close the one it replaces.
+      // (A failed connect above keeps the current session.)
+      if (prev && prev.id !== session.id) {
+        void connectionApi.disconnect(prev.id).catch((err) => set({ error: errorMessage(err) }))
+      }
       return true
     } catch (err) {
       const info = hostKeyInfo(err)

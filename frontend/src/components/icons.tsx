@@ -87,3 +87,12 @@ export function LinkIcon(p: IconProps) {
     </Svg>
   )
 }
+
+/** Up/down chevrons: a control that opens a list to choose from. */
+export function ChevronIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M5 6l3-3 3 3M5 10l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </Svg>
+  )
+}

@@ -41,6 +41,7 @@ export function importTargetFor(s: WorkspaceState): { schema: string; table: str
 const ACTIONS: Record<string, (ctx: CommandContext) => void> = {
   quickOpen: (ctx) => ctx.openPalette('tables'),
   commandPalette: (ctx) => ctx.openPalette('commands'),
+  switchConnection: (ctx) => ctx.openPalette('connections'),
   settings: () => useSettings.getState().setOpen(true),
   exportData: (ctx) => {
     const src = exportSourceFor(ctx.store.getState())

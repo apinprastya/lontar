@@ -369,7 +369,17 @@ Read-only safe mode does not allow importing, and Confirm mode asks first.
 |---|---|
 | Mod+P | Open a table or view: fuzzy search over the current schema, then the other schemas. Enter opens the data, Mod+Enter the structure. Type `>` for commands. |
 | Mod+Shift+P | Every command with its shortcut (generated from the shortcut list) |
+| Mod+K | Switch connection: search the saved connections, Enter connects |
 | Mod+, | Settings |
+
+### Switching connections
+
+Press Mod+K, or click the connection name at the top of the sidebar, to
+switch to another saved connection without going back to the connection list.
+The new connection opens first. If it fails, you stay where you are and the
+reason is shown. Once it succeeds, the previous session is closed. Staged
+grid edits are committed or discarded first, as when disconnecting. Query tabs
+are saved per connection, so switching back restores them.
 
 ## Settings and themes
 

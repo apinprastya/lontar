@@ -3,7 +3,9 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import { matchesShortcut } from '../../lib/mod'
 import ExportDialog from '../export/ExportDialog'
 import ImportWizard from '../import/ImportWizard'
-import CommandPalette, { type PaletteMode, type PaletteTable } from '../palette/CommandPalette'
+import CommandPalette, { type PaletteConnection, type PaletteMode, type PaletteTable } from '../palette/CommandPalette'
+import HostKeyDialog from '../connections/HostKeyDialog'
+import { KIND_BADGES, connectionSummary } from '../connections/types'
 import { commandAvailable, runCommand } from '../palette/commands'
 import { resultEditView } from '../../stores/queryTabs'
 import { editorApi, type EditorApi } from '../editor/api'
@@ -80,6 +82,14 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
   const session = useConnections((s) => s.session)
   const connection = useConnections((s) => s.connections.find((c) => c.id === s.session?.connectionId))
   const disconnect = useConnections((s) => s.disconnect)
+  const connect = useConnections((s) => s.connect)
+  const connections = useConnections((s) => s.connections)
+  const connectingId = useConnections((s) => s.connectingId)
+  const connError = useConnections((s) => s.error)
+  const clearConnError = useConnections((s) => s.clearError)
+  const hostKey = useConnections((s) => s.hostKey)
+  const acceptHostKey = useConnections((s) => s.acceptHostKey)
+  const dismissHostKey = useConnections((s) => s.dismissHostKey)
   const tab = useActiveTab()
   const showDetail = useWorkspace((s) => s.showDetail)
   const toggleDetail = useWorkspace((s) => s.toggleDetail)
@@ -94,9 +104,15 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
   const [palette, setPalette] = useState<PaletteMode | null>(null)
   const paletteTables = usePaletteTables(store, api, palette === 'tables')
   // Overlays (palette, dialogs) own the keyboard while open.
-  const overlay = Boolean(palette || exportRequest || importRequest || closeConfirm)
+  const overlay = Boolean(palette || exportRequest || importRequest || closeConfirm || hostKey)
   const overlayRef = useRef(overlay)
   overlayRef.current = overlay
+  const openSwitcher = () => {
+    clearConnError()
+    setPalette('connections')
+  }
+  const openSwitcherRef = useRef(openSwitcher)
+  openSwitcherRef.current = openSwitcher
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -108,6 +124,11 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
         setPalette(e.shiftKey ? 'commands' : 'tables')
         return
       }
+      if (matchesShortcut(e, platform, 'k')) {
+        e.preventDefault()
+        openSwitcherRef.current()
+        return
+      }
       if (overlayRef.current) return
       if (handleShortcut(e, platform, store.getState(), isTextTarget(e.target))) e.preventDefault()
     }
@@ -115,10 +136,39 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
     return () => window.removeEventListener('keydown', onKey)
   }, [platform, store])
 
+  /**
+   * Switches to another saved connection. Staged edits are committed or
+   * discarded first; a failed connect keeps this session (and shows why).
+   */
+  const switchTo = (id: string) => {
+    const go = async () => {
+      // Success, or a host key to confirm: the palette makes way. A plain
+      // failure keeps it open with the reason.
+      const ok = await connect(id)
+      setPalette(ok || useConnections.getState().hostKey ? null : 'connections')
+    }
+    const st = store.getState()
+    st.guarded(
+      st.tabs.map((t) => t.id),
+      () => void go(),
+    )
+    // Staged edits: the unsaved-changes prompt takes over from the palette.
+    if (store.getState().guard) setPalette(null)
+  }
+  const paletteConnections: PaletteConnection[] = connections.map((c) => ({
+    id: c.id,
+    name: c.name,
+    badge: KIND_BADGES[c.kind],
+    kind: c.kind,
+    summary: connectionSummary(c),
+    color: connectionColor(c),
+    current: c.id === session?.connectionId,
+  }))
+
   const commandContext = {
     platform,
     store,
-    openPalette: (m: PaletteMode) => setPalette(m),
+    openPalette: (m: PaletteMode) => (m === 'connections' ? openSwitcher() : setPalette(m)),
     disconnect: () => store.getState().guarded(store.getState().tabs.map((t) => t.id), () => void disconnect()),
   }
 
@@ -161,6 +211,8 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
       <Group orientation="horizontal" className="ws-panels">
         <Panel id="sidebar" defaultSize={240} minSize={160} maxSize={480}>
           <Sidebar
+            onSwitchConnection={openSwitcher}
+            switchHint={shortcutLabel(platform, 'K')}
             name={session.name}
             kind={kind}
             color={color}
@@ -179,6 +231,14 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
         <Separator className="resize-handle" />
         <Panel id="main" minSize={300}>
           <div className="ws-main">
+            {connError && palette !== 'connections' && (
+              <div className="banner error ws-banner" role="alert" data-testid="connection-error">
+                <span className="selectable">{connError}</span>
+                <button type="button" className="icon-button" aria-label="Dismiss" onClick={clearConnError}>
+                  ×
+                </button>
+              </div>
+            )}
             <div className="toolbar ws-toolbar">
               <button type="button" onClick={() => void refresh()} title={`Refresh (${shortcutLabel(platform, 'R')})`}>
                 <RefreshIcon /> Refresh
@@ -277,6 +337,7 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
           onClose={() => store.getState().closePreview(tab.id)}
         />
       )}
+      {hostKey && <HostKeyDialog info={hostKey.info} busy={hostKey.busy} onAccept={() => void acceptHostKey()} onCancel={dismissHostKey} />}
       {guard && <UnsavedDialog count={guardCount} busy={guard.busy} onChoose={(c) => void store.getState().resolveGuard(c)} />}
       {palette && (
         <CommandPalette
@@ -287,6 +348,10 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
           disabled={(id) => !commandAvailable(id, store.getState())}
           onModeChange={setPalette}
           onClose={() => setPalette(null)}
+          connections={paletteConnections}
+          connectingId={connectingId}
+          connectError={connError}
+          onConnect={switchTo}
           onOpenTable={(t, view) => {
             setPalette(null)
             store.getState().openTableView(t.schema, t.name, view)

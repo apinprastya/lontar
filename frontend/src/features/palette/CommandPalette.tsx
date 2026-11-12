@@ -4,7 +4,20 @@ import { isModPressed } from '../../lib/mod'
 import { commands, shortcutText, type Shortcut } from '../workspace/keymap'
 import type { TableType } from '../workspace/types'
 
-export type PaletteMode = 'tables' | 'commands'
+export type PaletteMode = 'tables' | 'commands' | 'connections'
+
+/** A saved connection offered by the connection switcher. */
+export interface PaletteConnection {
+  id: string
+  name: string
+  /** Short engine badge ("PG") and its CSS kind. */
+  badge: string
+  kind: string
+  summary: string
+  color: string
+  /** The connection of the open session. */
+  current: boolean
+}
 
 /** A table or view offered by quick open. */
 export interface PaletteTable {
@@ -29,6 +42,25 @@ export interface CommandPaletteProps {
   onClose(): void
   /** The command list (defaults to the keymap registry). */
   list?: Shortcut[]
+  /** Saved connections (connections mode). */
+  connections?: PaletteConnection[]
+  /** Connection being connected to (shown as busy). */
+  connectingId?: string | null
+  /** Why the last switch failed. */
+  connectError?: string | null
+  onConnect?(id: string): void
+}
+
+const PLACEHOLDERS: Record<PaletteMode, string> = {
+  tables: 'Open a table or view… (type > for commands)',
+  commands: 'Run a command…',
+  connections: 'Switch to a connection…',
+}
+const LABELS: Record<PaletteMode, string> = { tables: 'Open table', commands: 'Commands', connections: 'Switch connection' }
+const EMPTY: Record<PaletteMode, string> = {
+  tables: 'No matching table or view.',
+  commands: 'No matching command.',
+  connections: 'No matching connection.',
 }
 
 /** cmdk value of a table item. */
@@ -39,7 +71,8 @@ export function tableValue(t: Pick<PaletteTable, 'schema' | 'name'>): string {
 /**
  * Quick open (Mod+P): fuzzy-find tables and views; Enter opens the data,
  * Mod+Enter the structure. Commands (Mod+Shift+P, or ">" in quick open):
- * every command of the keymap registry with its shortcut.
+ * every command of the keymap registry with its shortcut. Connections
+ * (Mod+K): the saved connections; Enter switches to one.
  */
 export default function CommandPalette({
   mode,
@@ -52,6 +85,10 @@ export default function CommandPalette({
   onModeChange,
   onClose,
   list,
+  connections = [],
+  connectingId = null,
+  connectError = null,
+  onConnect,
 }: CommandPaletteProps) {
   const [search, setSearch] = useState('')
   const [value, setValue] = useState('')
@@ -102,7 +139,7 @@ export default function CommandPalette({
     <div className="dialog-backdrop palette-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <Command
         className="palette"
-        label={mode === 'tables' ? 'Open table' : 'Commands'}
+        label={LABELS[mode]}
         value={value}
         onValueChange={setValue}
         onKeyDown={onKeyDown}
@@ -112,11 +149,39 @@ export default function CommandPalette({
           autoFocus
           value={search}
           onValueChange={changeSearch}
-          placeholder={mode === 'tables' ? 'Open a table or view… (type > for commands)' : 'Run a command…'}
+          placeholder={PLACEHOLDERS[mode]}
         />
+        {mode === 'connections' && connectError && (
+          <div className="palette-error error selectable" role="alert">
+            {connectError}
+          </div>
+        )}
         <Command.List>
-          <Command.Empty>{mode === 'tables' ? 'No matching table or view.' : 'No matching command.'}</Command.Empty>
-          {mode === 'tables' ? (
+          <Command.Empty>{EMPTY[mode]}</Command.Empty>
+          {mode === 'connections' ? (
+            <Command.Group heading="Saved connections">
+              {connections.map((c) => (
+                <Command.Item
+                  key={c.id}
+                  value={`conn:${c.id}`}
+                  keywords={[c.name, c.summary]}
+                  disabled={connectingId !== null}
+                  onSelect={() => (c.current ? onClose() : onConnect?.(c.id))}
+                >
+                  <span className="palette-conn-color" style={c.color ? { background: c.color } : undefined} aria-hidden />
+                  <span className={`kind-badge palette-conn-kind kind-${c.kind}`} aria-hidden>
+                    {c.badge}
+                  </span>
+                  <span className="palette-name">
+                    {c.name}
+                    <span className="palette-meta palette-conn-summary"> {c.summary}</span>
+                  </span>
+                  {c.current && <span className="palette-meta">Connected</span>}
+                  {connectingId === c.id && <span className="palette-meta">Connecting…</span>}
+                </Command.Item>
+              ))}
+            </Command.Group>
+          ) : mode === 'tables' ? (
             <>
               {current.length > 0 && <Command.Group heading="This schema">{current.map(tableItem)}</Command.Group>}
               {other.length > 0 && <Command.Group heading="Other schemas">{other.map(tableItem)}</Command.Group>}
@@ -134,7 +199,9 @@ export default function CommandPalette({
           )}
         </Command.List>
         <div className="palette-footer">
-          {mode === 'tables' ? (
+          {mode === 'connections' ? (
+            <span>Enter: switch · Esc: close</span>
+          ) : mode === 'tables' ? (
             <span>
               Enter: data · {shortcutText({ key: 'enter', mod: true }, platform)}: structure · Esc: close
             </span>

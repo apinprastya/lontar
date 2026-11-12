@@ -24,6 +24,7 @@ export interface Shortcut {
 export const SHORTCUTS: Shortcut[] = [
   { id: 'quickOpen', key: 'p', mod: true, scope: 'global', description: 'Open a table or view…', command: true },
   { id: 'commandPalette', key: 'p', mod: true, shift: true, scope: 'global', description: 'Show all commands' },
+  { id: 'switchConnection', key: 'k', mod: true, scope: 'global', description: 'Switch connection…', command: true },
   { id: 'settings', key: ',', mod: true, scope: 'global', description: 'Settings…', command: true },
   { id: 'newQuery', key: 't', mod: true, scope: 'global', description: 'New SQL query tab', command: true },
   { id: 'closeTab', key: 'w', mod: true, scope: 'global', description: 'Close tab', command: true },
