@@ -17,7 +17,7 @@ vars:
 tasks:
   build:
     summary: Builds the application for Windows
-    # SKIP_BUILD=true reuses an existing bin/dbedit.exe, so the release
+    # SKIP_BUILD=true reuses an existing bin/lontar.exe, so the release
     # workflow can Authenticode-sign the exe before `package` embeds it in
     # the installer (create:nsis:installer depends on build).
     status:
@@ -107,7 +107,7 @@ tasks:
           INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
     vars:
       FORMAT: '{{.FORMAT | default "nsis"}}'
-      # dbedit installs per user by default ($LOCALAPPDATA\Programs\dbedit,
+      # lontar installs per user by default ($LOCALAPPDATA\Programs\lontar,
       # no UAC prompt). Pass INSTALL_SCOPE=machine for Program Files.
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
 
@@ -117,7 +117,9 @@ tasks:
     cmds:
       # info.json holds the identity from config.yml; the version fields are
       # stamped into a temporary copy (git-ignored) by tools/stamp.
-      - go -C "{{.ROOT_DIR}}/tools" run ./stamp wininfo -version "{{.VERSION}}" -num "{{.VERSION_NUM}}" -in "{{.ROOT_DIR}}/build/windows/info.json" -out "{{.ROOT_DIR}}/build/windows/info.stamped.json"
+      # GOOS/GOARCH are cleared so `GOOS=windows wails3 build` (env var) runs
+      # the stamp helper for the host instead of building a Windows exe.
+      - GOOS= GOARCH= go -C "{{.ROOT_DIR}}/tools" run ./stamp wininfo -version "{{.VERSION}}" -num "{{.VERSION_NUM}}" -in "{{.ROOT_DIR}}/build/windows/info.json" -out "{{.ROOT_DIR}}/build/windows/info.stamped.json"
       - wails3 generate syso -arch {{.ARCH}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.stamped.json -out ../wails_windows_{{.ARCH}}.syso
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
@@ -135,9 +137,9 @@ tasks:
       - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
       - |
         {{if eq OS "windows"}}
-        makensis -INPUTCHARSET UTF8 {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DINFO_PRODUCTVERSION={{.VERSION_NUM}} -DDBEDIT_VERSION={{.VERSION}} -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
+        makensis -INPUTCHARSET UTF8 {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DINFO_PRODUCTVERSION={{.VERSION_NUM}} -DLONTAR_VERSION={{.VERSION}} -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
         {{else}}
-        makensis -INPUTCHARSET UTF8 {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DINFO_PRODUCTVERSION={{.VERSION_NUM}} -DDBEDIT_VERSION={{.VERSION}} -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
+        makensis -INPUTCHARSET UTF8 {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DINFO_PRODUCTVERSION={{.VERSION_NUM}} -DLONTAR_VERSION={{.VERSION}} -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
         {{end}}
     vars:
       ARCH: '{{.ARCH | default ARCH}}'

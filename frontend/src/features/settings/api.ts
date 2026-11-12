@@ -1,4 +1,4 @@
-import { SettingsService } from '../../../bindings/dbedit/internal/services'
+import { SettingsService } from '../../../bindings/lontar/internal/services'
 import type { Settings } from './types'
 
 type BindingSettings = Parameters<typeof SettingsService.Save>[0]

@@ -9,7 +9,7 @@ vi.mock('../../lib/events', () => ({
     return () => listeners.delete(name)
   },
 }))
-vi.mock('../../../bindings/dbedit/internal/services', () => import('../../test/mockBindings'))
+vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/mockBindings'))
 
 import { DEFAULT_SETTINGS } from '../settings/types'
 import { useSettings } from '../../stores/settings'

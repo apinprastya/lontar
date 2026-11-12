@@ -6,8 +6,8 @@ import (
 	"net"
 	"testing"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/tlstest"
+	"lontar/internal/driver"
+	"lontar/internal/tlstest"
 )
 
 func TestConfigTLSAndDial(t *testing.T) {

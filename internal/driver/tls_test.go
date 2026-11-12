@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/tlstest"
+	"lontar/internal/tlstest"
 )
 
 // tlsServer serves TLS with the given server certificate on 127.0.0.1 and

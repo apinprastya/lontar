@@ -2,26 +2,34 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 
-	"dbedit/internal/conn"
-	"dbedit/internal/driver/all"
-	"dbedit/internal/history"
-	"dbedit/internal/query"
-	"dbedit/internal/services"
-	"dbedit/internal/settings"
-	"dbedit/internal/sshtunnel"
-	"dbedit/internal/store"
+	"lontar/internal/conn"
+	"lontar/internal/driver/all"
+	"lontar/internal/history"
+	"lontar/internal/migrate"
+	"lontar/internal/query"
+	"lontar/internal/services"
+	"lontar/internal/settings"
+	"lontar/internal/sshtunnel"
+	"lontar/internal/store"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// appName is used for the application name and the main window title. It
-// is also the Linux program name (WM_CLASS / Wayland app_id), which must
-// match StartupWMClass and the name of build/linux/dbedit.desktop.
-const appName = "dbedit"
+// appName is the display name: the application name (menus, About) and the
+// main window title.
+const appName = "Lontar"
+
+// programName is the lowercase identifier: the binary name and the Linux
+// program name (WM_CLASS / Wayland app_id), which must match StartupWMClass
+// and the name of build/linux/lontar.desktop. WebKitGTK also keeps the
+// webview's data (localStorage) under $XDG_DATA_HOME/<programName>.
+const programName = "lontar"
 
 // appIcon is the application icon, rendered from build/appicon.svg. Wails
 // uses it for the macOS/Linux message dialogs; the window/taskbar icons come
@@ -44,8 +52,8 @@ type backend struct {
 	settings    *services.SettingsService
 }
 
-// KnownHostsFile is dbedit's own known_hosts in the config directory (the
-// only known_hosts file dbedit writes).
+// KnownHostsFile is Lontar's own known_hosts in the config directory (the
+// only known_hosts file Lontar writes).
 const KnownHostsFile = "known_hosts"
 
 // userKnownHosts returns ~/.ssh/known_hosts (read only), or nil without a
@@ -58,9 +66,42 @@ func userKnownHosts() []string {
 	return []string{filepath.Join(home, ".ssh", "known_hosts")}
 }
 
+// configDir returns the per-user config directory (<user config
+// dir>/lontar), first moving the directory left by the app's former name,
+// dbedit, there (see migrate.ConfigDir). It must run before any store opens.
+//
+// If moving fails, the legacy directory is complete and still in place, so
+// this run uses it as is rather than starting empty; the next start retries
+// the move. Starting with an empty lontar directory instead would strand the
+// old data, because the move never overwrites an existing directory.
+func configDir(userConfigDir func() (string, error), opts migrate.Options) (string, error) {
+	base, err := userConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("locate config directory: %w", err)
+	}
+	if _, err := migrate.ConfigDir(base, store.LegacyAppDirName, store.AppDirName, opts); err != nil {
+		legacy := filepath.Join(base, store.LegacyAppDirName)
+		if fi, serr := os.Stat(legacy); serr == nil && fi.IsDir() {
+			logf(opts, "migrate: %v; using %s for this run", err, legacy)
+			return legacy, nil
+		}
+		logf(opts, "migrate: %v", err)
+	}
+	return filepath.Join(base, store.AppDirName), nil
+}
+
+// logf logs through opts.Logf, or the standard logger when it is nil.
+func logf(opts migrate.Options, format string, args ...any) {
+	if opts.Logf != nil {
+		opts.Logf(format, args...)
+		return
+	}
+	log.Printf(format, args...)
+}
+
 // newBackend wires the connection store (JSON + OS keychain, with the
 // encrypted-file fallback on Linux), the session manager with its SSH
-// tunnels (host keys checked against ~/.ssh/known_hosts and dbedit's own
+// tunnels (host keys checked against ~/.ssh/known_hosts and Lontar's own
 // known_hosts), the driver registry, the query history (history.db) and the
 // settings (settings.json), keeping everything under configDir. All
 // services share one session manager.
@@ -117,7 +158,7 @@ func appOptions(assets fs.FS, b backend) application.Options {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 		Linux: application.LinuxOptions{
-			ProgramName: appName,
+			ProgramName: programName,
 		},
 	}
 }

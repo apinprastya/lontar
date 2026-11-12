@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // Tag classifies a connection's environment. It drives the colour strip in

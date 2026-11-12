@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"dbedit/internal/conn"
-	"dbedit/internal/driver"
-	"dbedit/internal/history"
-	"dbedit/internal/query"
-	"dbedit/internal/sqlsplit"
-	"dbedit/internal/store"
+	"lontar/internal/conn"
+	"lontar/internal/driver"
+	"lontar/internal/history"
+	"lontar/internal/query"
+	"lontar/internal/sqlsplit"
+	"lontar/internal/store"
 )
 
 // EditorSessions is the subset of *conn.Manager used by EditorService.

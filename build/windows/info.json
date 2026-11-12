@@ -5,10 +5,10 @@
 	"info": {
 		"0409": {
 			"ProductVersion": "0.0.0",
-			"CompanyName": "dbedit contributors",
+			"CompanyName": "Lontar contributors",
 			"FileDescription": "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite",
-			"LegalCopyright": "© 2026 dbedit contributors",
-			"ProductName": "dbedit",
+			"LegalCopyright": "© 2026 Lontar contributors",
+			"ProductName": "Lontar",
 			"Comments": "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite"
 		}
 	}

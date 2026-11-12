@@ -5,7 +5,7 @@
   Sandbox). This is Wails v3's "production" preset (`wails3 setup
   entitlements`): network.client only. No JIT/unsigned-memory exceptions are
   needed because WKWebView runs JavaScript in Apple's own WebContent process,
-  not in dbedit's. Used by build/darwin/sign-notarize.sh.
+  not in Lontar's. Used by build/darwin/sign-notarize.sh.
 -->
 <plist version="1.0">
 	<dict>

@@ -3,10 +3,10 @@ package testutil
 import (
 	"testing"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/mysql"
-	"dbedit/internal/driver/postgres"
-	"dbedit/internal/driver/sqlite"
+	"lontar/internal/driver"
+	"lontar/internal/driver/mysql"
+	"lontar/internal/driver/postgres"
+	"lontar/internal/driver/sqlite"
 )
 
 func TestCheckIntrospectionSQLite(t *testing.T) {
@@ -16,7 +16,7 @@ func TestCheckIntrospectionSQLite(t *testing.T) {
 	CheckIntrospection(t, EngineSQLite, sqlite.New(), db)
 	_ = db.Close()
 	CheckIntrospectionErrors(t, sqlite.New(), db)
-	for e, want := range map[string]string{EnginePostgres: "public", EngineMySQL: "dbedit", EngineMariaDB: "dbedit", EngineSQLite: "main"} {
+	for e, want := range map[string]string{EnginePostgres: "public", EngineMySQL: "lontar", EngineMariaDB: "lontar", EngineSQLite: "main"} {
 		if got := SeedSchema(e); got != want {
 			t.Errorf("SeedSchema(%s) = %q", e, got)
 		}

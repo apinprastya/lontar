@@ -1,4 +1,4 @@
-// Package driver defines the database driver abstraction used by dbedit and a
+// Package driver defines the database driver abstraction used by Lontar and a
 // registry of the available implementations.
 //
 // Each supported engine lives in its own subpackage (postgres, mysql, sqlite)

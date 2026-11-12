@@ -1,5 +1,5 @@
 #!/bin/sh
-# Refresh the desktop-entry and icon caches after dbedit is removed.
+# Refresh the desktop-entry and icon caches after Lontar is removed.
 # Every step is optional and never fails the removal.
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database -q /usr/share/applications || true

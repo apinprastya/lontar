@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/sshtest"
+	"lontar/internal/sshtest"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"

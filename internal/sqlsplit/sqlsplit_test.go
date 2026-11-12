@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 func texts(stmts []Statement) []string {

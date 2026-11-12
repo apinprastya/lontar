@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 
 	gomysql "github.com/go-sql-driver/mysql"
 )
 
 // DriverConfig converts a test database into a driver.Config and password,
-// so tests can open it through dbedit's own drivers (with their DSN
+// so tests can open it through Lontar's own drivers (with their DSN
 // settings, e.g. MySQL clientFoundRows and read-only sessions).
 func DriverConfig(t testing.TB, kind driver.Kind, db DB) (driver.Config, string) {
 	t.Helper()

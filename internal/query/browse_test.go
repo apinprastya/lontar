@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 var testCols = []driver.Column{

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 func ptr(s string) *string { return &s }
@@ -34,7 +34,7 @@ func TestDefaultDir(t *testing.T) {
 
 	userConfigDir = func() (string, error) { return "/cfg", nil }
 	d, err := DefaultDir()
-	if err != nil || d != filepath.Join("/cfg", "dbedit") {
+	if err != nil || d != filepath.Join("/cfg", "lontar") {
 		t.Fatalf("DefaultDir() = %q, %v", d, err)
 	}
 	userConfigDir = func() (string, error) { return "", errors.New("no HOME") }

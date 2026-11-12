@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/conn"
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/all"
-	"dbedit/internal/query"
-	"dbedit/internal/store"
+	"lontar/internal/conn"
+	"lontar/internal/driver"
+	"lontar/internal/driver/all"
+	"lontar/internal/query"
+	"lontar/internal/store"
 )
 
 // openSQLiteSession saves an SQLite connection, seeds it and connects.

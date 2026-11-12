@@ -1,7 +1,7 @@
 version: '3'
 
 vars:
-  APP_NAME: "dbedit"
+  APP_NAME: "lontar"
   BIN_DIR: "bin"
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
@@ -10,7 +10,7 @@ vars:
   # tasks below dispatch to the matching platform Taskfile via this variable.
   GOOS: '{{.GOOS | default OS}}'
   # Version stamped into every build and package (Go ldflags, Info.plist,
-  # Windows VERSIONINFO, NSIS, nfpm). DBEDIT_VERSION (e.g. the release tag)
+  # Windows VERSIONINFO, NSIS, nfpm). LONTAR_VERSION (e.g. the release tag)
   # wins; otherwise `git describe --tags --always --dirty` is used: a tag
   # such as v1.2.3 or v1.2.3-4-gabc1234 gives 1.2.3[-4-gabc1234], a bare
   # commit gives 0.0.0-dev+<hash>, and no git at all gives 0.0.0-dev. A
@@ -19,7 +19,7 @@ vars:
   # Windows. Print it with `wails3 task version`.
   VERSION:
     sh: |
-      v="${DBEDIT_VERSION:-}"
+      v="${LONTAR_VERSION:-}"
       if [ -z "$v" ]; then v=$(git describe --tags --always --dirty 2>/dev/null) || v=""; fi
       v="${v#v}"
       case "$v" in
@@ -41,7 +41,7 @@ vars:
         *) echo "$n" ;;
       esac
   # Linker flag that sets AppService.Version (internal/services/app.go).
-  VERSION_LDFLAGS: '-X dbedit/internal/services.Version={{.VERSION}}'
+  VERSION_LDFLAGS: '-X lontar/internal/services.Version={{.VERSION}}'
 
 includes:
   common: ./build/Taskfile.yml
@@ -85,7 +85,7 @@ tasks:
       - task: linux:package
 
   package:windows:
-    summary: Builds the per-user NSIS installer (bin/dbedit-amd64-installer.exe; needs makensis)
+    summary: Builds the per-user NSIS installer (bin/lontar-amd64-installer.exe; needs makensis)
     cmds:
       - task: windows:package
         vars:
@@ -93,7 +93,7 @@ tasks:
           INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
 
   package:darwin:
-    summary: Builds a universal (amd64 + arm64) bin/dbedit.app and bin/dbedit.dmg (macOS host)
+    summary: Builds a universal (amd64 + arm64) bin/lontar.app and bin/lontar.dmg (macOS host)
     cmds:
       - task: darwin:package:universal
       - task: darwin:create:dmg
@@ -215,7 +215,7 @@ tasks:
     cmds:
       # main() only wires up the webview and is not unit-testable; everything it
       # calls (app.go, internal/...) is covered.
-      - grep -v '^dbedit/main.go:' coverage.out > coverage.filtered.out
+      - grep -v '^lontar/main.go:' coverage.out > coverage.filtered.out
       - go tool cover -func=coverage.filtered.out
       - |
         total=$(go tool cover -func=coverage.filtered.out | awk '/^total:/ {sub("%", "", $3); print $3}')

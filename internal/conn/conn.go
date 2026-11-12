@@ -14,14 +14,14 @@ import (
 	"sync"
 	"time"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/sshtunnel"
-	"dbedit/internal/store"
+	"lontar/internal/driver"
+	"lontar/internal/sshtunnel"
+	"lontar/internal/store"
 
 	"github.com/google/uuid"
 )
 
-// Pool limits applied to every session. dbedit is an interactive client:
+// Pool limits applied to every session. Lontar is an interactive client:
 // a few connections are enough for browsing plus a running query, and idle
 // connections are released so servers are not held open needlessly.
 const (

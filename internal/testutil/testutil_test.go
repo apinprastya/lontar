@@ -293,7 +293,7 @@ func TestSeedBrowseFailure(t *testing.T) {
 }
 
 func TestAsRoot(t *testing.T) {
-	got, err := AsRoot(DB{Driver: DriverMySQL, DSN: "dbedit:pw@tcp(localhost:3306)/dbedit?parseTime=true"})
+	got, err := AsRoot(DB{Driver: DriverMySQL, DSN: "lontar:pw@tcp(localhost:3306)/lontar?parseTime=true"})
 	if err != nil || !strings.HasPrefix(got.DSN, "root:pw@tcp(localhost:3306)/?") {
 		t.Fatalf("AsRoot = %+v, %v", got, err)
 	}

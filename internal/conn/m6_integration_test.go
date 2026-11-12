@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/all"
-	"dbedit/internal/sshtest"
-	"dbedit/internal/sshtunnel"
-	"dbedit/internal/store"
-	"dbedit/internal/testutil"
-	"dbedit/internal/tlstest"
+	"lontar/internal/driver"
+	"lontar/internal/driver/all"
+	"lontar/internal/sshtest"
+	"lontar/internal/sshtunnel"
+	"lontar/internal/store"
+	"lontar/internal/testutil"
+	"lontar/internal/tlstest"
 
 	"github.com/testcontainers/testcontainers-go"
 	tcmysql "github.com/testcontainers/testcontainers-go/modules/mysql"
@@ -152,7 +152,7 @@ func pgTLS(t *testing.T, f tlstest.Files) (host string, port int) {
 	ctx := context.Background()
 	script := `cp /tls-in/* /var/lib/postgresql/ && chown postgres:postgres /var/lib/postgresql/*.pem && chmod 600 /var/lib/postgresql/server-key.pem && exec docker-entrypoint.sh "$@"`
 	c, err := tcpostgres.Run(ctx, testutil.Images[testutil.Postgres],
-		tcpostgres.WithDatabase("dbedit"), tcpostgres.WithUsername("dbedit"), tcpostgres.WithPassword("dbedit"),
+		tcpostgres.WithDatabase("lontar"), tcpostgres.WithUsername("lontar"), tcpostgres.WithPassword("lontar"),
 		testcontainers.WithFiles(
 			testcontainers.ContainerFile{HostFilePath: f.CA, ContainerFilePath: "/tls-in/ca.pem", FileMode: 0o644},
 			testcontainers.ContainerFile{HostFilePath: f.ServerCert, ContainerFilePath: "/tls-in/server-cert.pem", FileMode: 0o644},
@@ -184,7 +184,7 @@ func mysqlTLS(t *testing.T, f tlstest.Files) (host string, port int) {
 	testutil.SharedMySQL(t) // skips without Docker
 	ctx := context.Background()
 	c, err := tcmysql.Run(ctx, testutil.Images[testutil.MySQL],
-		tcmysql.WithDatabase("dbedit"), tcmysql.WithUsername("dbedit"), tcmysql.WithPassword("dbedit"),
+		tcmysql.WithDatabase("lontar"), tcmysql.WithUsername("lontar"), tcmysql.WithPassword("lontar"),
 		testcontainers.WithFiles(
 			testcontainers.ContainerFile{HostFilePath: f.CA, ContainerFilePath: "/tls/ca.pem", FileMode: 0o644},
 			testcontainers.ContainerFile{HostFilePath: f.ServerCert, ContainerFilePath: "/tls/server-cert.pem", FileMode: 0o644},
@@ -206,9 +206,9 @@ func mysqlTLS(t *testing.T, f tlstest.Files) (host string, port int) {
 }
 
 func TestTLS(t *testing.T) {
-	ca, _ := tlstest.NewCA("dbedit test CA")
+	ca, _ := tlstest.NewCA("lontar test CA")
 	dir := t.TempDir()
-	files, err := ca.WriteFiles(dir, "dbedit", "localhost") // DNS name only
+	files, err := ca.WriteFiles(dir, "lontar", "localhost") // DNS name only
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,17 +243,17 @@ func TestTLS(t *testing.T) {
 	for _, e := range engines {
 		t.Run(string(e.kind), func(t *testing.T) {
 			host, port := e.start(t, files)
-			base := store.Connection{ID: "tls", Name: "tls", Kind: e.kind, Host: host, Port: port, User: "dbedit", Database: "dbedit"}
+			base := store.Connection{ID: "tls", Name: "tls", Kind: e.kind, Host: host, Port: port, User: "lontar", Database: "lontar"}
 			src := newFakeSource()
 			m := NewManager(src, all.Registry())
 			m.PingTimeout = 60 * time.Second
-			sec := Secrets{Password: "dbedit"}
+			sec := Secrets{Password: "lontar"}
 			ctx := context.Background()
 
 			connect := func(t *testing.T, c store.Connection) (*Session, error) {
 				t.Helper()
 				src.mu.Lock()
-				src.conns[c.ID], src.passwords[c.ID] = c, "dbedit"
+				src.conns[c.ID], src.passwords[c.ID] = c, "lontar"
 				src.mu.Unlock()
 				// The server may still be starting up (MySQL restarts once
 				// during initialisation).
@@ -315,7 +315,7 @@ func TestTLS(t *testing.T) {
 				src2 := newFakeSource()
 				m2, srv := bastion(t, src2)
 				c := withSSH(with(store.SSLVerifyFull, files.CA, "localhost"), srv)
-				if _, err := m2.Test(ctx, c, Secrets{Password: "dbedit", SSHPassword: "sshpw"}); err != nil {
+				if _, err := m2.Test(ctx, c, Secrets{Password: "lontar", SSHPassword: "sshpw"}); err != nil {
 					t.Fatal(err)
 				}
 				if srv.Forwards() == 0 {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 
-	"dbedit/internal/conn"
-	"dbedit/internal/driver"
+	"lontar/internal/conn"
+	"lontar/internal/driver"
 )
 
 // Sessions is the subset of *conn.Manager used by SchemaService and

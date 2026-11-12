@@ -36,7 +36,7 @@ env:
   WAILS_VERSION: v3.0.0
   NODE_VERSION: "24"
   # Read by the root Taskfile (VERSION); empty means `git describe`.
-  DBEDIT_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+  LONTAR_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
 
 jobs:
   linux:
@@ -90,9 +90,9 @@ jobs:
           V: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p dist
-          cp bin/dbedit-x86_64.AppImage "dist/dbedit-$V-linux-x86_64.AppImage"
-          cp bin/dbedit.deb "dist/dbedit-$V-linux-amd64.deb"
-          cp bin/dbedit.rpm "dist/dbedit-$V-linux-x86_64.rpm"
+          cp bin/lontar-x86_64.AppImage "dist/lontar-$V-linux-x86_64.AppImage"
+          cp bin/lontar.deb "dist/lontar-$V-linux-amd64.deb"
+          cp bin/lontar.rpm "dist/lontar-$V-linux-x86_64.rpm"
           dpkg-deb -I dist/*.deb
           ls -l dist
 
@@ -149,16 +149,16 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "Version: $v"
 
-      - name: Build dbedit.exe
+      - name: Build lontar.exe
         run: wails3 task windows:build
 
-      - name: Sign dbedit.exe
+      - name: Sign lontar.exe
         if: env.HAVE_WINDOWS_SIGNING == 'true'
         shell: pwsh
         env:
           WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-        run: ./build/windows/sign.ps1 bin/dbedit.exe
+        run: ./build/windows/sign.ps1 bin/lontar.exe
 
       - name: Build NSIS installer (per-user, WebView2 bootstrapper)
         # SKIP_BUILD keeps the (signed) exe from the previous steps.
@@ -170,7 +170,7 @@ jobs:
         env:
           WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-        run: ./build/windows/sign.ps1 bin/dbedit-amd64-installer.exe
+        run: ./build/windows/sign.ps1 bin/lontar-amd64-installer.exe
 
       - name: Collect artifacts
         shell: pwsh
@@ -178,8 +178,8 @@ jobs:
           V: ${{ steps.version.outputs.version }}
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item bin/dbedit-amd64-installer.exe "dist/dbedit-$env:V-windows-amd64-setup.exe"
-          Compress-Archive -Path bin/dbedit.exe -DestinationPath "dist/dbedit-$env:V-windows-amd64-portable.zip"
+          Copy-Item bin/lontar-amd64-installer.exe "dist/lontar-$env:V-windows-amd64-setup.exe"
+          Compress-Archive -Path bin/lontar.exe -DestinationPath "dist/lontar-$env:V-windows-amd64-portable.zip"
           Get-ChildItem dist
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -224,18 +224,18 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "Version: $v"
 
-      - name: Build universal dbedit.app (amd64 + arm64)
+      - name: Build universal lontar.app (amd64 + arm64)
         run: |
           wails3 task darwin:package:universal
-          lipo -archs bin/dbedit.app/Contents/MacOS/dbedit
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' bin/dbedit.app/Contents/Info.plist
+          lipo -archs bin/lontar.app/Contents/MacOS/lontar
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' bin/lontar.app/Contents/Info.plist
 
-      - name: Sign dbedit.app (Developer ID, hardened runtime)
+      - name: Sign lontar.app (Developer ID, hardened runtime)
         if: env.HAVE_MACOS_SIGNING == 'true'
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-        run: build/darwin/sign-notarize.sh app bin/dbedit.app
+        run: build/darwin/sign-notarize.sh app bin/lontar.app
 
       - name: Build .dmg
         run: wails3 task darwin:create:dmg
@@ -246,7 +246,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: build/darwin/sign-notarize.sh dmg bin/dbedit.dmg
+        run: build/darwin/sign-notarize.sh dmg bin/lontar.dmg
 
       - name: Remove signing keychain
         if: always() && env.HAVE_MACOS_SIGNING == 'true'
@@ -257,7 +257,7 @@ jobs:
           V: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p dist
-          cp bin/dbedit.dmg "dist/dbedit-$V-macos-universal.dmg"
+          cp bin/lontar.dmg "dist/lontar-$V-macos-universal.dmg"
           ls -l dist
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -294,6 +294,6 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME}"
           if [ "${GITHUB_REF_TYPE}" != "tag" ]; then tag="v$V"; fi
-          flags=(--draft --title "dbedit $V" --generate-notes --target "$GITHUB_SHA")
+          flags=(--draft --title "Lontar $V" --generate-notes --target "$GITHUB_SHA")
           case "$V" in *-*) flags+=(--prerelease) ;; esac
           gh release create "$tag" "${flags[@]}" dist/*

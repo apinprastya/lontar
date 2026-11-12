@@ -191,7 +191,7 @@ export interface Draft {
 }
 
 export function draftKey(connectionId: string): string {
-  return `dbedit.queryDrafts.${connectionId}`
+  return `lontar.queryDrafts.${connectionId}`
 }
 
 /** Saved query tabs of a connection ([] when none or storage fails). */

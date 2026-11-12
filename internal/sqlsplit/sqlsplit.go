@@ -22,7 +22,7 @@ package sqlsplit
 import (
 	"strings"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // Statement is one statement of a script.

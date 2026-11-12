@@ -11,5 +11,5 @@ coverage.filtered.out
 dist
 *.syso
 build/windows/info.stamped.json
-build/linux/appimage/dbedit
-build/linux/appimage/dbedit.png
+build/linux/appimage/lontar
+build/linux/appimage/lontar.png

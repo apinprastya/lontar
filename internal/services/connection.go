@@ -5,10 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"dbedit/internal/conn"
-	"dbedit/internal/driver"
-	"dbedit/internal/sshtunnel"
-	"dbedit/internal/store"
+	"lontar/internal/conn"
+	"lontar/internal/driver"
+	"lontar/internal/sshtunnel"
+	"lontar/internal/store"
 )
 
 // ConnectionStore is the subset of *store.Store used by ConnectionService.
@@ -158,7 +158,7 @@ func hostKeyError(err error) error {
 
 // AcceptHostKey trusts the SSH host key with the given SHA256 fingerprint
 // that host presented in the last refused attempt (see
-// sshtunnel.HostKeyUnknownError). It is appended to dbedit's own
+// sshtunnel.HostKeyUnknownError). It is appended to Lontar's own
 // known_hosts file; the user's ~/.ssh/known_hosts is never written. A
 // changed key cannot be accepted here.
 func (s *ConnectionService) AcceptHostKey(host, fingerprint string) error {

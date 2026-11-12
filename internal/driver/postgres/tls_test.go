@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 func TestBuildDSNTLS(t *testing.T) {

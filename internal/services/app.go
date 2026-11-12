@@ -10,8 +10,8 @@ import "runtime"
 const DevVersion = "0.0.0-dev"
 
 // Version is the application version. Every Taskfile build and package
-// stamps it with -ldflags "-X dbedit/internal/services.Version=<VERSION>",
-// where VERSION comes from `git describe` or DBEDIT_VERSION (see the root
+// stamps it with -ldflags "-X lontar/internal/services.Version=<VERSION>",
+// where VERSION comes from `git describe` or LONTAR_VERSION (see the root
 // Taskfile.yml).
 var Version = DevVersion
 

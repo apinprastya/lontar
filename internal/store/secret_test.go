@@ -151,7 +151,7 @@ func TestFallbackSecretStore(t *testing.T) {
 }
 
 func TestFileSecretStoreRoundTrip(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "dbedit")
+	dir := filepath.Join(t.TempDir(), "lontar")
 	s := NewFileSecretStore(dir)
 
 	if _, err := s.Get("x"); !errors.Is(err, ErrSecretNotFound) {
@@ -317,5 +317,18 @@ func TestFileSecretStoreKeyWriteFailure(t *testing.T) {
 	s := NewFileSecretStore(filepath.Join(blocker, "sub"))
 	if err := s.Set("k", "v"); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestKeyringSecretStoreService(t *testing.T) {
+	keyring.MockInit()
+	if err := (KeyringSecretStore{Service: "other"}).Set("id", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (KeyringSecretStore{}).Get("id"); !errors.Is(err, ErrSecretNotFound) {
+		t.Fatalf("zero value must use KeyringService, err = %v", err)
+	}
+	if v, err := keyring.Get("other", "id"); err != nil || v != "x" {
+		t.Fatalf("Get = %q, %v", v, err)
 	}
 }

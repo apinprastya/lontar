@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // Names of the objects created by SeedStructure (in StructSchema).

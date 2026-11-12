@@ -17,7 +17,7 @@ import (
 
 // HostKeyUnknownError is returned when the SSH server's host key is in no
 // known_hosts file. The UI shows the fingerprint and, if the user accepts
-// it, calls HostKeys.Accept (which appends the key to dbedit's own
+// it, calls HostKeys.Accept (which appends the key to Lontar's own
 // known_hosts) and retries.
 type HostKeyUnknownError struct {
 	// Kind is always "hostKeyUnknown" (for the frontend).
@@ -58,13 +58,13 @@ func (e *HostKeyChangedError) Error() string { return e.Message }
 var ErrNoPendingKey = errors.New("no host key with this fingerprint is waiting to be accepted; connect again first")
 
 // HostKeys verifies SSH host keys against the user's known_hosts files
-// (read-only) plus dbedit's own known_hosts file, which is the only file
+// (read-only) plus Lontar's own known_hosts file, which is the only file
 // it ever writes.
 type HostKeys struct {
 	// UserFiles are read but never written (e.g. ~/.ssh/known_hosts).
 	// Missing files are skipped.
 	UserFiles []string
-	// AppFile is dbedit's own known_hosts (<config dir>/known_hosts).
+	// AppFile is Lontar's own known_hosts (<config dir>/known_hosts).
 	AppFile string
 
 	mu      sync.Mutex
@@ -140,7 +140,7 @@ func (h *HostKeys) Callback(address string) (ssh.HostKeyCallback, []string, erro
 			return &HostKeyChangedError{
 				Kind: "hostKeyChanged", Host: host, Address: hostname, KeyType: key.Type(), FingerprintSHA256: fp, Known: known,
 				Message: fmt.Sprintf("WARNING: the SSH host key of %s has CHANGED (now %s %s). Someone could be intercepting the connection "+
-					"(man-in-the-middle), or the server's key was replaced. dbedit will not connect. If the change is expected, "+
+					"(man-in-the-middle), or the server's key was replaced. Lontar will not connect. If the change is expected, "+
 					"remove the old entry (%s) from the known_hosts file by hand and connect again.",
 					host, key.Type(), fp, strings.Join(known, ", ")),
 			}

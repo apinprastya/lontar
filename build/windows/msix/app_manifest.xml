@@ -8,14 +8,14 @@
   IgnorableNamespaces="uap3">
   
   <Identity 
-    Name="dev.dbedit.app"
-    Publisher="CN=dbedit contributors"
+    Name="dev.lontar.app"
+    Publisher="CN=Lontar contributors"
     Version="0.0.0.0" 
     ProcessorArchitecture="x64" />
   
   <Properties>
-    <DisplayName>dbedit</DisplayName>
-    <PublisherDisplayName>dbedit contributors</PublisherDisplayName>
+    <DisplayName>Lontar</DisplayName>
+    <PublisherDisplayName>Lontar contributors</PublisherDisplayName>
     <Description>Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite</Description>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -29,9 +29,9 @@
   </Resources>
   
   <Applications>
-    <Application Id="dbedit" Executable="dbedit.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="lontar" Executable="lontar.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="dbedit"
+        DisplayName="Lontar"
         Description="Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
@@ -41,7 +41,7 @@
       </uap:VisualElements>
       
       <Extensions>
-        <desktop:Extension Category="windows.fullTrustProcess" Executable="dbedit.exe" />
+        <desktop:Extension Category="windows.fullTrustProcess" Executable="lontar.exe" />
         
         
       </Extensions>

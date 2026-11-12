@@ -1,4 +1,4 @@
-import { ConnectionService } from '../../../bindings/dbedit/internal/services'
+import { ConnectionService } from '../../../bindings/lontar/internal/services'
 import type { Connection, DriverInfo, Secrets, SessionInfo } from './types'
 
 // The generated bindings type kind/tag as TS enums; the JSON is identical,

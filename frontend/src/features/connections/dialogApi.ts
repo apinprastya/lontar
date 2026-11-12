@@ -1,4 +1,4 @@
-import { DialogService } from '../../../bindings/dbedit/internal/services'
+import { DialogService } from '../../../bindings/lontar/internal/services'
 
 export interface FileFilter {
   displayName: string

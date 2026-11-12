@@ -19,14 +19,14 @@ import * as history$0 from "../history/models.js";
  * removed.
  */
 export function Clear(connectionID: string): $CancellablePromise<number> {
-    return $Call.ByID(2086287080, connectionID);
+    return $Call.ByID(3757235798, connectionID);
 }
 
 /**
  * Delete removes one entry.
  */
 export function Delete(id: number): $CancellablePromise<void> {
-    return $Call.ByID(1498380388, id);
+    return $Call.ByID(2083545462, id);
 }
 
 /**
@@ -34,5 +34,5 @@ export function Delete(id: number): $CancellablePromise<void> {
  * by a substring of the SQL.
  */
 export function List(connectionID: string, search: string, limit: number, offset: number): $CancellablePromise<history$0.Entry[] | null> {
-    return $Call.ByID(2853253151, connectionID, search, limit, offset);
+    return $Call.ByID(1192790797, connectionID, search, limit, offset);
 }

@@ -32,7 +32,7 @@ export interface ConnectionsState {
   connect(id: string): Promise<boolean>
   /** Unknown SSH host key met by connect (shown as a dialog). */
   hostKey: HostKeyPrompt | null
-  /** Trusts the prompted key (dbedit's own known_hosts) and connects again. */
+  /** Trusts the prompted key (Lontar's own known_hosts) and connects again. */
   acceptHostKey(): Promise<boolean>
   dismissHostKey(): void
   /** Trusts a host key without connecting (the form's Test). */

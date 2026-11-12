@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/all"
-	"dbedit/internal/driver/sqlite"
-	"dbedit/internal/store"
-	"dbedit/internal/testutil"
+	"lontar/internal/driver"
+	"lontar/internal/driver/all"
+	"lontar/internal/driver/sqlite"
+	"lontar/internal/store"
+	"lontar/internal/testutil"
 )
 
 func TestMain(m *testing.M) { os.Exit(testutil.Main(m)) }

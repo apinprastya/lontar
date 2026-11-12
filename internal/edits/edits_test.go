@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/values"
+	"lontar/internal/driver"
+	"lontar/internal/values"
 )
 
 func col(name, typ string, ord, pkPos int) driver.Column {

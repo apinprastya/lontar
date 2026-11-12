@@ -1,6 +1,6 @@
 // Package store persists saved connections and their secrets.
 //
-// Connections live in <config dir>/dbedit/connections.json (see DefaultDir),
+// Connections live in <config dir>/lontar/connections.json (see DefaultDir),
 // written atomically with 0600 permissions inside a 0700 directory. The file
 // carries a schema version so later milestones (SSH/SSL, ...) can migrate it.
 //
@@ -25,7 +25,11 @@ import (
 )
 
 // AppDirName is the directory created inside os.UserConfigDir().
-const AppDirName = "dbedit"
+const AppDirName = "lontar"
+
+// LegacyAppDirName is the config directory of the app's former name. It is
+// moved to AppDirName once at startup (see internal/migrate).
+const LegacyAppDirName = "dbedit"
 
 // ConnectionsFile is the file name of the connection list.
 const ConnectionsFile = "connections.json"
@@ -36,22 +40,22 @@ const ConnectionsFile = "connections.json"
 //	2: M4 adds "safeMode" ("off" | "confirm" | "readonly")
 //	3: M6 makes SSH/SSL live and adds "hasSshPassword"/"hasSshPassphrase";
 //	   the SSL mode "prefer" becomes "preferred" (MySQL/MariaDB) or
-//	   "require" (PostgreSQL, which has no preferred mode in dbedit)
+//	   "require" (PostgreSQL, which has no preferred mode in Lontar)
 const CurrentVersion = 3
 
 // ErrNotFound is returned for unknown connection IDs.
 var ErrNotFound = errors.New("connection not found")
 
 // ErrNewerVersion is returned when connections.json was written by a newer
-// dbedit. The file is left untouched.
-var ErrNewerVersion = errors.New("connections file was created by a newer version of dbedit")
+// lontar. The file is left untouched.
+var ErrNewerVersion = errors.New("connections file was created by a newer version of Lontar")
 
 // userConfigDir is replaced in tests.
 var userConfigDir = os.UserConfigDir
 
-// DefaultDir returns the per-user config directory for dbedit:
-// ~/.config/dbedit on Linux, %AppData%\dbedit on Windows and
-// ~/Library/Application Support/dbedit on macOS.
+// DefaultDir returns the per-user config directory for Lontar:
+// ~/.config/lontar on Linux, %AppData%\lontar on Windows and
+// ~/Library/Application Support/lontar on macOS.
 func DefaultDir() (string, error) {
 	base, err := userConfigDir()
 	if err != nil {
@@ -115,7 +119,7 @@ func (s *Store) load() (*file, error) {
 }
 
 // migrate upgrades an older file in memory; the next write stores it with
-// CurrentVersion. Older dbedit versions then refuse the file
+// CurrentVersion. Older Lontar versions then refuse the file
 // (ErrNewerVersion) instead of silently dropping the new fields.
 func migrate(f *file) {
 	if f.Version < 2 {

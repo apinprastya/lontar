@@ -25,7 +25,11 @@ const (
 	secretsKeyLen  = 32 // AES-256
 )
 
-// secretsAAD binds the ciphertext to its purpose and format version.
+// secretsAAD binds the ciphertext to its purpose and format version. It is
+// part of the on-disk format, not a display name: it still carries the app's
+// former name (dbedit), because files written before the rename move with the
+// config directory and must keep decrypting. Change it only together with
+// secretsVersion.
 var secretsAAD = []byte("dbedit-secrets-v1")
 
 // randReader is replaced in tests.

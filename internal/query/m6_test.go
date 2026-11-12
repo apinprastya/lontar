@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 func TestBuildSelectAllAndReturnsRows(t *testing.T) {

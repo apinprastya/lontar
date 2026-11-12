@@ -2,10 +2,10 @@
 package all
 
 import (
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/mysql"
-	"dbedit/internal/driver/postgres"
-	"dbedit/internal/driver/sqlite"
+	"lontar/internal/driver"
+	"lontar/internal/driver/mysql"
+	"lontar/internal/driver/postgres"
+	"lontar/internal/driver/sqlite"
 )
 
 // Registry returns a new registry with the PostgreSQL, MySQL, MariaDB and

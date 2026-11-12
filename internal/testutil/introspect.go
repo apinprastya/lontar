@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // SeedSchema is the schema holding the SeedBrowse fixture for engine when

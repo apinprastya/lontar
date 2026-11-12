@@ -2,7 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../../bindings/dbedit/internal/services', () => import('../../test/mockBindings'))
+vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/mockBindings'))
 
 import { SettingsService, resetBindings } from '../../test/mockBindings'
 import { useSettings } from '../../stores/settings'

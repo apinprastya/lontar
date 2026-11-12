@@ -3,8 +3,8 @@ package query
 import (
 	"strings"
 
-	dbdriver "dbedit/internal/driver"
-	"dbedit/internal/sqlsplit"
+	dbdriver "lontar/internal/driver"
+	"lontar/internal/sqlsplit"
 )
 
 // readKeywords start statements that never change data or schema: queries,

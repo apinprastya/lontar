@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -35,7 +35,7 @@ func cancelHandler(c *pgconn.PgConn) ctxwatch.Handler {
 const DefaultPort = 5432
 
 // ApplicationName is reported to the server (visible in pg_stat_activity).
-const ApplicationName = "dbedit"
+const ApplicationName = "lontar"
 
 // ReadOnlyParam is the run-time parameter that makes sessions read-only.
 const ReadOnlyParam = "default_transaction_read_only"

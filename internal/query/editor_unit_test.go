@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	dbdriver "dbedit/internal/driver"
-	"dbedit/internal/sqlsplit"
+	dbdriver "lontar/internal/driver"
+	"lontar/internal/sqlsplit"
 
 	gomysql "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"

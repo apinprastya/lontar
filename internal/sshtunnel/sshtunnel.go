@@ -14,9 +14,9 @@
 // # Host keys
 //
 // Host keys are always verified (never InsecureIgnoreHostKey) against the
-// user's known_hosts (read only) and dbedit's own known_hosts in the config
+// user's known_hosts (read only) and Lontar's own known_hosts in the config
 // directory. An unknown key fails with *HostKeyUnknownError; the UI shows
-// its fingerprint and HostKeys.Accept appends exactly that key to dbedit's
+// its fingerprint and HostKeys.Accept appends exactly that key to Lontar's
 // file. A changed key fails with *HostKeyChangedError and can only be
 // resolved by editing the file by hand.
 //

@@ -2,7 +2,7 @@
 // the config directory (next to connections.json), written atomically.
 //
 // The file carries a version. Missing fields take their defaults, so a file
-// from an older dbedit loads fine; a file from a newer dbedit is refused
+// from an older Lontar loads fine; a file from a newer Lontar is refused
 // (ErrNewerVersion) and never overwritten.
 package settings
 
@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"dbedit/internal/store"
+	"lontar/internal/store"
 )
 
 // FileName is the settings file in the config directory.
@@ -27,8 +27,8 @@ const FileName = "settings.json"
 //	   export defaults, confirm closing dirty query tabs)
 const CurrentVersion = 1
 
-// ErrNewerVersion is returned for a settings file written by a newer dbedit.
-var ErrNewerVersion = errors.New("settings file was created by a newer version of dbedit")
+// ErrNewerVersion is returned for a settings file written by a newer Lontar.
+var ErrNewerVersion = errors.New("settings file was created by a newer version of Lontar")
 
 // Theme is the colour theme.
 type Theme string
@@ -179,7 +179,7 @@ func (s *Store) load() (Settings, error) {
 }
 
 // Save normalizes and writes v, and returns what was written. A file
-// written by a newer dbedit is not overwritten (a corrupt one is).
+// written by a newer Lontar is not overwritten (a corrupt one is).
 func (s *Store) Save(v Settings) (Settings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

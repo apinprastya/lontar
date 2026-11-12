@@ -24,7 +24,7 @@ import * as $models from "./models.js";
  * refused on connections in read-only safe mode.
  */
 export function Apply(sessionID: string, cs: edits$0.ChangeSet): $CancellablePromise<$models.ApplyResult | null> {
-    return $Call.ByID(4051358085, sessionID, cs);
+    return $Call.ByID(1670460275, sessionID, cs);
 }
 
 /**
@@ -33,5 +33,5 @@ export function Apply(sessionID: string, cs: edits$0.ChangeSet): $CancellablePro
  * executed.
  */
 export function Preview(sessionID: string, cs: edits$0.ChangeSet): $CancellablePromise<edits$0.PreviewStatement[] | null> {
-    return $Call.ByID(660279045, sessionID, cs);
+    return $Call.ByID(350633919, sessionID, cs);
 }

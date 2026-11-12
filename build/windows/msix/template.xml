@@ -10,15 +10,15 @@
         AllowPromptForPassword="false">
     </Settings>
     <Installer
-        Path="dbedit.exe"
+        Path="lontar.exe"
         Arguments=""
-        InstallLocation="C:\Program Files\dbedit">
+        InstallLocation="C:\Program Files\lontar">
     </Installer>
     <PackageInformation
-        PackageName="dbedit"
-        PackageDisplayName="dbedit"
-        PublisherName="CN=dbedit contributors"
-        PublisherDisplayName="dbedit contributors"
+        PackageName="lontar"
+        PackageDisplayName="Lontar"
+        PublisherName="CN=Lontar contributors"
+        PublisherDisplayName="Lontar contributors"
         Version="0.0.0.0"
         PackageDescription="Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite">
         <Capabilities>
@@ -27,10 +27,10 @@
         </Capabilities>
         <Applications>
             <Application
-                Id="dbedit"
+                Id="lontar"
                 Description="Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite"
-                DisplayName="dbedit"
-                ExecutableName="dbedit.exe"
+                DisplayName="Lontar"
+                ExecutableName="lontar.exe"
                 EntryPoint="Windows.FullTrustApplication">
                 
             </Application>
@@ -43,13 +43,13 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>dbedit</DisplayName>
-            <PublisherDisplayName>dbedit contributors</PublisherDisplayName>
+            <DisplayName>Lontar</DisplayName>
+            <PublisherDisplayName>Lontar contributors</PublisherDisplayName>
             <Description>Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>
-    <SaveLocation PackagePath="dbedit.msix" />
+    <SaveLocation PackagePath="lontar.msix" />
     <PackageIntegrity>
         <CertificatePath></CertificatePath>
     </PackageIntegrity>

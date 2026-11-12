@@ -5,14 +5,14 @@ version: '3'
 
 # This information is used to generate the build assets.
 info:
-  companyName: "dbedit contributors" # Publisher (Windows VERSIONINFO/NSIS, nfpm vendor)
-  productName: "dbedit" # The name of the application
-  productIdentifier: "dev.dbedit.app" # Bundle id (macOS CFBundleIdentifier, Windows manifest/MSIX)
+  companyName: "Lontar contributors" # Publisher (Windows VERSIONINFO/NSIS, nfpm vendor)
+  productName: "Lontar" # The name of the application
+  productIdentifier: "dev.lontar.app" # Bundle id (macOS CFBundleIdentifier, Windows manifest/MSIX)
   description: "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite" # The application description
-  copyright: "© 2026 dbedit contributors" # Copyright text
+  copyright: "© 2026 Lontar contributors" # Copyright text
   comments: "Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite" # Comments
   # Baseline only. Every build and package is stamped with the version from
-  # `git describe` / DBEDIT_VERSION (see VERSION in the root Taskfile.yml).
+  # `git describe` / LONTAR_VERSION (see VERSION in the root Taskfile.yml).
   version: "0.0.0"
   # License: TODO — not chosen yet. nfpm.yaml carries the matching TODO.
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)

@@ -2,15 +2,24 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"testing/fstest"
+
+	"lontar/internal/migrate"
+	"lontar/internal/sshtunnel"
 )
 
 func TestAppOptions(t *testing.T) {
 	b := newBackend(t.TempDir())
 	opts := appOptions(fstest.MapFS{"index.html": {Data: []byte("<html></html>")}}, b)
-	if opts.Name != "dbedit" {
-		t.Fatalf("Name = %q, want dbedit", opts.Name)
+	if opts.Name != "Lontar" {
+		t.Fatalf("Name = %q, want Lontar", opts.Name)
 	}
 	if len(opts.Services) != 11 {
 		t.Fatalf("expected 11 bound services, got %d", len(opts.Services))
@@ -38,8 +47,8 @@ func TestAppOptions(t *testing.T) {
 	if !opts.Mac.ApplicationShouldTerminateAfterLastWindowClosed {
 		t.Fatal("app should quit when the last window closes on macOS")
 	}
-	if opts.Linux.ProgramName != "dbedit" {
-		t.Fatalf("Linux.ProgramName = %q, want dbedit (StartupWMClass in build/linux/dbedit.desktop)", opts.Linux.ProgramName)
+	if opts.Linux.ProgramName != "lontar" {
+		t.Fatalf("Linux.ProgramName = %q, want lontar (StartupWMClass in build/linux/lontar.desktop)", opts.Linux.ProgramName)
 	}
 	if !bytes.HasPrefix(opts.Icon, []byte("\x89PNG\r\n\x1a\n")) {
 		t.Fatal("Icon must be the embedded build/appicon.png")
@@ -75,8 +84,8 @@ func TestNewBackend(t *testing.T) {
 
 func TestMainWindowOptions(t *testing.T) {
 	w := mainWindowOptions()
-	if w.Title != "dbedit" {
-		t.Fatalf("Title = %q, want dbedit", w.Title)
+	if w.Title != "Lontar" {
+		t.Fatalf("Title = %q, want Lontar", w.Title)
 	}
 	if w.URL != "/" {
 		t.Fatalf("URL = %q, want /", w.URL)
@@ -94,4 +103,89 @@ func TestWailsAdaptersWithoutApp(t *testing.T) {
 		t.Fatal("SaveFile without an app")
 	}
 	WailsEmitter{}.Emit("x", 1) // no app: dropped, no panic
+}
+
+func TestConfigDir(t *testing.T) {
+	base := t.TempDir()
+	quiet := migrate.Options{Logf: func(string, ...any) {}}
+	cfg := func() (string, error) { return base, nil }
+
+	// Fresh profile: the new directory (not created yet).
+	if d, err := configDir(cfg, quiet); err != nil || d != filepath.Join(base, "lontar") {
+		t.Fatalf("configDir = %q, %v", d, err)
+	}
+
+	// A dbedit directory is moved before anything opens it.
+	old := filepath.Join(base, "dbedit")
+	if err := os.MkdirAll(old, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(old, "settings.json"), []byte(`{"version":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d, err := configDir(cfg, quiet)
+	if err != nil || d != filepath.Join(base, "lontar") {
+		t.Fatalf("configDir = %q, %v", d, err)
+	}
+	if _, err := os.Stat(filepath.Join(d, "settings.json")); err != nil {
+		t.Fatal("settings.json not moved")
+	}
+	// known_hosts and the other files are resolved inside the new directory.
+	b := newBackend(d)
+	if hk, ok := b.connections.HostKeys.(*sshtunnel.HostKeys); !ok || hk.AppFile != filepath.Join(base, "lontar", KnownHostsFile) {
+		t.Fatalf("known_hosts = %+v", b.connections.HostKeys)
+	}
+	_ = b.editor.ServiceShutdown()
+
+	if _, err := configDir(func() (string, error) { return "", errors.New("no home") }, quiet); err == nil {
+		t.Fatal("expected an error")
+	}
+}
+
+func TestConfigDirFallsBackToLegacy(t *testing.T) {
+	base := t.TempDir()
+	cfg := func() (string, error) { return base, nil }
+	if err := os.MkdirAll(filepath.Join(base, "dbedit"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var logged []string
+	opts := migrate.Options{
+		Rename: func(string, string) error { return errors.New("rename failed") },
+		Logf:   func(f string, a ...any) { logged = append(logged, fmt.Sprintf(f, a...)) },
+	}
+	// The copy fallback fails too: base is read-only, so no staging dir.
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX permissions and a non-root user")
+	}
+	if err := os.Chmod(base, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(base, 0o700) })
+	d, err := configDir(cfg, opts)
+	if err != nil || d != filepath.Join(base, "dbedit") {
+		t.Fatalf("configDir = %q, %v (log %v)", d, err, logged)
+	}
+	if !strings.Contains(strings.Join(logged, "\n"), "for this run") {
+		t.Fatalf("log = %v", logged)
+	}
+
+	// No legacy directory to fall back to: the new path, with the error logged.
+	logged = nil
+	if err := os.Chmod(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := configDir(func() (string, error) { return filepath.Join(base, "f", "x"), nil }, opts); err != nil || d != filepath.Join(base, "f", "x", "lontar") {
+		t.Fatalf("configDir = %q, %v", d, err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "f"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := configDir(func() (string, error) { return filepath.Join(base, "f", "x"), nil }, opts); err != nil {
+		t.Fatal(err)
+	}
+	if len(logged) == 0 {
+		t.Fatal("migration error not logged")
+	}
+	// The standard logger is used when Logf is nil.
+	logf(migrate.Options{}, "test %d", 1)
 }

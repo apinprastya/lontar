@@ -1,8 +1,13 @@
-# dbedit
+# Lontar
 
 A fast, lightweight desktop database client for PostgreSQL, MySQL/MariaDB and
 SQLite, built with Go + [Wails 3](https://v3.wails.io) and React/TypeScript.
 See [PLAN.md](PLAN.md) for the design and milestones.
+
+Lontar are the palm-leaf manuscripts once used in Bali and Java to record knowledge.
+
+*Formerly dbedit.* Lontar moves your existing connections, passwords and
+history over on first start; see "Upgrading from dbedit".
 
 ## Prerequisites
 
@@ -237,7 +242,7 @@ for that.
 The connection form's **SSH** tab connects through an SSH server (a
 bastion). The database host and port are then reached *from the SSH
 server*, so you can use names only it can resolve (e.g. `db.internal`).
-dbedit opens no local port: every database connection is a forwarded
+Lontar opens no local port: every database connection is a forwarded
 channel of one SSH connection, made in-process.
 
 - **Authentication:** password, a private key file (`~/.ssh/id_ed25519`
@@ -246,17 +251,17 @@ channel of one SSH connection, made in-process.
   Windows). The SSH password and the key passphrase are kept in the OS
   keychain like the database password, each under its own entry, and are
   never shown again ("saved", **Clear saved**).
-- **Host keys are always checked.** dbedit reads `~/.ssh/known_hosts` (it
+- **Host keys are always checked.** Lontar reads `~/.ssh/known_hosts` (it
   never writes it) and its own `known_hosts` next to `connections.json`.
   - The first connection to an unknown server shows its key type and
     SHA256 fingerprint. Compare it with what the server's administrator
     gives you, then choose **Trust and connect**. The key is added to
-    dbedit's own `known_hosts`.
-  - If a server's key **changed**, dbedit refuses to connect and names the
+    Lontar's own `known_hosts`.
+  - If a server's key **changed**, Lontar refuses to connect and names the
     recorded entry. This can mean someone is intercepting the connection.
     If the change is expected (the server was reinstalled), delete that
     line from the named `known_hosts` file by hand and connect again.
-    dbedit never replaces a known key itself.
+    Lontar never replaces a known key itself.
 - A keepalive is sent every 30 seconds. If the SSH connection drops, the
   running query fails with an error, and the next query reconnects the
   tunnel once. Switching databases reuses the tunnel; disconnecting closes it.
@@ -370,15 +375,15 @@ mode `0600` in a `0700` directory) in the per-user config directory:
 
 | OS | Location |
 |---|---|
-| Linux | `$XDG_CONFIG_HOME/dbedit/connections.json` (default `~/.config/dbedit/`) |
-| Windows | `%AppData%\dbedit\connections.json` |
-| macOS | `~/Library/Application Support/dbedit/connections.json` |
+| Linux | `$XDG_CONFIG_HOME/lontar/connections.json` (default `~/.config/lontar/`) |
+| Windows | `%AppData%\lontar\connections.json` |
+| macOS | `~/Library/Application Support/lontar/connections.json` |
 
 **Passwords (database, SSH password, SSH key passphrase) are never written to
 `connections.json`** and are never sent back to the UI (it only learns whether
 one is saved). They are kept in the OS
 keychain via [go-keyring](https://github.com/zalando/go-keyring), under the
-service `dbedit` with the connection ID as the account:
+service `lontar` with the connection ID as the account:
 
 - macOS: Keychain
 - Windows: Credential Manager
@@ -396,7 +401,35 @@ keychain errors are reported.
 
 Deleting a connection also deletes its saved passwords. `connections.json` is
 at schema version 3 (M6). Older files are upgraded on the next save, and a file
-from a newer dbedit is refused rather than overwritten.
+from a newer Lontar is refused rather than overwritten.
+
+### Upgrading from dbedit
+
+Lontar was called dbedit. On its first start it moves dbedit's data over:
+
+- **Config directory.** `dbedit/` in the per-user config directory (with
+  `connections.json`, `history.db`, `settings.json`, `known_hosts` and the
+  Linux fallback `secrets.enc`/`secrets.key`) is renamed to `lontar/`. If
+  that fails (e.g. it would cross file systems) it is copied, keeping the
+  file permissions, and the old directory is removed only after the copy
+  succeeded. Nothing is moved when `lontar/` already exists; the old
+  directory is then left alone and a line is logged. If the move fails,
+  Lontar uses `dbedit/` for that run and tries again on the next start.
+- **Passwords in the OS keychain** move from the service `dbedit` to
+  `lontar` the first time each one is needed. Saving or deleting a password
+  also removes any copy left under `dbedit`. On macOS the keychain may ask
+  once whether Lontar may read an item that dbedit created.
+- **Unsent query drafts** are not carried over in the desktop app. The
+  webview keeps its local storage under the program name
+  (`~/.local/share/dbedit` on Linux, `%AppData%\dbedit.exe` on Windows, the
+  `dev.dbedit.app` WebKit data on macOS), so Lontar starts with an empty
+  one. (`dbedit.*` keys are moved to `lontar.*` where the storage is shared,
+  e.g. server mode in a browser.) The old webview directories can be deleted
+  by hand.
+
+On Windows, uninstall dbedit before or after installing Lontar: the two are
+separate entries in "Apps & features". Uninstalling dbedit keeps the data
+that Lontar has already moved.
 
 ## Installing
 
@@ -407,28 +440,28 @@ macOS, `Get-FileHash` on Windows).
 
 | OS | File | Notes |
 |---|---|---|
-| Linux (Debian 13+, Ubuntu 24.04+) | `dbedit-<version>-linux-amd64.deb` | `sudo apt install ./dbedit-*.deb` pulls in GTK4 (`libgtk-4-1`) and WebKitGTK 6.0 (`libwebkitgtk-6.0-4`). |
-| Linux (Fedora 39+) | `dbedit-<version>-linux-x86_64.rpm` | `sudo dnf install ./dbedit-*.rpm` pulls in `gtk4` and `webkitgtk6.0`. |
-| Linux (any, x86_64) | `dbedit-<version>-linux-x86_64.AppImage` | `chmod +x dbedit-*.AppImage && ./dbedit-*.AppImage`. Self-contained (GTK and WebKitGTK bundled), so it is large (~130 MB). |
-| Windows 10/11 (x64) | `dbedit-<version>-windows-amd64-setup.exe` | Per-user installer, see below. |
-| Windows (portable) | `dbedit-<version>-windows-amd64-portable.zip` | Just `dbedit.exe`; needs the WebView2 runtime (built into Windows 11). |
-| macOS 12+ (Apple silicon and Intel) | `dbedit-<version>-macos-universal.dmg` | Open it and drag dbedit to Applications. |
+| Linux (Debian 13+, Ubuntu 24.04+) | `lontar-<version>-linux-amd64.deb` | `sudo apt install ./lontar-*.deb` pulls in GTK4 (`libgtk-4-1`) and WebKitGTK 6.0 (`libwebkitgtk-6.0-4`). |
+| Linux (Fedora 39+) | `lontar-<version>-linux-x86_64.rpm` | `sudo dnf install ./lontar-*.rpm` pulls in `gtk4` and `webkitgtk6.0`. |
+| Linux (any, x86_64) | `lontar-<version>-linux-x86_64.AppImage` | `chmod +x lontar-*.AppImage && ./lontar-*.AppImage`. Self-contained (GTK and WebKitGTK bundled), so it is large (~130 MB). |
+| Windows 10/11 (x64) | `lontar-<version>-windows-amd64-setup.exe` | Per-user installer, see below. |
+| Windows (portable) | `lontar-<version>-windows-amd64-portable.zip` | Just `lontar.exe`; needs the WebView2 runtime (built into Windows 11). |
+| macOS 12+ (Apple silicon and Intel) | `lontar-<version>-macos-universal.dmg` | Open it and drag Lontar to Applications. |
 
-The packages install `dbedit` to `/usr/bin`, a desktop entry
+The packages install `lontar` to `/usr/bin`, a desktop entry
 (`Development;Database;`) and the icon in the `hicolor` theme. The optional
 `gnome-keyring` recommendation provides the Secret Service; without one,
-dbedit stores passwords in its encrypted file instead (see "Saved connections
+Lontar stores passwords in its encrypted file instead (see "Saved connections
 and passwords").
 
 **Windows installer.** It installs **per user** into
-`%LOCALAPPDATA%\Programs\dbedit` (no administrator prompt), adds a Start-menu
+`%LOCALAPPDATA%\Programs\Lontar` (no administrator prompt), adds a Start-menu
 and a desktop shortcut and an "Apps & features" entry with an uninstaller.
 If the Microsoft Edge WebView2 runtime is missing it runs Microsoft's
 Evergreen bootstrapper, which downloads the runtime (**internet access
 needed** for that step only; Windows 11 and current Windows 10 already have
 it). Uninstalling removes the program and the WebView2 cache
-(`%AppData%\dbedit.exe`) but keeps your connections, history and settings in
-`%AppData%\dbedit` and the passwords in Credential Manager.
+(`%AppData%\lontar.exe`) but keeps your connections, history and settings in
+`%AppData%\lontar` and the passwords in Credential Manager.
 
 **Unsigned builds.** Releases are only code-signed when the maintainers'
 signing secrets are configured (see "Releasing"). Unsigned builds work, but
@@ -438,10 +471,10 @@ the OS warns first:
   **More info → Run anyway**.
 - **macOS:** Gatekeeper says the app "cannot be opened because the developer
   cannot be verified" (or that it is "damaged"). Either right-click (Control-
-  click) dbedit in Applications, choose **Open** and confirm **Open**
+  click) Lontar in Applications, choose **Open** and confirm **Open**
   (on macOS 15+: try to open it once, then **System Settings → Privacy &
   Security → Open Anyway**), or remove the quarantine flag:
-  `xattr -dr com.apple.quarantine /Applications/dbedit.app`.
+  `xattr -dr com.apple.quarantine /Applications/lontar.app`.
 - **Linux:** packages are not GPG-signed; verify them with `SHA256SUMS`.
 
 ## Build
@@ -455,12 +488,12 @@ wails3 task version   # the version builds are stamped with
 
 Every build and package task stamps the same version (`VERSION` in the root
 `Taskfile.yml`) into the Go binary (`-ldflags -X
-dbedit/internal/services.Version=…`, shown in the status bar), the macOS
+lontar/internal/services.Version=…`, shown in the status bar), the macOS
 `Info.plist`, the Windows VERSIONINFO resource and installer, and the
 `.deb`/`.rpm` metadata. It comes from:
 
-1. `DBEDIT_VERSION` if set (a leading `v` is dropped), e.g.
-   `DBEDIT_VERSION=v1.2.3 wails3 task package:linux`; otherwise
+1. `LONTAR_VERSION` if set (a leading `v` is dropped), e.g.
+   `LONTAR_VERSION=v1.2.3 wails3 task package:linux`; otherwise
 2. `git describe --tags --always --dirty`: tag `v1.2.3` → `1.2.3`,
    `v1.2.3-4-gabc1234` → `1.2.3-4-gabc1234`, an untagged commit →
    `0.0.0-dev+<hash>[-dirty]`; otherwise
@@ -476,24 +509,25 @@ GitHub's runners). Output goes to `bin/`.
 
 | Task | Host | Output | Extra tools |
 |---|---|---|---|
-| `wails3 task package:linux` | Linux | `dbedit-x86_64.AppImage`, `dbedit.deb`, `dbedit.rpm`, `dbedit.pkg.tar.zst` | none: nfpm is built into `wails3`; the AppImage step downloads linuxdeploy (internet). |
-| `wails3 task package:windows` | Windows (or Linux with `GOOS=windows`) | `dbedit-amd64-installer.exe` | [NSIS](https://nsis.sourceforge.io) `makensis` on `PATH`; the WebView2 bootstrapper is downloaded. `INSTALL_SCOPE=machine` builds a per-machine (Program Files, UAC) installer instead. |
-| `wails3 task package:darwin` | macOS | universal `dbedit.app` + `dbedit.dmg` | Xcode command line tools. The app is ad-hoc signed only. |
+| `wails3 task package:linux` | Linux | `lontar-x86_64.AppImage`, `lontar.deb`, `lontar.rpm`, `lontar.pkg.tar.zst` | none: nfpm is built into `wails3`; the AppImage step downloads linuxdeploy (internet). |
+| `wails3 task package:windows` | Windows (or Linux with `GOOS=windows`) | `lontar-amd64-installer.exe` | [NSIS](https://nsis.sourceforge.io) `makensis` on `PATH`; the WebView2 bootstrapper is downloaded. `INSTALL_SCOPE=machine` builds a per-machine (Program Files, UAC) installer instead. |
+| `wails3 task package:darwin` | macOS | universal `lontar.app` + `lontar.dmg` | Xcode command line tools. The app is ad-hoc signed only. |
 
-`GOOS=windows wails3 build` cross-compiles `bin/dbedit.exe` (with icon,
+`GOOS=windows wails3 build` cross-compiles `bin/lontar.exe` (with icon,
 manifest and version resource) from Linux or macOS, since the Windows build
 needs no cgo. The macOS and Linux GUI builds need cgo and so their own OS (or
 the `wails3 task setup:docker` cross-compile image).
 
-Identity (name, publisher `dbedit contributors`, bundle id `dev.dbedit.app`,
+Identity (name, publisher `Lontar contributors`, bundle id `dev.lontar.app`,
 description, copyright) is set in `build/config.yml`. After changing it run
 `wails3 task common:update:build-assets`, then re-apply what that command
-overwrites from the Wails templates: `build/linux/nfpm/nfpm.yaml` (dbedit's
+overwrites from the Wails templates: `build/linux/nfpm/nfpm.yaml` (Lontar's
 dependencies, icons, license TODO) and the hand-added keys in
-`build/darwin/Info*.plist` (`LSApplicationCategoryType`,
-`LSMinimumSystemVersion`); delete the `build/ios` and `build/linux/desktop`
-files it recreates (unused). `build/linux/dbedit.desktop` is maintained by
-hand.
+`build/darwin/Info*.plist` (the comment block, `LSApplicationCategoryType`,
+`LSMinimumSystemVersion` 12.0, the boolean `NSHighResolutionCapable`, and
+`CFBundleDisplayName` "Lontar"); restore `build/darwin/entitlements.plist`,
+which it deletes; delete the `build/ios` and `build/linux/desktop` files it
+recreates (unused). `build/linux/lontar.desktop` is maintained by hand.
 
 ### Regenerating the icon
 
@@ -537,7 +571,7 @@ Signing is optional; each step is skipped when its secrets are missing:
 | `APPLE_TEAM_ID` | The Apple Developer team ID |
 | `APPLE_APP_PASSWORD` | An app-specific password for that Apple ID |
 
-Windows signs `dbedit.exe` before it goes into the installer, then the
+Windows signs `lontar.exe` before it goes into the installer, then the
 installer (`build/windows/sign.ps1`, signtool, SHA-256 + RFC 3161 timestamp).
 macOS signs the app with the hardened runtime and
 `build/darwin/entitlements.plist` (only `com.apple.security.network.client`,

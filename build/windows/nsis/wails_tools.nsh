@@ -5,19 +5,19 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "dbedit"
+    !define INFO_PROJECTNAME "lontar"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "dbedit contributors"
+    !define INFO_COMPANYNAME "Lontar contributors"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "dbedit"
+    !define INFO_PRODUCTNAME "Lontar"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "0.0.0"
 !endif
 !ifndef INFO_COPYRIGHT
-    !define INFO_COPYRIGHT "© 2026 dbedit contributors"
+    !define INFO_COPYRIGHT "© 2026 Lontar contributors"
 !endif
 !ifndef PRODUCT_EXECUTABLE
     !define PRODUCT_EXECUTABLE "${INFO_PROJECTNAME}.exe"

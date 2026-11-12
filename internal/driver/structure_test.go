@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 type tableList struct {

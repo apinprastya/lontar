@@ -51,6 +51,11 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
+	// The server counts a login after its side of the handshake returns,
+	// which can be just after the client's; wait for it.
+	for deadline := time.Now().Add(2 * time.Second); s.Logins() < 2 && time.Now().Before(deadline); {
+		time.Sleep(time.Millisecond)
+	}
 	if s.Logins() != 2 {
 		t.Fatalf("logins = %d", s.Logins())
 	}

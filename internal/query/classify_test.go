@@ -3,7 +3,7 @@ package query
 import (
 	"testing"
 
-	dbdriver "dbedit/internal/driver"
+	dbdriver "lontar/internal/driver"
 )
 
 func TestIsWrite(t *testing.T) {

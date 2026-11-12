@@ -1,4 +1,4 @@
-module dbedit
+module lontar
 
 go 1.26.0
 

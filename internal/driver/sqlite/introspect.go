@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // MainDatabase is the only database of an SQLite connection.

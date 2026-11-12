@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )

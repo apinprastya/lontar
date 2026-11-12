@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-vi.mock('../../../bindings/dbedit/internal/services', () => import('../../test/mockBindings'))
+vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/mockBindings'))
 import { EditService, resetBindings } from '../../test/mockBindings'
 import { editApi } from './api'
 import { safeModeLabel } from './types'

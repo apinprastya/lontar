@@ -1,15 +1,15 @@
 Unicode true
 
 ####
-## dbedit NSIS installer. Built by `wails3 task package:windows`
+## Lontar NSIS installer. Built by `wails3 task package:windows`
 ## (windows:create:nsis:installer), which passes:
-##   -DARG_WAILS_AMD64_BINARY=<bin\dbedit.exe>   the binary to install
+##   -DARG_WAILS_AMD64_BINARY=<bin\lontar.exe>   the binary to install
 ##   -DINFO_PRODUCTVERSION=X.Y.Z                 numeric version (VERSION_NUM)
-##   -DDBEDIT_VERSION=<full version>             e.g. 1.2.3-rc.1 (VERSION)
+##   -DLONTAR_VERSION=<full version>             e.g. 1.2.3-rc.1 (VERSION)
 ##   -DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user
 ##
 ## Install scope: per-user by default (no UAC prompt), into
-## $LOCALAPPDATA\Programs\dbedit, with the uninstall entry under HKCU. Build
+## $LOCALAPPDATA\Programs\lontar, with the uninstall entry under HKCU. Build
 ## with INSTALL_SCOPE=machine for a per-machine install into Program Files.
 ##
 ## WebView2: the installer embeds Microsoft's Evergreen *bootstrapper*
@@ -25,8 +25,8 @@ Unicode true
 ####
 !include "wails_tools.nsh"
 
-!ifndef DBEDIT_VERSION
-    !define DBEDIT_VERSION "${INFO_PRODUCTVERSION}"
+!ifndef LONTAR_VERSION
+    !define LONTAR_VERSION "${INFO_PRODUCTVERSION}"
 !endif
 
 # The version information for this two must consist of 4 parts
@@ -35,7 +35,7 @@ VIFileVersion    "${INFO_PRODUCTVERSION}.0"
 
 VIAddVersionKey "CompanyName"     "${INFO_COMPANYNAME}"
 VIAddVersionKey "FileDescription" "${INFO_PRODUCTNAME} Installer"
-VIAddVersionKey "ProductVersion"  "${DBEDIT_VERSION}"
+VIAddVersionKey "ProductVersion"  "${LONTAR_VERSION}"
 VIAddVersionKey "FileVersion"     "${INFO_PRODUCTVERSION}"
 VIAddVersionKey "LegalCopyright"  "${INFO_COPYRIGHT}"
 VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
@@ -65,7 +65,7 @@ ManifestDPIAware true
 #!uninstfinalize 'signtool --file "%1"'
 #!finalize 'signtool --file "%1"'
 
-Name "${INFO_PRODUCTNAME} ${DBEDIT_VERSION}"
+Name "${INFO_PRODUCTNAME} ${LONTAR_VERSION}"
 OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
 !if "${WAILS_INSTALL_SCOPE}" == "user"
     InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
@@ -99,8 +99,8 @@ SectionEnd
 Section "uninstall" 
     !insertmacro wails.setShellContext
 
-    # Remove the WebView2 cache (%AppData%\dbedit.exe). dbedit's own data
-    # (%AppData%\dbedit: connections, history, settings) is kept, and saved
+    # Remove the WebView2 cache (%AppData%\lontar.exe). Lontar's own data
+    # (%AppData%\lontar: connections, history, settings) is kept, and saved
     # passwords stay in Windows Credential Manager.
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}"
 

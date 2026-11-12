@@ -1,4 +1,4 @@
-// Package query builds and runs the SQL behind dbedit's table browser.
+// Package query builds and runs the SQL behind Lontar's table browser.
 //
 // # Safety
 //
@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/values"
+	"lontar/internal/driver"
+	"lontar/internal/values"
 )
 
 // Engine is what the browser needs from a driver: SQL generation and

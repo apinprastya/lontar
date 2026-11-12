@@ -1,4 +1,4 @@
-import { EditorService, HistoryService } from '../../../bindings/dbedit/internal/services'
+import { EditorService, HistoryService } from '../../../bindings/lontar/internal/services'
 import type { Kind } from '../connections/types'
 import type { Cell } from '../workspace/types'
 import type { CompletionColumn, CompletionSchema, ExecOptions, ExecResult, HistoryEntry, ResultSet, Statement } from './types'

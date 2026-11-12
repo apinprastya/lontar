@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AppService } from '../../bindings/dbedit/internal/services'
+import { AppService } from '../../bindings/lontar/internal/services'
 
 export type AppInfo =
   | { status: 'loading' }

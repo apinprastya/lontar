@@ -14,19 +14,19 @@
 		<key>CFBundleDevelopmentRegion</key>
 		<string>en</string>
 		<key>CFBundleDisplayName</key>
-		<string>dbedit</string>
+		<string>Lontar</string>
 		<key>CFBundleExecutable</key>
-		<string>dbedit</string>
+		<string>lontar</string>
 		<key>CFBundleGetInfoString</key>
 		<string>Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite</string>
 		<key>CFBundleIconFile</key>
 		<string>icons</string>
 		<key>CFBundleIdentifier</key>
-		<string>dev.dbedit.app</string>
+		<string>dev.lontar.app</string>
 		<key>CFBundleInfoDictionaryVersion</key>
 		<string>6.0</string>
 		<key>CFBundleName</key>
-		<string>dbedit</string>
+		<string>Lontar</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
@@ -40,6 +40,6 @@
 		<key>NSHighResolutionCapable</key>
 		<true/>
 		<key>NSHumanReadableCopyright</key>
-		<string>© 2026 dbedit contributors</string>
+		<string>© 2026 Lontar contributors</string>
 	</dict>
 </plist>

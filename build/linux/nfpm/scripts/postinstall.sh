@@ -1,5 +1,5 @@
 #!/bin/sh
-# Refresh the desktop-entry and icon caches so dbedit shows up in menus with
+# Refresh the desktop-entry and icon caches so Lontar shows up in menus with
 # its icon straight away. Every step is optional and never fails the install.
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database -q /usr/share/applications || true

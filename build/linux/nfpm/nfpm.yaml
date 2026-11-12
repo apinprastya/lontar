@@ -1,78 +1,78 @@
-# nfpm config for the dbedit .deb / .rpm / Arch packages, built by
+# nfpm config for the Lontar .deb / .rpm / Arch packages, built by
 # `wails3 task package:linux` (linux:generate:deb|rpm|aur → `wails3 tool package`).
 # See https://nfpm.goreleaser.com.
 #
 # Identity mirrors build/config.yml. NOTE: `wails3 task common:update:build-assets`
 # rewrites this file from the Wails template; re-apply this version afterwards.
 #
-# DBEDIT_PKG_VERSION and GOARCH are set by the Linux Taskfile (VERSION from the
-# root Taskfile: git describe / DBEDIT_VERSION). nfpm maps a semver
+# LONTAR_PKG_VERSION and GOARCH are set by the Linux Taskfile (VERSION from the
+# root Taskfile: git describe / LONTAR_VERSION). nfpm maps a semver
 # pre-release such as 0.0.0-dev+abc1234 to each format's rules.
 
-name: "dbedit"
+name: "lontar"
 arch: ${GOARCH}
 platform: "linux"
-version: ${DBEDIT_PKG_VERSION}
+version: ${LONTAR_PKG_VERSION}
 version_schema: semver
 release: "1"
 section: "database"
 priority: "optional"
-maintainer: "dbedit contributors"
+maintainer: "Lontar contributors"
 description: |-
   Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite
   Desktop client with a connection list, table browser, spreadsheet-like grid
   with staged edits, SQL editor, SSH tunnels, TLS and CSV/JSON/SQL export.
-vendor: "dbedit contributors"
+vendor: "Lontar contributors"
 # TODO(license): no license has been chosen yet. Set the SPDX id here (and in
 # README/config.yml) once it is decided.
 license: ""
 
 contents:
-  - src: "./bin/dbedit"
-    dst: "/usr/bin/dbedit"
+  - src: "./bin/lontar"
+    dst: "/usr/bin/lontar"
     file_info:
       mode: 0755
-  - src: "./build/linux/dbedit.desktop"
-    dst: "/usr/share/applications/dbedit.desktop"
+  - src: "./build/linux/lontar.desktop"
+    dst: "/usr/share/applications/lontar.desktop"
     file_info:
       mode: 0644
   # hicolor theme icons (PNG 16–512 + scalable SVG), rendered from
   # build/appicon.svg by `wails3 task icons:render`. Listed one by one (not
   # `type: tree`) so the package never claims the shared hicolor directories.
-  - src: "./build/linux/icons/hicolor/16x16/apps/dbedit.png"
-    dst: "/usr/share/icons/hicolor/16x16/apps/dbedit.png"
+  - src: "./build/linux/icons/hicolor/16x16/apps/lontar.png"
+    dst: "/usr/share/icons/hicolor/16x16/apps/lontar.png"
     file_info:
       mode: 0644
-  - src: "./build/linux/icons/hicolor/24x24/apps/dbedit.png"
-    dst: "/usr/share/icons/hicolor/24x24/apps/dbedit.png"
+  - src: "./build/linux/icons/hicolor/24x24/apps/lontar.png"
+    dst: "/usr/share/icons/hicolor/24x24/apps/lontar.png"
     file_info:
       mode: 0644
-  - src: "./build/linux/icons/hicolor/32x32/apps/dbedit.png"
-    dst: "/usr/share/icons/hicolor/32x32/apps/dbedit.png"
+  - src: "./build/linux/icons/hicolor/32x32/apps/lontar.png"
+    dst: "/usr/share/icons/hicolor/32x32/apps/lontar.png"
     file_info:
       mode: 0644
-  - src: "./build/linux/icons/hicolor/48x48/apps/dbedit.png"
-    dst: "/usr/share/icons/hicolor/48x48/apps/dbedit.png"
+  - src: "./build/linux/icons/hicolor/48x48/apps/lontar.png"
+    dst: "/usr/share/icons/hicolor/48x48/apps/lontar.png"
     file_info:
       mode: 0644
-  - src: "./build/linux/icons/hicolor/64x64/apps/dbedit.png"
-    dst: "/usr/share/icons/hicolor/64x64/apps/dbedit.png"
+  - src: "./build/linux/icons/hicolor/64x64/apps/lontar.png"
+    dst: "/usr/share/icons/hicolor/64x64/apps/lontar.png"
     file_info:
       mode: 0644
-  - src: "./build/linux/icons/hicolor/128x128/apps/dbedit.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/dbedit.png"
+  - src: "./build/linux/icons/hicolor/128x128/apps/lontar.png"
+    dst: "/usr/share/icons/hicolor/128x128/apps/lontar.png"
     file_info:
       mode: 0644
-  - src: "./build/linux/icons/hicolor/256x256/apps/dbedit.png"
-    dst: "/usr/share/icons/hicolor/256x256/apps/dbedit.png"
+  - src: "./build/linux/icons/hicolor/256x256/apps/lontar.png"
+    dst: "/usr/share/icons/hicolor/256x256/apps/lontar.png"
     file_info:
       mode: 0644
-  - src: "./build/linux/icons/hicolor/512x512/apps/dbedit.png"
-    dst: "/usr/share/icons/hicolor/512x512/apps/dbedit.png"
+  - src: "./build/linux/icons/hicolor/512x512/apps/lontar.png"
+    dst: "/usr/share/icons/hicolor/512x512/apps/lontar.png"
     file_info:
       mode: 0644
-  - src: "./build/linux/icons/hicolor/scalable/apps/dbedit.svg"
-    dst: "/usr/share/icons/hicolor/scalable/apps/dbedit.svg"
+  - src: "./build/linux/icons/hicolor/scalable/apps/lontar.svg"
+    dst: "/usr/share/icons/hicolor/scalable/apps/lontar.svg"
     file_info:
       mode: 0644
 
@@ -81,7 +81,7 @@ depends:
   - libgtk-4-1
   - libwebkitgtk-6.0-4
 recommends:
-  # Secret Service for the OS keychain; without it dbedit falls back to its
+  # Secret Service for the OS keychain; without it Lontar falls back to its
   # encrypted file store.
   - gnome-keyring
 

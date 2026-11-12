@@ -3,8 +3,8 @@ package testutil
 import (
 	"testing"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/sqlite"
+	"lontar/internal/driver"
+	"lontar/internal/driver/sqlite"
 )
 
 func TestDriverConfig(t *testing.T) {

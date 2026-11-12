@@ -16,13 +16,13 @@ const plist = `<plist version="1.0">
 		<key>CFBundleVersion</key>
 		    <string>0.0.0</string>
 		<key>CFBundleName</key>
-		<string>dbedit</string>
+		<string>lontar</string>
 	</dict>
 </plist>`
 
 const info = `{
 	"fixed": {"file_version": "0.0.0"},
-	"info": {"0409": {"ProductVersion": "0.0.0", "CompanyName": "dbedit contributors"}}
+	"info": {"0409": {"ProductVersion": "0.0.0", "CompanyName": "Lontar contributors"}}
 }`
 
 func TestPlist(t *testing.T) {
@@ -34,7 +34,7 @@ func TestPlist(t *testing.T) {
 	if strings.Count(s, "<string>1.2.3</string>") != 2 || strings.Contains(s, "0.0.0") {
 		t.Fatalf("not stamped:\n%s", s)
 	}
-	if !strings.Contains(s, "<string>dbedit</string>") {
+	if !strings.Contains(s, "<string>lontar</string>") {
 		t.Fatal("other keys must be kept")
 	}
 	if _, err := Plist([]byte(`<dict><key>CFBundleShortVersionString</key><string>1</string></dict>`), "1.2.3"); err == nil {
@@ -58,7 +58,7 @@ func TestWinInfo(t *testing.T) {
 		t.Fatalf("fixed = %v", doc.Fixed)
 	}
 	l := doc.Info["0409"]
-	if l["ProductVersion"] != "1.2.3-rc.1+abc" || l["FileVersion"] != "1.2.3" || l["CompanyName"] != "dbedit contributors" {
+	if l["ProductVersion"] != "1.2.3-rc.1+abc" || l["FileVersion"] != "1.2.3" || l["CompanyName"] != "Lontar contributors" {
 		t.Fatalf("info = %v", l)
 	}
 

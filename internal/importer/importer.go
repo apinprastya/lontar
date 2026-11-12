@@ -32,9 +32,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/edits"
-	"dbedit/internal/values"
+	"lontar/internal/driver"
+	"lontar/internal/edits"
+	"lontar/internal/values"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -637,18 +637,18 @@ func (in *inserter) insert(rows []row) error {
 		}
 		return nil
 	}
-	if _, err := in.tx.ExecContext(in.ctx, "SAVEPOINT dbedit_import"); err != nil {
+	if _, err := in.tx.ExecContext(in.ctx, "SAVEPOINT lontar_import"); err != nil {
 		return err
 	}
 	err := in.exec(rows)
 	if err == nil {
-		_, err = in.tx.ExecContext(in.ctx, "RELEASE SAVEPOINT dbedit_import")
+		_, err = in.tx.ExecContext(in.ctx, "RELEASE SAVEPOINT lontar_import")
 		return err
 	}
 	if in.ctx.Err() != nil {
 		return in.ctx.Err()
 	}
-	if _, rerr := in.tx.ExecContext(in.ctx, "ROLLBACK TO SAVEPOINT dbedit_import"); rerr != nil {
+	if _, rerr := in.tx.ExecContext(in.ctx, "ROLLBACK TO SAVEPOINT lontar_import"); rerr != nil {
 		return in.rowError(rows[0], err)
 	}
 	for _, r := range rows {

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // hasColumn reports whether information_schema.<table> has column (feature

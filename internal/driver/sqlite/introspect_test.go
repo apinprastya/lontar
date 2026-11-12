@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"dbedit/internal/testutil"
+	"lontar/internal/testutil"
 )
 
 func TestIntrospection(t *testing.T) {

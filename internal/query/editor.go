@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	dbdriver "dbedit/internal/driver"
-	"dbedit/internal/sqlsplit"
-	"dbedit/internal/values"
+	dbdriver "lontar/internal/driver"
+	"lontar/internal/sqlsplit"
+	"lontar/internal/values"
 
 	gomysql "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"

@@ -3,8 +3,9 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
 
-	"dbedit/internal/store"
+	"lontar/internal/migrate"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -15,7 +16,8 @@ import (
 var assets embed.FS
 
 func main() {
-	dir, err := store.DefaultDir()
+	// Moves the config directory of the former name (dbedit) first.
+	dir, err := configDir(os.UserConfigDir, migrate.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}

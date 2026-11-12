@@ -22,19 +22,19 @@ import * as $models from "./models.js";
  * Defaults returns the default settings.
  */
 export function Defaults(): $CancellablePromise<settings$0.Settings> {
-    return $Call.ByID(1471382528);
+    return $Call.ByID(3621840178);
 }
 
 /**
  * Get returns the settings (the defaults if the file is missing or broken).
  */
 export function Get(): $CancellablePromise<$models.SettingsState> {
-    return $Call.ByID(4218240890);
+    return $Call.ByID(3512286788);
 }
 
 /**
  * Save validates (clamps) and stores v, and returns what was stored.
  */
 export function Save(v: settings$0.Settings): $CancellablePromise<settings$0.Settings> {
-    return $Call.ByID(2686372267, v);
+    return $Call.ByID(4228427829, v);
 }

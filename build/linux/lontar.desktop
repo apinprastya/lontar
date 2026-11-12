@@ -1,13 +1,13 @@
 [Desktop Entry]
 Type=Application
 Version=1.5
-Name=dbedit
+Name=Lontar
 GenericName=Database Client
 Comment=Fast, lightweight database client for PostgreSQL, MySQL/MariaDB and SQLite
-Exec=dbedit
-Icon=dbedit
+Exec=lontar
+Icon=lontar
 Terminal=false
 Categories=Development;Database;
 Keywords=database;sql;postgresql;postgres;mysql;mariadb;sqlite;
 StartupNotify=true
-StartupWMClass=dbedit
+StartupWMClass=lontar

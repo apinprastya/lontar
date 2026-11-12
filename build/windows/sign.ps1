@@ -1,6 +1,6 @@
 # Authenticode-signs Windows release files (CI only).
 #
-#   pwsh build/windows/sign.ps1 bin/dbedit.exe [more files...]
+#   pwsh build/windows/sign.ps1 bin/lontar.exe [more files...]
 #
 # Inputs come from the environment (GitHub secrets); nothing is stored in the
 # repository:
@@ -22,11 +22,11 @@ $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\si
     Sort-Object FullName -Descending | Select-Object -First 1
 if (-not $signtool) { throw 'sign.ps1: signtool.exe not found (Windows 10 SDK)' }
 
-$pfx = Join-Path ([System.IO.Path]::GetTempPath()) ("dbedit-" + [guid]::NewGuid() + ".pfx")
+$pfx = Join-Path ([System.IO.Path]::GetTempPath()) ("lontar-" + [guid]::NewGuid() + ".pfx")
 try {
     [System.IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX))
     foreach ($f in $Files) {
-        & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:WINDOWS_CERT_PASSWORD /tr $timestamp /td SHA256 /d 'dbedit' $f
+        & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:WINDOWS_CERT_PASSWORD /tr $timestamp /td SHA256 /d 'Lontar' $f
         if ($LASTEXITCODE -ne 0) { throw "sign.ps1: signing $f failed" }
         & $signtool.FullName verify /pa $f
         if ($LASTEXITCODE -ne 0) { throw "sign.ps1: verifying $f failed" }

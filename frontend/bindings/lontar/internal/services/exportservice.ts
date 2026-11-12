@@ -20,7 +20,7 @@ import * as $models from "./models.js";
  * Cancel stops a running export; its temporary file is removed.
  */
 export function Cancel(jobID: string): $CancellablePromise<boolean> {
-    return $Call.ByID(3499830159, jobID);
+    return $Call.ByID(3462695285, jobID);
 }
 
 /**
@@ -29,14 +29,14 @@ export function Cancel(jobID: string): $CancellablePromise<boolean> {
  * not.
  */
 export function CheckQuery(sessionID: string, sql: string): $CancellablePromise<void> {
-    return $Call.ByID(2281023457, sessionID, sql);
+    return $Call.ByID(614190451, sessionID, sql);
 }
 
 /**
  * Export runs an export to req.Path (written atomically).
  */
 export function Export(req: $models.ExportRequest): $CancellablePromise<$models.ExportResult | null> {
-    return $Call.ByID(1397816327, req);
+    return $Call.ByID(4185099529, req);
 }
 
 /**
@@ -44,5 +44,5 @@ export function Export(req: $models.ExportRequest): $CancellablePromise<$models.
  * as CSV/TSV by the frontend).
  */
 export function SaveText(path: string, text: string): $CancellablePromise<void> {
-    return $Call.ByID(3239493107, path, text);
+    return $Call.ByID(4064810605, path, text);
 }

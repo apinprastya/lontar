@@ -27,61 +27,61 @@ import * as $models from "./models.js";
 /**
  * AcceptHostKey trusts the SSH host key with the given SHA256 fingerprint
  * that host presented in the last refused attempt (see
- * sshtunnel.HostKeyUnknownError). It is appended to dbedit's own
+ * sshtunnel.HostKeyUnknownError). It is appended to Lontar's own
  * known_hosts file; the user's ~/.ssh/known_hosts is never written. A
  * changed key cannot be accepted here.
  */
 export function AcceptHostKey(host: string, fingerprint: string): $CancellablePromise<void> {
-    return $Call.ByID(954147804, host, fingerprint);
+    return $Call.ByID(628276682, host, fingerprint);
 }
 
 /**
  * Connect opens a session for a saved connection.
  */
 export function Connect(connectionID: string): $CancellablePromise<$models.SessionInfo> {
-    return $Call.ByID(3868025291, connectionID);
+    return $Call.ByID(1373307497, connectionID);
 }
 
 /**
  * Delete removes a connection and its stored password.
  */
 export function Delete(id: string): $CancellablePromise<void> {
-    return $Call.ByID(1540784948, id);
+    return $Call.ByID(2382581338, id);
 }
 
 /**
  * Disconnect closes a session.
  */
 export function Disconnect(sessionID: string): $CancellablePromise<void> {
-    return $Call.ByID(3619524269, sessionID);
+    return $Call.ByID(2219666587, sessionID);
 }
 
 /**
  * Drivers lists the supported database types with their default ports.
  */
 export function Drivers(): $CancellablePromise<driver$0.Info[] | null> {
-    return $Call.ByID(3836955354);
+    return $Call.ByID(1437643604);
 }
 
 /**
  * Duplicate copies a connection (and its password) under a new name.
  */
 export function Duplicate(id: string): $CancellablePromise<store$0.Connection> {
-    return $Call.ByID(3630652184, id);
+    return $Call.ByID(2979173190, id);
 }
 
 /**
  * Get returns one saved connection.
  */
 export function Get(id: string): $CancellablePromise<store$0.Connection> {
-    return $Call.ByID(740519793, id);
+    return $Call.ByID(1019731143, id);
 }
 
 /**
  * List returns all saved connections sorted by name.
  */
 export function List(): $CancellablePromise<store$0.Connection[] | null> {
-    return $Call.ByID(3863338895);
+    return $Call.ByID(4181082417);
 }
 
 /**
@@ -90,7 +90,7 @@ export function List(): $CancellablePromise<store$0.Connection[] | null> {
  * keeps the stored value, "" removes it, anything else replaces it.
  */
 export function Save(c: store$0.Connection, secrets: store$0.Secrets): $CancellablePromise<store$0.Connection> {
-    return $Call.ByID(2220670130, c, secrets);
+    return $Call.ByID(467827896, c, secrets);
 }
 
 /**
@@ -101,5 +101,5 @@ export function Save(c: store$0.Connection, secrets: store$0.Secrets): $Cancella
  * error (see hostKeyError).
  */
 export function Test(c: store$0.Connection, secrets: store$0.Secrets): $CancellablePromise<string> {
-    return $Call.ByID(2991644019, c, secrets);
+    return $Call.ByID(514985909, c, secrets);
 }

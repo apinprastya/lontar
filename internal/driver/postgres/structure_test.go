@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/postgres"
-	"dbedit/internal/testutil"
+	"lontar/internal/driver"
+	"lontar/internal/driver/postgres"
+	"lontar/internal/testutil"
 )
 
 func TestStructure(t *testing.T) {

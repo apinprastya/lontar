@@ -203,7 +203,7 @@ if [ "$GOOS" = "windows" ]; then
     EXT=".exe"
     LDFLAGS="-s -w -H windowsgui"
 fi
-# dbedit: extra linker flags from the Taskfile (version stamping, -X ...).
+# Lontar: extra linker flags from the Taskfile (version stamping, -X ...).
 if [ -n "$EXTRA_LDFLAGS" ]; then
     LDFLAGS="${LDFLAGS} ${EXTRA_LDFLAGS}"
 fi

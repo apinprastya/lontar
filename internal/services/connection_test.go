@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"dbedit/internal/sshtunnel"
+	"lontar/internal/sshtunnel"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/conn"
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/all"
-	"dbedit/internal/store"
+	"lontar/internal/conn"
+	"lontar/internal/driver"
+	"lontar/internal/driver/all"
+	"lontar/internal/store"
 )
 
 type fakeSessions struct {

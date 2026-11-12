@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../../bindings/dbedit/internal/services', () => import('../../test/mockBindings'))
+vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/mockBindings'))
 
 import { initialConnectionsState, useConnections } from '../../stores/connections'
 import { ConnectionService, makeConnection, makeSession, resetBindings } from '../../test/mockBindings'

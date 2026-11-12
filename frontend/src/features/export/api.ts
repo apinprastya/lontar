@@ -1,4 +1,4 @@
-import { ExportService, ImportService } from '../../../bindings/dbedit/internal/services'
+import { ExportService, ImportService } from '../../../bindings/lontar/internal/services'
 import type { Cell, FetchRequest, ResultColumn } from '../workspace/types'
 
 export type ExportFormat = 'csv' | 'json' | 'sql'

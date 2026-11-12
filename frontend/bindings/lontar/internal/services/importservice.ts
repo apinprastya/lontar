@@ -23,7 +23,7 @@ import * as $models from "./models.js";
  * Cancel stops a running import; everything is rolled back.
  */
 export function Cancel(jobID: string): $CancellablePromise<boolean> {
-    return $Call.ByID(1470112164, jobID);
+    return $Call.ByID(233792394, jobID);
 }
 
 /**
@@ -31,12 +31,12 @@ export function Cancel(jobID: string): $CancellablePromise<boolean> {
  * it; confirm mode needs confirmed.
  */
 export function Import(jobID: string, sessionID: string, req: importer$0.Request, confirmed: boolean): $CancellablePromise<$models.ImportResult | null> {
-    return $Call.ByID(335574979, jobID, sessionID, req, confirmed);
+    return $Call.ByID(379416493, jobID, sessionID, req, confirmed);
 }
 
 /**
  * Preview reads the first rows of path and suggests a column mapping.
  */
 export function Preview(sessionID: string, path: string, opts: importer$0.Options, schema: string, table: string): $CancellablePromise<importer$0.Preview | null> {
-    return $Call.ByID(1833403202, sessionID, path, opts, schema, table);
+    return $Call.ByID(2251509844, sessionID, path, opts, schema, table);
 }

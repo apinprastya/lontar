@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/all"
-	"dbedit/internal/store"
-	"dbedit/internal/testutil"
+	"lontar/internal/driver"
+	"lontar/internal/driver/all"
+	"lontar/internal/store"
+	"lontar/internal/testutil"
 
 	gomysql "github.com/go-sql-driver/mysql"
 )
@@ -187,7 +187,7 @@ func TestUseDatabaseIntegration(t *testing.T) {
 			// Switch back (root on MySQL starts without a database).
 			back := wantBefore
 			if back == "" {
-				back = "dbedit"
+				back = "lontar"
 			}
 			if s, err = m.UseDatabase(ctx, id, back); err != nil || s.Database != back {
 				t.Fatalf("switch back = %+v, %v", s, err)

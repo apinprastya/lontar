@@ -1,6 +1,6 @@
 package mysql
 
-import "dbedit/internal/driver"
+import "lontar/internal/driver"
 
 // Exported for the external tests.
 var (

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 func TestMetadata(t *testing.T) {

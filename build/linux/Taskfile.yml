@@ -151,7 +151,7 @@ tasks:
     cmds:
       - wails3 tool package -name "{{.APP_NAME}}" -format deb -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
     env:
-      DBEDIT_PKG_VERSION: '{{.VERSION}}'
+      LONTAR_PKG_VERSION: '{{.VERSION}}'
       GOARCH: '{{.ARCH | default ARCH}}'
 
   generate:rpm:
@@ -159,7 +159,7 @@ tasks:
     cmds:
       - wails3 tool package -name "{{.APP_NAME}}" -format rpm -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
     env:
-      DBEDIT_PKG_VERSION: '{{.VERSION}}'
+      LONTAR_PKG_VERSION: '{{.VERSION}}'
       GOARCH: '{{.ARCH | default ARCH}}'
 
   generate:aur:
@@ -167,10 +167,10 @@ tasks:
     cmds:
       - wails3 tool package -name "{{.APP_NAME}}" -format archlinux -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
     env:
-      DBEDIT_PKG_VERSION: '{{.VERSION}}'
+      LONTAR_PKG_VERSION: '{{.VERSION}}'
       GOARCH: '{{.ARCH | default ARCH}}'
 
-  # The .desktop file (build/linux/dbedit.desktop) is maintained by hand: it
+  # The .desktop file (build/linux/lontar.desktop) is maintained by hand: it
   # sets Comment, Keywords, StartupWMClass and the Development;Database;
   # categories, which `wails3 generate .desktop` cannot all express.
 

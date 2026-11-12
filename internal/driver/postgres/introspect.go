@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // ListDatabases implements driver.Introspector using pg_database. Templates

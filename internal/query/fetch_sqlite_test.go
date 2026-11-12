@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver/sqlite"
-	"dbedit/internal/testutil"
-	"dbedit/internal/values"
+	"lontar/internal/driver/sqlite"
+	"lontar/internal/testutil"
+	"lontar/internal/values"
 )
 
 // seedSQLite creates a small table with 1000 rows plus awkward names.

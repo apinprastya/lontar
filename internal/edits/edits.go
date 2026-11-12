@@ -25,7 +25,7 @@
 // text format. The server then parses the text with the column type's own
 // input function, exactly like a typed literal: big integers and numerics
 // stay exact, and enums, arrays, json/jsonb, uuid, interval and
-// date/time types all work without dbedit naming a type. Bytes are bound
+// date/time types all work without Lontar naming a type. Bytes are bound
 // as []byte.
 //
 // MySQL/MariaDB and SQLite: strings, with conversions where implicit
@@ -47,9 +47,9 @@ import (
 	"strconv"
 	"strings"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/query"
-	"dbedit/internal/values"
+	"lontar/internal/driver"
+	"lontar/internal/query"
+	"lontar/internal/values"
 
 	"github.com/jackc/pgx/v5"
 )

@@ -9,13 +9,13 @@ import (
 	"sync"
 	"testing"
 
-	"dbedit/internal/driver/all"
-	"dbedit/internal/export"
-	"dbedit/internal/importer"
-	"dbedit/internal/query"
-	"dbedit/internal/settings"
-	"dbedit/internal/store"
-	"dbedit/internal/values"
+	"lontar/internal/driver/all"
+	"lontar/internal/export"
+	"lontar/internal/importer"
+	"lontar/internal/query"
+	"lontar/internal/settings"
+	"lontar/internal/store"
+	"lontar/internal/values"
 )
 
 type recEmitter struct {

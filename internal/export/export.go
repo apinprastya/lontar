@@ -36,10 +36,10 @@ import (
 	"strings"
 	"time"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/query"
-	"dbedit/internal/sqlsplit"
-	"dbedit/internal/values"
+	"lontar/internal/driver"
+	"lontar/internal/query"
+	"lontar/internal/sqlsplit"
+	"lontar/internal/values"
 )
 
 func errorsAs(err error, target any) bool { return errors.As(err, target) }

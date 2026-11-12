@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"dbedit/internal/conn"
-	"dbedit/internal/driver/all"
-	"dbedit/internal/edits"
-	"dbedit/internal/query"
-	"dbedit/internal/store"
-	"dbedit/internal/values"
+	"lontar/internal/conn"
+	"lontar/internal/driver/all"
+	"lontar/internal/edits"
+	"lontar/internal/query"
+	"lontar/internal/store"
+	"lontar/internal/values"
 )
 
 func changeName(id float64, old values.Cell, name string) edits.ChangeSet {

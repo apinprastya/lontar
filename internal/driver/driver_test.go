@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 type fakeDriver struct {

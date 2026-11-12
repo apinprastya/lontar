@@ -10,7 +10,12 @@ import (
 
 // KeyringService is the service name used for OS keychain entries. Entries
 // are keyed by connection ID (see SecretKey).
-const KeyringService = "dbedit"
+const KeyringService = "lontar"
+
+// LegacyKeyringService is the service the app used under its former name,
+// dbedit. Its entries are moved to KeyringService lazily, on first read
+// (see MigratingSecretStore).
+const LegacyKeyringService = "dbedit"
 
 // ErrSecretNotFound is returned by SecretStore.Get when no secret exists.
 var ErrSecretNotFound = errors.New("secret not found")
@@ -43,8 +48,17 @@ func SecretKey(connectionID, purpose string) string {
 // stored next to it (secrets.key, mode 0600), so it only keeps passwords out
 // of connections.json and out of casual view; anyone who can read your files
 // can decrypt it.
+//
+// Keychain entries saved under the former name (LegacyKeyringService) are
+// moved to KeyringService the first time they are read; see
+// MigratingSecretStore. The fallback file needs no such step: it moves with
+// the config directory and its format does not depend on the app's name.
 func NewSecretStore(dir string) SecretStore {
-	return selectSecretStore(fallbackEnabled, KeyringSecretStore{}, NewFileSecretStore(dir))
+	keychain := &MigratingSecretStore{
+		Current: KeyringSecretStore{Service: KeyringService},
+		Legacy:  KeyringSecretStore{Service: LegacyKeyringService},
+	}
+	return selectSecretStore(fallbackEnabled, keychain, NewFileSecretStore(dir))
 }
 
 // selectSecretStore wires primary and fallback according to useFallback.
@@ -56,12 +70,21 @@ func selectSecretStore(useFallback bool, primary, fallback SecretStore) SecretSt
 }
 
 // KeyringSecretStore stores secrets in the OS keychain via go-keyring under
-// KeyringService.
-type KeyringSecretStore struct{}
+// Service (KeyringService when empty).
+type KeyringSecretStore struct {
+	Service string
+}
+
+func (k KeyringSecretStore) service() string {
+	if k.Service == "" {
+		return KeyringService
+	}
+	return k.Service
+}
 
 // Get implements SecretStore.
-func (KeyringSecretStore) Get(key string) (string, error) {
-	v, err := keyring.Get(KeyringService, key)
+func (k KeyringSecretStore) Get(key string) (string, error) {
+	v, err := keyring.Get(k.service(), key)
 	if errors.Is(err, keyring.ErrNotFound) {
 		return "", ErrSecretNotFound
 	}
@@ -72,20 +95,70 @@ func (KeyringSecretStore) Get(key string) (string, error) {
 }
 
 // Set implements SecretStore.
-func (KeyringSecretStore) Set(key, value string) error {
-	if err := keyring.Set(KeyringService, key, value); err != nil {
+func (k KeyringSecretStore) Set(key, value string) error {
+	if err := keyring.Set(k.service(), key, value); err != nil {
 		return fmt.Errorf("keychain: %w", err)
 	}
 	return nil
 }
 
 // Delete implements SecretStore.
-func (KeyringSecretStore) Delete(key string) error {
-	err := keyring.Delete(KeyringService, key)
+func (k KeyringSecretStore) Delete(key string) error {
+	err := keyring.Delete(k.service(), key)
 	if err == nil || errors.Is(err, keyring.ErrNotFound) {
 		return nil
 	}
 	return fmt.Errorf("keychain: %w", err)
+}
+
+// MigratingSecretStore moves secrets from Legacy to Current lazily. A read
+// that misses in Current tries Legacy; a secret found there is written to
+// Current, deleted from Legacy and returned. Writes and deletes also remove
+// the Legacy entry, so a replaced or deleted secret never resurfaces.
+//
+// It is used for the keychain entries saved under the app's former name
+// (LegacyKeyringService). Moving them lazily avoids enumerating the keychain,
+// which go-keyring cannot do.
+type MigratingSecretStore struct {
+	Current SecretStore
+	Legacy  SecretStore
+}
+
+// Get implements SecretStore.
+func (s *MigratingSecretStore) Get(key string) (string, error) {
+	v, err := s.Current.Get(key)
+	if !errors.Is(err, ErrSecretNotFound) {
+		return v, err
+	}
+	v, err = s.Legacy.Get(key)
+	if errors.Is(err, ErrSecretNotFound) {
+		return "", ErrSecretNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("read secret saved under %q: %w", LegacyKeyringService, err)
+	}
+	// Only drop the old entry once the new one is safely written; if the
+	// write fails, the next read tries again.
+	if s.Current.Set(key, v) == nil {
+		_ = s.Legacy.Delete(key)
+	}
+	return v, nil
+}
+
+// Set implements SecretStore.
+func (s *MigratingSecretStore) Set(key, value string) error {
+	if err := s.Current.Set(key, value); err != nil {
+		return err
+	}
+	// The new value replaces any old one; a failure leaves only a stale
+	// copy that Get never reaches, because Current now has the key.
+	_ = s.Legacy.Delete(key)
+	return nil
+}
+
+// Delete implements SecretStore. It removes key from both stores.
+func (s *MigratingSecretStore) Delete(key string) error {
+	return errors.Join(s.Current.Delete(key), s.Legacy.Delete(key))
 }
 
 // FallbackSecretStore uses Primary and switches to Fallback whenever Primary

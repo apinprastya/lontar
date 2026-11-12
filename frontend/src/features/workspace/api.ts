@@ -1,4 +1,4 @@
-import { BrowseService, SchemaService } from '../../../bindings/dbedit/internal/services'
+import { BrowseService, SchemaService } from '../../../bindings/lontar/internal/services'
 import type { Cell, FetchRequest, Location, Page, TableInfo } from './types'
 import { normalizeDetail, type TableDetail } from '../structure/types'
 

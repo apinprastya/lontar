@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// File and directory permissions for everything dbedit writes to its config
+// File and directory permissions for everything Lontar writes to its config
 // directory. On Windows only the read-only bit is meaningful; the per-user
 // %AppData% ACLs provide the equivalent protection.
 const (

@@ -26,7 +26,7 @@ import * as $models from "./models.js";
  * Cancel cancels a running Execute or FetchMore.
  */
 export function Cancel(requestID: string): $CancellablePromise<boolean> {
-    return $Call.ByID(3474686280, requestID);
+    return $Call.ByID(604078846, requestID);
 }
 
 /**
@@ -34,7 +34,7 @@ export function Cancel(requestID: string): $CancellablePromise<boolean> {
  * transaction is rolled back and its connection is closed.
  */
 export function CloseEditor(editorID: string): $CancellablePromise<void> {
-    return $Call.ByID(1492258759, editorID);
+    return $Call.ByID(1433140377, editorID);
 }
 
 /**
@@ -42,7 +42,7 @@ export function CloseEditor(editorID: string): $CancellablePromise<void> {
  * CompletionSchema to include them).
  */
 export function CompletionColumns(sessionID: string, schema: string, table: string): $CancellablePromise<$models.CompletionColumn[] | null> {
-    return $Call.ByID(3473190411, sessionID, schema, table);
+    return $Call.ByID(3387505097, sessionID, schema, table);
 }
 
 /**
@@ -51,7 +51,7 @@ export function CompletionColumns(sessionID: string, schema: string, table: stri
  * set, the database is switched or the session closes.
  */
 export function CompletionSchema(sessionID: string, schema: string, refresh: boolean): $CancellablePromise<$models.CompletionSchema | null> {
-    return $Call.ByID(2823015435, sessionID, schema, refresh);
+    return $Call.ByID(3887417245, sessionID, schema, refresh);
 }
 
 /**
@@ -66,7 +66,7 @@ export function CompletionSchema(sessionID: string, schema: string, refresh: boo
  * writes; a notice explains why.
  */
 export function Execute(editorID: string, requestID: string, sql: string, opts: query$0.ExecOptions): $CancellablePromise<query$0.ExecResult | null> {
-    return $Call.ByID(2200776953, editorID, requestID, sql, opts);
+    return $Call.ByID(934943387, editorID, requestID, sql, opts);
 }
 
 /**
@@ -74,7 +74,7 @@ export function Execute(editorID: string, requestID: string, sql: string, opts: 
  * open (ResultSet.CanLoadMore).
  */
 export function FetchMore(editorID: string, requestID: string, resultID: string, n: number): $CancellablePromise<query$0.ResultSet | null> {
-    return $Call.ByID(354858239, editorID, requestID, resultID, n);
+    return $Call.ByID(3609060189, editorID, requestID, resultID, n);
 }
 
 /**
@@ -82,14 +82,14 @@ export function FetchMore(editorID: string, requestID: string, resultID: string,
  * connection is taken from the pool on the first run.
  */
 export function OpenEditor(sessionID: string): $CancellablePromise<string> {
-    return $Call.ByID(1361951443, sessionID);
+    return $Call.ByID(796351349, sessionID);
 }
 
 /**
  * Split splits a script into statements with the rules of kind.
  */
 export function Split(kind: driver$0.Kind, sql: string): $CancellablePromise<$models.Statement[] | null> {
-    return $Call.ByID(33979594, kind, sql);
+    return $Call.ByID(865242852, kind, sql);
 }
 
 /**
@@ -98,12 +98,12 @@ export function Split(kind: driver$0.Kind, sql: string): $CancellablePromise<$mo
  * sqlsplit.StatementAt for how a cursor between statements is resolved.
  */
 export function StatementAt(kind: driver$0.Kind, sql: string, cursor: number): $CancellablePromise<$models.Statement | null> {
-    return $Call.ByID(3756743270, kind, sql, cursor);
+    return $Call.ByID(2951233636, kind, sql, cursor);
 }
 
 /**
  * TxState returns the editor's transaction state as of its last run.
  */
 export function TxState(editorID: string): $CancellablePromise<query$0.TxInfo> {
-    return $Call.ByID(2215580235, editorID);
+    return $Call.ByID(2494486517, editorID);
 }

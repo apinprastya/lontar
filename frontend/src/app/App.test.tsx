@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../bindings/dbedit/internal/services', () => import('../test/mockBindings'))
+vi.mock('../../bindings/lontar/internal/services', () => import('../test/mockBindings'))
 
 import { initialConnectionsState, useConnections } from '../stores/connections'
 import { AppService, ConnectionService, SettingsService, makeConnection, makeSession, resetBindings } from '../test/mockBindings'
@@ -26,7 +26,7 @@ describe('App shell', () => {
 
     const { container } = render(<App />)
 
-    expect(screen.getByLabelText('Sidebar')).toHaveTextContent('dbedit')
+    expect(screen.getByLabelText('Sidebar')).toHaveTextContent('Lontar')
     expect(screen.getByLabelText('Sidebar')).toHaveTextContent('Not connected')
     expect(screen.getByRole('heading', { name: 'Connections' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Loading')

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/values"
+	"lontar/internal/driver"
+	"lontar/internal/values"
 )
 
 // Format is an export file format.
@@ -359,7 +359,7 @@ type sqlWriter struct {
 
 func (s *sqlWriter) Begin(cols []Column) error {
 	var h strings.Builder
-	h.WriteString("-- Exported by dbedit\n")
+	h.WriteString("-- Exported by Lontar\n")
 	if s.kind == driver.MySQL || s.kind == driver.MariaDB {
 		h.WriteString("SET NAMES utf8mb4;\n")
 	}

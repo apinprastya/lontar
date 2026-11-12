@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/mysql"
-	"dbedit/internal/testutil"
+	"lontar/internal/driver"
+	"lontar/internal/driver/mysql"
+	"lontar/internal/testutil"
 
 	gomysql "github.com/go-sql-driver/mysql"
 )

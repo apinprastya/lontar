@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // pgRel is the pg_class row of a table or view. Q* fields are quoted with

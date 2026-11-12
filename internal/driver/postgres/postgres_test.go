@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/postgres"
-	"dbedit/internal/testutil"
+	"lontar/internal/driver"
+	"lontar/internal/driver/postgres"
+	"lontar/internal/testutil"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -53,7 +53,7 @@ func TestBuildDSNSpecialPassword(t *testing.T) {
 	if pc.ConnectTimeout != 3*time.Second {
 		t.Errorf("connect timeout = %v", pc.ConnectTimeout)
 	}
-	if pc.RuntimeParams["search_path"] != "a&b=c" || pc.RuntimeParams["application_name"] != "dbedit" {
+	if pc.RuntimeParams["search_path"] != "a&b=c" || pc.RuntimeParams["application_name"] != "lontar" {
 		t.Errorf("runtime params = %v", pc.RuntimeParams)
 	}
 	if pc.TLSConfig == nil {

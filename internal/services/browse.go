@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"dbedit/internal/query"
+	"lontar/internal/query"
 )
 
 // BrowseService pages through tables for the grid. Every call takes a

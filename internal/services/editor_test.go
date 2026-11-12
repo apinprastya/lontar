@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/conn"
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/all"
-	"dbedit/internal/history"
-	"dbedit/internal/query"
+	"lontar/internal/conn"
+	"lontar/internal/driver"
+	"lontar/internal/driver/all"
+	"lontar/internal/history"
+	"lontar/internal/query"
 )
 
 func newEditorService(t *testing.T) (*EditorService, *conn.Manager, string, *history.Store) {

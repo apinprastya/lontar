@@ -10,7 +10,7 @@ export interface HostKeyDialogProps {
 
 /**
  * Asks whether to trust an unknown SSH host key. Accepting records the key
- * in dbedit's own known_hosts (never ~/.ssh/known_hosts). A changed key is
+ * in Lontar's own known_hosts (never ~/.ssh/known_hosts). A changed key is
  * shown as a warning without an Accept button: it must be fixed by hand.
  */
 export default function HostKeyDialog({ info, busy, onAccept, onCancel }: HostKeyDialogProps) {
@@ -40,7 +40,7 @@ export default function HostKeyDialog({ info, busy, onAccept, onCancel }: HostKe
         {changed ? (
           <p className="error">
             The server <strong>{info.host}</strong> presented a different key than the one recorded for it. Someone could be
-            intercepting the connection. dbedit will not connect. If the change is expected, remove the old entry by hand from:{' '}
+            intercepting the connection. Lontar will not connect. If the change is expected, remove the old entry by hand from:{' '}
             {(info.known ?? []).join(', ')}
           </p>
         ) : (
@@ -57,7 +57,7 @@ export default function HostKeyDialog({ info, busy, onAccept, onCancel }: HostKe
             {info.fingerprintSHA256}
           </dd>
         </dl>
-        {!changed && <p className="hint">Trusted keys are saved in dbedit's own known_hosts file; ~/.ssh/known_hosts is never modified.</p>}
+        {!changed && <p className="hint">Trusted keys are saved in Lontar's own known_hosts file; ~/.ssh/known_hosts is never modified.</p>}
         <div className="dialog-actions">
           <span className="spacer" />
           <button ref={cancelRef} type="button" onClick={onCancel} disabled={busy}>

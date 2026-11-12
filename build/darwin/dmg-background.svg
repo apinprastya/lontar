@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  dbedit .dmg window background (original artwork, © 2026 dbedit contributors).
+  Lontar .dmg window background (original artwork, © 2026 Lontar contributors).
   540 x 380, matching the Finder window size used by `darwin:create:dmg`.
   The app icon sits at x = 28 % and the Applications link at x = 72 % of the
   width; the arrow points from one to the other. Rendered to

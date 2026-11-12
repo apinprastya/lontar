@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	dbdriver "dbedit/internal/driver"
-	"dbedit/internal/values"
+	dbdriver "lontar/internal/driver"
+	"lontar/internal/values"
 
 	gomysql "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"

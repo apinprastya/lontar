@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"dbedit/internal/values"
+	"lontar/internal/values"
 )
 
 // Value is one exported value at full precision.

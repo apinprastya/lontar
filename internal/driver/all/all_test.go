@@ -3,7 +3,7 @@ package all
 import (
 	"testing"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 func TestRegistryHasAllKinds(t *testing.T) {

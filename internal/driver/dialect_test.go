@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/testutil"
+	"lontar/internal/driver"
+	"lontar/internal/testutil"
 )
 
 func TestQuoteIdent(t *testing.T) {

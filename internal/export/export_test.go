@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/values"
+	"lontar/internal/driver"
+	"lontar/internal/values"
 )
 
 var (

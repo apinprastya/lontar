@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeDetail } from '../../test/structure'
 
-vi.mock('../../../bindings/dbedit/internal/services', () => import('../../test/mockBindings'))
+vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/mockBindings'))
 vi.mock('../../lib/clipboard', () => ({ copyText: vi.fn(async () => {}) }))
 vi.mock('@glideapps/glide-data-grid', async (importOriginal) => {
   const real = await importOriginal<typeof import('@glideapps/glide-data-grid')>()

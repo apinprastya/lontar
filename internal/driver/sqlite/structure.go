@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // master returns the quoted sqlite_master of schema. The schema must be an

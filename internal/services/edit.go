@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"dbedit/internal/edits"
-	"dbedit/internal/store"
+	"lontar/internal/edits"
+	"lontar/internal/store"
 )
 
 // ApplyResult is the outcome of EditService.Apply. A change set that was

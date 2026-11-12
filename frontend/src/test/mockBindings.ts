@@ -1,7 +1,7 @@
 /**
  * Shared mock of the generated Go service bindings. Use from a test with:
  *
- *   vi.mock('<relative path>/bindings/dbedit/internal/services', () => import('<relative path>/test/mockBindings'))
+ *   vi.mock('<relative path>/bindings/lontar/internal/services', () => import('<relative path>/test/mockBindings'))
  *
  * and import { ConnectionService, AppService, resetBindings } from this file.
  */

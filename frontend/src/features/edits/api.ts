@@ -1,4 +1,4 @@
-import { EditService } from '../../../bindings/dbedit/internal/services'
+import { EditService } from '../../../bindings/lontar/internal/services'
 import type { ApplyResult, ChangeSet, PreviewStatement } from './types'
 
 type BindingChangeSet = Parameters<typeof EditService.Preview>[1]

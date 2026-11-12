@@ -10,10 +10,10 @@ import (
 	"sync"
 	"testing"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/sqlite"
-	"dbedit/internal/sshtunnel"
-	"dbedit/internal/store"
+	"lontar/internal/driver"
+	"lontar/internal/driver/sqlite"
+	"lontar/internal/sshtunnel"
+	"lontar/internal/store"
 )
 
 type fakeTunnel struct {

@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/driver/mysql"
-	"dbedit/internal/driver/postgres"
-	"dbedit/internal/driver/sqlite"
-	"dbedit/internal/query"
-	"dbedit/internal/testutil"
-	"dbedit/internal/values"
+	"lontar/internal/driver"
+	"lontar/internal/driver/mysql"
+	"lontar/internal/driver/postgres"
+	"lontar/internal/driver/sqlite"
+	"lontar/internal/query"
+	"lontar/internal/testutil"
+	"lontar/internal/values"
 )
 
 func TestMain(m *testing.M) { os.Exit(testutil.Main(m)) }

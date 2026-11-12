@@ -9,7 +9,7 @@ vi.mock('../../lib/events', () => ({
     return () => listeners.delete(name)
   },
 }))
-vi.mock('../../../bindings/dbedit/internal/services', () => import('../../test/mockBindings'))
+vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/mockBindings'))
 
 import { ImportService, resetBindings } from '../../test/mockBindings'
 import { filesApi, type FilesApi, type ImportPreview, type ImportResult } from '../export/api'

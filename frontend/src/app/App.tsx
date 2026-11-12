@@ -72,7 +72,7 @@ export default function App() {
   return (
     <div className="app-shell" data-platform={platform}>
       <aside className="sidebar" aria-label="Sidebar">
-        <div className="sidebar-header">dbedit</div>
+        <div className="sidebar-header">Lontar</div>
         <p className="sidebar-empty">Not connected</p>
       </aside>
 

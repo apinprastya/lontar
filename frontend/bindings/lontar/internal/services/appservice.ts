@@ -15,12 +15,12 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
  * ("linux", "windows" or "darwin").
  */
 export function Platform(): $CancellablePromise<string> {
-    return $Call.ByID(3642253875);
+    return $Call.ByID(3032629301);
 }
 
 /**
  * Version returns the application version string.
  */
 export function Version(): $CancellablePromise<string> {
-    return $Call.ByID(4057841348);
+    return $Call.ByID(2378800986);
 }

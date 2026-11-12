@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 
 	gomysql "github.com/go-sql-driver/mysql"
 )

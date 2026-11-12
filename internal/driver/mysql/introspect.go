@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dbedit/internal/driver"
+	"lontar/internal/driver"
 )
 
 // SystemDatabases are hidden by ListDatabases unless includeSystem is set.

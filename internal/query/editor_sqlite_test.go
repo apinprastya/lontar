@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	dbdriver "dbedit/internal/driver"
-	"dbedit/internal/testutil"
+	dbdriver "lontar/internal/driver"
+	"lontar/internal/testutil"
 )
 
 // liteEditors returns an editor manager over a fresh SQLite database.

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	dbdriver "dbedit/internal/driver"
-	"dbedit/internal/driver/postgres"
-	"dbedit/internal/testutil"
+	dbdriver "lontar/internal/driver"
+	"lontar/internal/driver/postgres"
+	"lontar/internal/testutil"
 
 	gomysql "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"

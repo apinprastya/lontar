@@ -23,14 +23,14 @@ import * as $models from "./models.js";
  * Columns lists the columns of a table or view.
  */
 export function Columns(sessionID: string, schema: string, table: string): $CancellablePromise<driver$0.Column[] | null> {
-    return $Call.ByID(2418582883, sessionID, schema, table);
+    return $Call.ByID(2308614769, sessionID, schema, table);
 }
 
 /**
  * Current returns the session's current database and default schema.
  */
 export function Current(sessionID: string): $CancellablePromise<$models.Location> {
-    return $Call.ByID(358488701, sessionID);
+    return $Call.ByID(197021355, sessionID);
 }
 
 /**
@@ -38,28 +38,28 @@ export function Current(sessionID: string): $CancellablePromise<$models.Location
  * includeSystem).
  */
 export function ListDatabases(sessionID: string, includeSystem: boolean): $CancellablePromise<string[] | null> {
-    return $Call.ByID(3618360602, sessionID, includeSystem);
+    return $Call.ByID(3892137224, sessionID, includeSystem);
 }
 
 /**
  * ListSchemas lists the schemas of the current database.
  */
 export function ListSchemas(sessionID: string, includeSystem: boolean): $CancellablePromise<string[] | null> {
-    return $Call.ByID(3234260056, sessionID, includeSystem);
+    return $Call.ByID(1639283126, sessionID, includeSystem);
 }
 
 /**
  * ListTables lists the tables and views of a schema.
  */
 export function ListTables(sessionID: string, schema: string): $CancellablePromise<driver$0.Table[] | null> {
-    return $Call.ByID(857004533, sessionID, schema);
+    return $Call.ByID(3085386859, sessionID, schema);
 }
 
 /**
  * TableDDL returns the CREATE statement(s) of a table or view.
  */
 export function TableDDL(sessionID: string, schema: string, table: string): $CancellablePromise<string> {
-    return $Call.ByID(2143832056, sessionID, schema, table);
+    return $Call.ByID(661638550, sessionID, schema, table);
 }
 
 /**
@@ -67,7 +67,7 @@ export function TableDDL(sessionID: string, schema: string, table: string): $Can
  * indexes, foreign keys (both directions), checks, triggers and metadata.
  */
 export function TableInfo(sessionID: string, schema: string, table: string): $CancellablePromise<driver$0.TableDetail | null> {
-    return $Call.ByID(3651447392, sessionID, schema, table);
+    return $Call.ByID(3594536894, sessionID, schema, table);
 }
 
 /**
@@ -75,5 +75,5 @@ export function TableInfo(sessionID: string, schema: string, table: string): $Ca
  * unchanged) and returns the new location.
  */
 export function UseDatabase(sessionID: string, database: string): $CancellablePromise<$models.Location> {
-    return $Call.ByID(2229435614, sessionID, database);
+    return $Call.ByID(3128553600, sessionID, database);
 }

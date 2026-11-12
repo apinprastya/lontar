@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 
-	"dbedit/internal/services"
+	"lontar/internal/services"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )

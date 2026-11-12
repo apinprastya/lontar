@@ -1,6 +1,6 @@
-// Build-time helpers for dbedit (icon rendering, version stamping). This is a
+// Build-time helpers for Lontar (icon rendering, version stamping). This is a
 // separate module so its dependencies stay out of the application's go.mod.
-module dbedit/tools
+module lontar/tools
 
 go 1.26.0
 

@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	// database/sql drivers used by dbedit.
+	// database/sql drivers used by Lontar.
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
@@ -75,9 +75,9 @@ const (
 
 // Credentials used for every container.
 const (
-	dbName     = "dbedit"
-	dbUser     = "dbedit"
-	dbPassword = "dbedit"
+	dbName     = "lontar"
+	dbUser     = "lontar"
+	dbPassword = "lontar"
 )
 
 // Images are fully qualified so that Podman does not need short-name

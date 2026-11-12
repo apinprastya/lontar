@@ -22,7 +22,7 @@ import * as query$0 from "../query/models.js";
  * whether the request was still running.
  */
 export function CancelFetch(requestID: string): $CancellablePromise<boolean> {
-    return $Call.ByID(99509573, requestID);
+    return $Call.ByID(9465011, requestID);
 }
 
 /**
@@ -30,12 +30,12 @@ export function CancelFetch(requestID: string): $CancellablePromise<boolean> {
  * and Sort are ignored).
  */
 export function CountRows(sessionID: string, requestID: string, req: query$0.Request): $CancellablePromise<number> {
-    return $Call.ByID(3500354713, sessionID, requestID, req);
+    return $Call.ByID(829798679, sessionID, requestID, req);
 }
 
 /**
  * FetchTable returns one page of a table. See query.Request.
  */
 export function FetchTable(sessionID: string, requestID: string, req: query$0.Request): $CancellablePromise<query$0.Page | null> {
-    return $Call.ByID(2274211877, sessionID, requestID, req);
+    return $Call.ByID(3149013271, sessionID, requestID, req);
 }

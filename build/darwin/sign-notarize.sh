@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Developer ID signing and notarization for the macOS release (CI only).
 #
-#   sign-notarize.sh app <path/to/dbedit.app>   import the certificate into a
+#   sign-notarize.sh app <path/to/lontar.app>   import the certificate into a
 #       temporary keychain and sign the bundle (hardened runtime, timestamp,
 #       build/darwin/entitlements.plist)
-#   sign-notarize.sh dmg <path/to/dbedit.dmg>   sign the dmg and, when the Apple
+#   sign-notarize.sh dmg <path/to/lontar.dmg>   sign the dmg and, when the Apple
 #       ID secrets are present, notarize it with notarytool and staple it
 #   sign-notarize.sh cleanup                    delete the temporary keychain
 #
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
-KEYCHAIN="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/dbedit-signing.keychain-db"
+KEYCHAIN="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/lontar-signing.keychain-db"
 ENTITLEMENTS="build/darwin/entitlements.plist"
 
 need() {
@@ -38,7 +38,7 @@ identity() {
 
 case "${1:-}" in
 app)
-	app="${2:?usage: sign-notarize.sh app <dbedit.app>}"
+	app="${2:?usage: sign-notarize.sh app <lontar.app>}"
 	need MACOS_CERT_P12 MACOS_CERT_PASSWORD
 	kcpass="$(openssl rand -base64 24)"
 	security create-keychain -p "$kcpass" "$KEYCHAIN"
@@ -60,12 +60,12 @@ app)
 	echo "Signing $app as: $id"
 	xattr -cr "$app"
 	# Single-binary bundle: sign the executable, then the bundle (no --deep).
-	codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS" --sign "$id" "$app/Contents/MacOS/dbedit"
+	codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS" --sign "$id" "$app/Contents/MacOS/lontar"
 	codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS" --sign "$id" "$app"
 	codesign --verify --strict --verbose=2 "$app"
 	;;
 dmg)
-	dmg="${2:?usage: sign-notarize.sh dmg <dbedit.dmg>}"
+	dmg="${2:?usage: sign-notarize.sh dmg <lontar.dmg>}"
 	id="$(identity)"
 	if [ -z "$id" ]; then
 		echo "sign-notarize: run 'sign-notarize.sh app' first" >&2
@@ -86,7 +86,7 @@ cleanup)
 	security delete-keychain "$KEYCHAIN" 2>/dev/null || true
 	;;
 *)
-	echo "usage: sign-notarize.sh app <dbedit.app> | dmg <dbedit.dmg> | cleanup" >&2
+	echo "usage: sign-notarize.sh app <lontar.app> | dmg <lontar.dmg> | cleanup" >&2
 	exit 2
 	;;
 esac

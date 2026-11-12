@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"testing"
 
-	"dbedit/internal/driver/postgres"
-	"dbedit/internal/testutil"
+	"lontar/internal/driver/postgres"
+	"lontar/internal/testutil"
 )
 
 func TestIntrospection(t *testing.T) {

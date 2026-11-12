@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"dbedit/internal/driver"
-	"dbedit/internal/values"
+	"lontar/internal/driver"
+	"lontar/internal/values"
 )
 
 // Literal renders v as an SQL literal for kind's dialect. Unlike the
