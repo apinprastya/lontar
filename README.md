@@ -549,9 +549,9 @@ lontar/internal/services.Version=…`, shown in the status bar), the macOS
 `.deb`/`.rpm` metadata. It comes from:
 
 1. `LONTAR_VERSION` if set (a leading `v` is dropped), e.g.
-   `LONTAR_VERSION=v1.2.3 wails3 task package:linux`; otherwise
-2. `git describe --tags --always --dirty`: tag `v1.2.3` → `1.2.3`,
-   `v1.2.3-4-gabc1234` → `1.2.3-4-gabc1234`, an untagged commit →
+   `LONTAR_VERSION=v26.11.1 wails3 task package:linux`; otherwise
+2. `git describe --tags --always --dirty`: tag `v26.11.1` → `26.11.1`,
+   `v26.11.1-4-gabc1234` → `26.11.1-4-gabc1234`, an untagged commit →
    `0.0.0-dev+<hash>[-dirty]`; otherwise
 3. `0.0.0-dev` (no git), which is also the default of a plain `go build`.
 
@@ -602,18 +602,33 @@ icons`. Commit the results; builds do not re-render.
 
 ## Releasing
 
+Releases use calendar versioning: **`vYY.MM.MICRO`**, with the two-digit
+year, the month without a leading zero, and a counter that restarts at 1 every
+month (`v26.11.1`, `v26.11.2`, `v26.12.1`). A pre-release adds a suffix,
+`v26.11.3-rc.1`; it does not use up its number, so `v26.11.3` follows it.
+`tools/calver` checks the format; tags in any other format fail the release.
+
 1. Make sure CI is green on `main`.
-2. Tag and push: `git tag v1.2.3 && git push origin v1.2.3`.
-3. `.github/workflows/release.yml` runs the short tests on Linux, Windows and
-   macOS, builds every package stamped with `1.2.3`, signs what it has
-   secrets for, and creates a **draft** GitHub Release with the files and
-   `SHA256SUMS` (versions with a `-` are marked pre-release).
+2. Tag and push the next version:
+   ```sh
+   git fetch --tags
+   wails3 task release:next          # e.g. 26.11.2
+   git tag v26.11.2 && git push origin v26.11.2
+   ```
+3. `.github/workflows/release.yml` checks the version, runs the short tests
+   on Linux, Windows and macOS, builds every package stamped with `26.11.2`,
+   signs what it has secrets for, and creates a **draft** GitHub Release with
+   the files and `SHA256SUMS` (versions with a `-` are marked pre-release).
 4. Review the draft and publish it.
 
 The workflow can also be started by hand (**Actions → Release → Run
-workflow**) with an optional version; the draft then targets that commit
-with tag `v<version>`. `wails3 task release:checksums DIR=dist` writes the
-same `SHA256SUMS` locally.
+workflow**). If you leave the version empty, it uses the next number for the
+current month (UTC), based on the existing tags and releases. You can also
+enter a version such as `26.11.2-rc.1`. The draft targets the dispatched
+commit, with tag `v<version>`. The run fails if that tag or a release (even a
+draft) for it already exists, so publish or delete a draft before starting
+another run. `wails3 task release:checksums DIR=dist` writes the same
+`SHA256SUMS` locally.
 
 Signing is optional; each step is skipped when its secrets are missing:
 
@@ -633,7 +648,24 @@ macOS signs the app with the hardened runtime and
 `build/darwin/entitlements.plist` (only `com.apple.security.network.client`,
 Wails' production preset), then signs, notarizes (`notarytool`) and staples
 the dmg (`build/darwin/sign-notarize.sh`). With the certificate but no Apple
-ID secrets the dmg is signed but not notarized. The `.app` targets macOS 12
+ID secrets the dmg is signed but not notarized.
+
+Setting up the macOS secrets (Apple Developer account):
+
+1. In Xcode → Settings → Accounts → Manage Certificates (or on
+   developer.apple.com → Certificates) create a **Developer ID Application**
+   certificate. Note that this is not "Apple Development" or "Mac App
+   Distribution".
+2. In Keychain Access, export that certificate *with its private key* as a
+   `.p12` file, using a password. Store
+   `base64 -i DeveloperID.p12 | pbcopy` as `MACOS_CERT_P12` and the password
+   as `MACOS_CERT_PASSWORD`.
+3. On account.apple.com → Sign-In and Security → App-Specific Passwords,
+   create a password for `APPLE_APP_PASSWORD`. `APPLE_ID` is the account's
+   e-mail, and `APPLE_TEAM_ID` is the 10-character Team ID shown on
+   developer.apple.com → Membership.
+4. Add all five under **Settings → Secrets and variables → Actions** of the
+   GitHub repository. The `.app` targets macOS 12
 (`LSMinimumSystemVersion`, matching `-mmacosx-version-min=12.0`).
 
 **License:** [Apache License 2.0](LICENSE) (SPDX `Apache-2.0`). See also

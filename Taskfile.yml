@@ -98,6 +98,12 @@ tasks:
       - task: darwin:package:universal
       - task: darwin:create:dmg
 
+  release:next:
+    summary: Prints the next CalVer release (YY.MM.MICRO) for this month from the local tags (run `git fetch --tags` first)
+    silent: true
+    cmds:
+      - git tag -l 'v*' | go -C tools run ./calver next
+
   release:checksums:
     summary: Writes SHA256SUMS for every file in DIR (default dist)
     vars:

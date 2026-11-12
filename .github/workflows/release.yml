@@ -3,10 +3,14 @@ name: Release
 # Builds signed (when secrets exist) packages for every OS and attaches them,
 # with SHA256SUMS, to a DRAFT GitHub Release. Publishing the draft is manual.
 #
-# - push of a tag v* (e.g. v1.2.3): version = the tag without "v".
-# - workflow_dispatch: version = the "version" input, or `git describe`
-#   (0.0.0-dev+<hash> without tags); the draft gets the tag v<version> on the
-#   dispatched commit when it is published.
+# Versions are CalVer, vYY.MM.MICRO (e.g. v26.11.1; MICRO restarts at 1 every
+# month, pre-releases look like v26.11.2-rc.1). tools/calver checks the format.
+#
+# - push of a tag v* (e.g. v26.11.1): version = the tag without "v".
+# - workflow_dispatch: version = the "version" input, or, when empty, the next
+#   free number of the current month (UTC) computed from the existing tags and
+#   releases; the draft gets the tag v<version> on the dispatched commit when
+#   it is published.
 #
 # Optional secrets (each signing step is skipped when its secrets are absent):
 #   WINDOWS_CERT_PFX, WINDOWS_CERT_PASSWORD                      Authenticode
@@ -21,7 +25,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to stamp, e.g. 1.2.3-rc.1 (empty: git describe)"
+        description: "CalVer to release, e.g. 26.11.2 or 26.11.2-rc.1 (empty: next number of this month)"
         required: false
         default: ""
 
@@ -35,15 +39,55 @@ concurrency:
 env:
   WAILS_VERSION: v3.0.0
   NODE_VERSION: "24"
-  # Read by the root Taskfile (VERSION); empty means `git describe`.
-  LONTAR_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
 
 jobs:
-  linux:
-    name: Linux (AppImage, .deb, .rpm)
+  version:
+    name: Resolve CalVer version
     runs-on: ubuntu-24.04
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # all tags, for the next number
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: tools/go.mod
+          cache-dependency-path: tools/go.sum
+
+      - id: resolve
+        name: Resolve and validate version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          calver() { go -C tools run ./calver "$@"; }
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            v=$(calver check "$GITHUB_REF_NAME")
+          elif [ -n "$INPUT_VERSION" ]; then
+            v=$(calver check "$INPUT_VERSION")
+          else
+            v=$({ git tag -l 'v*'; gh release list --limit 1000 --json tagName -q '.[].tagName'; } | calver next)
+          fi
+          tag="v$v"
+          if [ "$GITHUB_REF_TYPE" != tag ] && git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::tag $tag already exists; push it to release it, or pick another version"
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "### Releasing $tag" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: $v (tag $tag)"
+
+  linux:
+    name: Linux (AppImage, .deb, .rpm)
+    needs: version
+    runs-on: ubuntu-24.04
+    env:
+      LONTAR_VERSION: ${{ needs.version.outputs.version }} # read by the root Taskfile
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -75,19 +119,18 @@ jobs:
           go test -short ./...
           (cd tools && go test ./...)
 
-      - id: version
-        name: Resolve version
+      - name: Check stamped version
         run: |
           v=$(wails3 task version 2>/dev/null | head -n1 | cut -d' ' -f1)
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "Version: $v"
+          echo "Taskfile VERSION: $v"
+          test "$v" = "$LONTAR_VERSION"
 
       - name: Build packages
         run: wails3 task package:linux
 
       - name: Collect artifacts
         env:
-          V: ${{ steps.version.outputs.version }}
+          V: ${{ needs.version.outputs.version }}
         run: |
           mkdir -p dist
           cp bin/lontar-x86_64.AppImage "dist/lontar-$V-linux-x86_64.AppImage"
@@ -104,8 +147,10 @@ jobs:
 
   windows:
     name: Windows (NSIS installer, portable zip)
+    needs: version
     runs-on: windows-latest
     env:
+      LONTAR_VERSION: ${{ needs.version.outputs.version }}
       HAVE_WINDOWS_SIGNING: ${{ secrets.WINDOWS_CERT_PFX != '' && secrets.WINDOWS_CERT_PASSWORD != '' }}
     defaults:
       run:
@@ -142,12 +187,11 @@ jobs:
           go test -short ./...
           (cd tools && go test ./...)
 
-      - id: version
-        name: Resolve version
+      - name: Check stamped version
         run: |
           v=$(wails3 task version 2>/dev/null | head -n1 | cut -d' ' -f1)
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "Version: $v"
+          echo "Taskfile VERSION: $v"
+          test "$v" = "$LONTAR_VERSION"
 
       - name: Build lontar.exe
         run: wails3 task windows:build
@@ -175,7 +219,7 @@ jobs:
       - name: Collect artifacts
         shell: pwsh
         env:
-          V: ${{ steps.version.outputs.version }}
+          V: ${{ needs.version.outputs.version }}
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item bin/lontar-amd64-installer.exe "dist/lontar-$env:V-windows-amd64-setup.exe"
@@ -190,8 +234,10 @@ jobs:
 
   macos:
     name: macOS (universal .dmg)
+    needs: version
     runs-on: macos-latest
     env:
+      LONTAR_VERSION: ${{ needs.version.outputs.version }}
       HAVE_MACOS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' && secrets.MACOS_CERT_PASSWORD != '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -217,12 +263,11 @@ jobs:
           go test -short ./...
           (cd tools && go test ./...)
 
-      - id: version
-        name: Resolve version
+      - name: Check stamped version
         run: |
           v=$(wails3 task version 2>/dev/null | head -n1 | cut -d' ' -f1)
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "Version: $v"
+          echo "Taskfile VERSION: $v"
+          test "$v" = "$LONTAR_VERSION"
 
       - name: Build universal lontar.app (amd64 + arm64)
         run: |
@@ -254,7 +299,7 @@ jobs:
 
       - name: Collect artifacts
         env:
-          V: ${{ steps.version.outputs.version }}
+          V: ${{ needs.version.outputs.version }}
         run: |
           mkdir -p dist
           cp bin/lontar.dmg "dist/lontar-$V-macos-universal.dmg"
@@ -268,7 +313,7 @@ jobs:
 
   release:
     name: Draft GitHub Release
-    needs: [linux, windows, macos]
+    needs: [version, linux, windows, macos]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -290,10 +335,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          V: ${{ needs.linux.outputs.version }}
+          V: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
         run: |
-          tag="${GITHUB_REF_NAME}"
-          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then tag="v$V"; fi
+          tag="$TAG"
+          # Also catches a draft left by an earlier run of the same version.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::a release for $tag already exists (maybe an unpublished draft); delete it or release another version"
+            exit 1
+          fi
           flags=(--draft --title "Lontar $V" --generate-notes --target "$GITHUB_SHA")
           case "$V" in *-*) flags+=(--prerelease) ;; esac
           gh release create "$tag" "${flags[@]}" dist/*
