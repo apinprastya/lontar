@@ -44,10 +44,20 @@ app)
 	security create-keychain -p "$kcpass" "$KEYCHAIN"
 	security set-keychain-settings -lut 21600 "$KEYCHAIN"
 	security unlock-keychain -p "$kcpass" "$KEYCHAIN"
-	p12="$(mktemp)"
-	trap 'rm -f "$p12"' EXIT
-	printf '%s' "$MACOS_CERT_P12" | base64 --decode >"$p12"
-	security import "$p12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+	tmp="$(mktemp -d)"
+	trap 'rm -rf "$tmp"' EXIT
+	p12="$tmp/cert.p12"
+	# Tolerate base64 that was wrapped or pasted with a trailing newline.
+	printf '%s' "$MACOS_CERT_P12" | tr -d ' \r\n' | base64 --decode >"$p12"
+	# A PKCS#12 file is DER: it starts with a SEQUENCE byte (0x30). Say so
+	# instead of letting `security` report an opaque "Unknown format".
+	if [ "$(head -c1 "$p12" | od -An -tx1 | tr -d ' \n')" != "30" ]; then
+		echo "sign-notarize: MACOS_CERT_P12 does not decode to a .p12 file (expected: base64 -w0 DeveloperID.p12)" >&2
+		exit 1
+	fi
+	# -f/-t explicitly: without them `security` guesses the format from the
+	# file name.
+	security import "$p12" -f pkcs12 -t agg -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
 	security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kcpass" "$KEYCHAIN" >/dev/null
 	# Search the temporary keychain first, keep the existing ones.
 	# shellcheck disable=SC2046
