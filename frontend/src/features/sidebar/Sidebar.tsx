@@ -3,6 +3,7 @@ import { copyText } from '../../lib/clipboard'
 import { ChevronIcon, MatViewIcon, RefreshIcon, TableIcon, ViewIcon } from '../../components/icons'
 import { useWorkspace } from '../../stores/workspace'
 import { KIND_LABELS, type Kind } from '../connections/types'
+import { EngineBadge } from '../../components/EngineLogo'
 import type { TableInfo } from '../workspace/types'
 import { formatEstimate, groupTables } from './tableList'
 
@@ -111,6 +112,7 @@ export default function Sidebar({ name, kind, color, badge, onSwitchConnection, 
           const body = (
             <>
               <span className="ws-conn-strip" style={color ? { background: color } : undefined} data-testid="conn-strip" />
+              <EngineBadge kind={kind} className="ws-conn-kind" />
               <span className="ws-conn-text">
                 <span className="ws-conn-name">
                   <strong>{name}</strong>

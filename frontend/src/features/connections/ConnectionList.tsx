@@ -1,6 +1,7 @@
 import type React from 'react'
 import { KeyboardEvent, RefObject, useMemo } from 'react'
-import { Connection, KIND_BADGES, KIND_LABELS, TAGS, connectionColor, connectionSummary } from './types'
+import { EngineBadge } from '../../components/EngineLogo'
+import { Connection, KIND_LABELS, TAGS, connectionColor, connectionSummary } from './types'
 
 export interface ConnectionListProps {
   connections: Connection[]
@@ -113,9 +114,7 @@ export default function ConnectionList({
                 onDoubleClick={() => onConnect(c.id)}
               >
                 <span className="color-strip" style={color ? { background: color } : undefined} data-testid="color-strip" />
-                <span className={`kind-badge kind-${c.kind}`} title={KIND_LABELS[c.kind]}>
-                  {KIND_BADGES[c.kind]}
-                </span>
+                <EngineBadge kind={c.kind} />
                 <span className="connection-text">
                   <span className="connection-name">{c.name}</span>
                   <span className="connection-summary mono">{connectionSummary(c)}</span>

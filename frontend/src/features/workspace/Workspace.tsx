@@ -5,7 +5,7 @@ import ExportDialog from '../export/ExportDialog'
 import ImportWizard from '../import/ImportWizard'
 import CommandPalette, { type PaletteConnection, type PaletteMode, type PaletteTable } from '../palette/CommandPalette'
 import HostKeyDialog from '../connections/HostKeyDialog'
-import { KIND_BADGES, connectionSummary } from '../connections/types'
+import { connectionSummary } from '../connections/types'
 import { commandAvailable, runCommand } from '../palette/commands'
 import { resultEditView } from '../../stores/queryTabs'
 import { editorApi, type EditorApi } from '../editor/api'
@@ -197,7 +197,6 @@ function WorkspaceView({
   const paletteConnections: PaletteConnection[] = connections.map((c) => ({
     id: c.id,
     name: c.name,
-    badge: KIND_BADGES[c.kind],
     kind: c.kind,
     summary: connectionSummary(c),
     color: connectionColor(c),
@@ -323,6 +322,7 @@ function WorkspaceView({
               )}
               <span className="spacer" />
               <ToolButton
+                className="danger-tool"
                 label="Disconnect"
                 title="Disconnect this connection"
                 icon={<UnplugIcon />}

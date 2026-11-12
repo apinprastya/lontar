@@ -1,4 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
+import { EngineBadge } from '../../components/EngineLogo'
 import { errorMessage } from '../../lib/errors'
 import { hostKeyInfo, type HostKeyInfo } from '../../lib/hostkey'
 import { SAFE_MODES, type SafeMode } from '../edits/types'
@@ -534,13 +535,16 @@ export default function ConnectionForm({
 
         <div className="form-grid" hidden={tab !== 'general'}>
           <label htmlFor={field('kind')}>Type</label>
-          <select id={field('kind')} value={draft.kind} onChange={(e) => changeKind(e.target.value as Kind)}>
-            {kinds.map((k) => (
-              <option key={k} value={k}>
-                {drivers.find((d) => d.kind === k)?.displayName ?? KIND_LABELS[k]}
-              </option>
-            ))}
-          </select>
+          <div className="kind-field">
+            <EngineBadge kind={draft.kind} className="kind-field-badge" />
+            <select id={field('kind')} value={draft.kind} onChange={(e) => changeKind(e.target.value as Kind)}>
+              {kinds.map((k) => (
+                <option key={k} value={k}>
+                  {drivers.find((d) => d.kind === k)?.displayName ?? KIND_LABELS[k]}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <label htmlFor={field('name')}>Name</label>
           <div className="field">

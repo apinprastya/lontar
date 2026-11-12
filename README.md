@@ -615,3 +615,8 @@ ID secrets the dmg is signed but not notarized. The `.app` targets macOS 12
 
 **License:** not chosen yet (TODO). The packages carry an empty license field
 until it is.
+
+**Database logos:** the PostgreSQL, MySQL, MariaDB and SQLite logos shown next
+to connections come from [Simple Icons](https://simpleicons.org) (`simple-icons`,
+CC0-1.0). The logos are trademarks of their respective owners and are used only
+to identify the database engine of a connection.

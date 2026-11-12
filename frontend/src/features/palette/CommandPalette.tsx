@@ -1,6 +1,8 @@
 import { Command } from 'cmdk'
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { isModPressed } from '../../lib/mod'
+import { EngineBadge } from '../../components/EngineLogo'
+import type { Kind } from '../connections/types'
 import { commands, shortcutText, type Shortcut } from '../workspace/keymap'
 import type { TableType } from '../workspace/types'
 
@@ -10,9 +12,8 @@ export type PaletteMode = 'tables' | 'commands' | 'connections'
 export interface PaletteConnection {
   id: string
   name: string
-  /** Short engine badge ("PG") and its CSS kind. */
-  badge: string
-  kind: string
+  /** Database engine (its logo is shown). */
+  kind: Kind
   summary: string
   color: string
   /** The connection of the active session. */
@@ -180,9 +181,7 @@ export default function CommandPalette({
                   onSelect={() => (c.current ? onClose() : onConnect?.(c.id))}
                 >
                   <span className="palette-conn-color" style={c.color ? { background: c.color } : undefined} aria-hidden />
-                  <span className={`kind-badge palette-conn-kind kind-${c.kind}`} aria-hidden>
-                    {c.badge}
-                  </span>
+                  <EngineBadge kind={c.kind} className="palette-conn-kind" />
                   <span className="palette-name">
                     {c.name}
                     <span className="palette-meta palette-conn-summary"> {c.summary}</span>

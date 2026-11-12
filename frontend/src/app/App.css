@@ -574,17 +574,37 @@ input[type='radio']:focus-visible {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), inset 0 -8px 16px rgba(0, 0, 0, 0.12);
 }
 
+/* Brand colours of the engine logos (see components/EngineLogo.tsx). */
 .kind-postgres {
-  background: #336791;
+  background: #4169e1;
 }
 .kind-mysql {
-  background: #00758f;
+  background: #4479a1;
 }
 .kind-mariadb {
-  background: #a0522d;
+  background: #003545;
 }
 .kind-sqlite {
-  background: #4b7a3d;
+  background: #003b57;
+}
+
+/* The logo sits white on the tile, about 60% of its size. */
+.kind-badge .engine-logo {
+  width: 60%;
+  height: 60%;
+  color: #fff;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .connection-text {
@@ -2584,4 +2604,49 @@ textarea.cell-editor-input {
 .ws-toolbar,
 .query-toolbar {
   min-height: 42px;
+}
+
+/* ---- Engine logos in context ----------------------------------------------- */
+
+.kind-badge {
+  position: relative;
+}
+
+.kind-badge.ws-conn-kind {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.kind-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kind-field select {
+  flex: 1;
+}
+
+.kind-badge.kind-field-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+/* MySQL's mark includes its wordmark: give it more of the tile. */
+.kind-badge.kind-mysql .engine-logo {
+  width: 82%;
+  height: 82%;
+}
+
+/* Destructive toolbar action (Disconnect): red icon, red tint on hover. */
+.ws-toolbar button.danger-tool {
+  color: var(--danger);
+}
+
+.ws-toolbar button.danger-tool:hover:not(:disabled) {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { within, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -38,7 +38,11 @@ describe('ConnectionList', () => {
     const items = screen.getAllByRole('option')
     expect(items).toHaveLength(3)
     expect(items[0]).toHaveTextContent('Analytics')
-    expect(items[0]).toHaveTextContent('PG')
+    // The engine shows as its logo, named for screen readers.
+    const badge = within(items[0]).getByTestId('engine-badge')
+    expect(badge).toHaveAttribute('data-kind', 'postgres')
+    expect(badge.querySelector('svg path')).not.toBeNull()
+    expect(badge).toHaveTextContent('PostgreSQL')
     expect(items[0]).toHaveTextContent('pg.internal:5432/warehouse')
     expect(items[0]).toHaveTextContent('Production')
     expect(items[0]).toHaveTextContent('Connecting…')
