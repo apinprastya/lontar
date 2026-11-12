@@ -951,7 +951,8 @@ export function createWorkspaceStore(
       closeConfirm: null,
 
       activateTab(id) {
-        if (findTab(id)) set({ activeTabId: id })
+        // Any tab: table or query (findTab only finds table tabs).
+        if (get().tabs.some((t) => t.id === id)) set({ activeTabId: id })
       },
 
       activateIndex(index) {
