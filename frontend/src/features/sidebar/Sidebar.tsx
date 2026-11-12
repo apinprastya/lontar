@@ -16,6 +16,8 @@ export interface SidebarProps {
   onSwitchConnection?(): void
   /** Shortcut label of the switcher, e.g. "Ctrl+K". */
   switchHint?: string
+  /** Number of open connections (shown when more than one). */
+  openCount?: number
 }
 
 /** Open context menu of a sidebar table. */
@@ -92,7 +94,7 @@ function TableItem({ t, active, onMenu }: { t: TableInfo; active: boolean; onMen
  * Workspace sidebar: connection header, database/schema switchers, search
  * and the grouped table/view list.
  */
-export default function Sidebar({ name, kind, color, badge, onSwitchConnection, switchHint }: SidebarProps) {
+export default function Sidebar({ name, kind, color, badge, onSwitchConnection, switchHint, openCount = 1 }: SidebarProps) {
   const s = useWorkspace((st) => st)
   const active = s.tabs.find((t) => t.id === s.activeTabId)
   const groups = useMemo(() => groupTables(s.tables, s.search), [s.tables, s.search])
@@ -104,28 +106,43 @@ export default function Sidebar({ name, kind, color, badge, onSwitchConnection, 
 
   return (
     <aside className="ws-sidebar" aria-label="Sidebar">
-      <div className="ws-conn">
-        <span className="ws-conn-strip" style={color ? { background: color } : undefined} data-testid="conn-strip" />
-        <div className="ws-conn-text">
-          {onSwitchConnection ? (
+      <div className={`ws-conn${onSwitchConnection ? ' switchable' : ''}`}>
+        {(() => {
+          const body = (
+            <>
+              <span className="ws-conn-strip" style={color ? { background: color } : undefined} data-testid="conn-strip" />
+              <span className="ws-conn-text">
+                <span className="ws-conn-name">
+                  <strong>{name}</strong>
+                  {openCount > 1 && (
+                    <span className="ws-conn-count" title={`${openCount} connections open`} data-testid="open-count">
+                      {openCount}
+                    </span>
+                  )}
+                </span>
+                <span className="muted">
+                  {KIND_LABELS[kind] ?? kind} {badge}
+                </span>
+              </span>
+            </>
+          )
+          // The whole card opens the connection switcher.
+          return onSwitchConnection ? (
             <button
               type="button"
-              className="ws-conn-switch"
+              className="ws-conn-card"
               onClick={onSwitchConnection}
               title={`Switch connection${switchHint ? ` (${switchHint})` : ''}`}
               aria-label={`${name}: switch connection`}
             >
-              <strong>{name}</strong>
+              {body}
               <ChevronIcon className="icon ws-conn-chevron" />
             </button>
           ) : (
-            <strong>{name}</strong>
-          )}
-          <span className="muted">
-            {KIND_LABELS[kind] ?? kind} {badge}
-          </span>
-        </div>
-        <button type="button" className="icon-button" aria-label="Refresh table list" title="Refresh" onClick={() => void s.refreshTables()}>
+            <div className="ws-conn-card">{body}</div>
+          )
+        })()}
+        <button type="button" className="icon-button ws-conn-refresh" aria-label="Refresh table list" title="Refresh" onClick={() => void s.refreshTables()}>
           <RefreshIcon />
         </button>
       </div>

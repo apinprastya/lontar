@@ -15,8 +15,10 @@ export interface PaletteConnection {
   kind: string
   summary: string
   color: string
-  /** The connection of the open session. */
+  /** The connection of the active session. */
   current: boolean
+  /** Its open session (null: not connected). */
+  sessionId: string | null
 }
 
 /** A table or view offered by quick open. */
@@ -49,6 +51,8 @@ export interface CommandPaletteProps {
   /** Why the last switch failed. */
   connectError?: string | null
   onConnect?(id: string): void
+  /** Disconnects an open background session. */
+  onDisconnect?(sessionId: string): void
 }
 
 const PLACEHOLDERS: Record<PaletteMode, string> = {
@@ -56,6 +60,11 @@ const PLACEHOLDERS: Record<PaletteMode, string> = {
   commands: 'Run a command…',
   connections: 'Switch to a connection…',
 }
+/** Sort key of a connection in the switcher: current, open, the rest. */
+function rank(c: PaletteConnection): number {
+  return c.current ? 0 : c.sessionId ? 1 : 2
+}
+
 const LABELS: Record<PaletteMode, string> = { tables: 'Open table', commands: 'Commands', connections: 'Switch connection' }
 const EMPTY: Record<PaletteMode, string> = {
   tables: 'No matching table or view.',
@@ -89,6 +98,7 @@ export default function CommandPalette({
   connectingId = null,
   connectError = null,
   onConnect,
+  onDisconnect,
 }: CommandPaletteProps) {
   const [search, setSearch] = useState('')
   const [value, setValue] = useState('')
@@ -160,7 +170,8 @@ export default function CommandPalette({
           <Command.Empty>{EMPTY[mode]}</Command.Empty>
           {mode === 'connections' ? (
             <Command.Group heading="Saved connections">
-              {connections.map((c) => (
+              {/* Open connections first, the current one on top. */}
+              {[...connections].sort((a, b) => rank(a) - rank(b)).map((c) => (
                 <Command.Item
                   key={c.id}
                   value={`conn:${c.id}`}
@@ -176,7 +187,25 @@ export default function CommandPalette({
                     {c.name}
                     <span className="palette-meta palette-conn-summary"> {c.summary}</span>
                   </span>
-                  {c.current && <span className="palette-meta">Connected</span>}
+                  {c.current && <span className="palette-meta palette-conn-state current">Current</span>}
+                  {!c.current && c.sessionId && (
+                    <>
+                      <span className="palette-meta palette-conn-state">Connected</span>
+                      <button
+                        type="button"
+                        className="palette-conn-close"
+                        aria-label={`Disconnect ${c.name}`}
+                        title="Disconnect"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (c.sessionId) onDisconnect?.(c.sessionId)
+                        }}
+                      >
+                        ×
+                      </button>
+                    </>
+                  )}
                   {connectingId === c.id && <span className="palette-meta">Connecting…</span>}
                 </Command.Item>
               ))}

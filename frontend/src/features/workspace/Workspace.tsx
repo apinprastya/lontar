@@ -78,7 +78,29 @@ function usePaletteTables(store: WorkspaceStore, api: WorkspaceApi, open: boolea
   return { tables, loading }
 }
 
-function WorkspaceView({ platform, store, editor, api }: { platform?: string; store: WorkspaceStore; editor: EditorApi; api: WorkspaceApi }) {
+/** Number of staged changes in all tabs of a workspace store. */
+export function stagedChanges(store: WorkspaceStore | undefined): number {
+  if (!store) return 0
+  return store.getState().tabs.reduce((n, t) => {
+    if (t.kind === 'table') return n + pendingCount(t.pending)
+    return n + (t.edit ? pendingCount(t.edit.pending) : 0)
+  }, 0)
+}
+
+function WorkspaceView({
+  platform,
+  store,
+  editor,
+  api,
+  storeOf,
+}: {
+  platform?: string
+  store: WorkspaceStore
+  editor: EditorApi
+  api: WorkspaceApi
+  /** The workspace store of another open session. */
+  storeOf(sessionId: string): WorkspaceStore | undefined
+}) {
   const session = useConnections((s) => s.session)
   const connection = useConnections((s) => s.connections.find((c) => c.id === s.session?.connectionId))
   const disconnect = useConnections((s) => s.disconnect)
@@ -88,6 +110,8 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
   const connError = useConnections((s) => s.error)
   const clearConnError = useConnections((s) => s.clearError)
   const hostKey = useConnections((s) => s.hostKey)
+  const openSessions = useConnections((s) => s.sessions)
+  const [closeSessionAsk, setCloseSession] = useState<{ id: string; changes: number } | null>(null)
   const acceptHostKey = useConnections((s) => s.acceptHostKey)
   const dismissHostKey = useConnections((s) => s.dismissHostKey)
   const tab = useActiveTab()
@@ -104,7 +128,7 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
   const [palette, setPalette] = useState<PaletteMode | null>(null)
   const paletteTables = usePaletteTables(store, api, palette === 'tables')
   // Overlays (palette, dialogs) own the keyboard while open.
-  const overlay = Boolean(palette || exportRequest || importRequest || closeConfirm || hostKey)
+  const overlay = Boolean(palette || exportRequest || importRequest || closeConfirm || hostKey || closeSessionAsk)
   const overlayRef = useRef(overlay)
   overlayRef.current = overlay
   const openSwitcher = () => {
@@ -140,20 +164,23 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
    * Switches to another saved connection. Staged edits are committed or
    * discarded first; a failed connect keeps this session (and shows why).
    */
-  const switchTo = (id: string) => {
-    const go = async () => {
-      // Success, or a host key to confirm: the palette makes way. A plain
-      // failure keeps it open with the reason.
-      const ok = await connect(id)
-      setPalette(ok || useConnections.getState().hostKey ? null : 'connections')
-    }
-    const st = store.getState()
-    st.guarded(
-      st.tabs.map((t) => t.id),
-      () => void go(),
-    )
-    // Staged edits: the unsaved-changes prompt takes over from the palette.
-    if (store.getState().guard) setPalette(null)
+  /**
+   * Switches to another saved connection: its open session, or a new one.
+   * This session stays connected with its tabs; a failed connect keeps it
+   * active (and shows why).
+   */
+  const switchTo = async (id: string) => {
+    const ok = await connect(id)
+    // Success, or a host key to confirm: the palette makes way.
+    if (!ok) setPalette(useConnections.getState().hostKey ? null : 'connections')
+  }
+  /** Disconnects a background session, asking first if it has staged edits. */
+  const closeSession = (sessionId: string) => {
+    const n = stagedChanges(storeOf(sessionId))
+    if (n > 0) {
+      setPalette(null)
+      setCloseSession({ id: sessionId, changes: n })
+    } else void disconnect(sessionId)
   }
   const paletteConnections: PaletteConnection[] = connections.map((c) => ({
     id: c.id,
@@ -163,6 +190,7 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
     summary: connectionSummary(c),
     color: connectionColor(c),
     current: c.id === session?.connectionId,
+    sessionId: openSessions.find((x) => x.connectionId === c.id)?.id ?? null,
   }))
 
   const commandContext = {
@@ -212,6 +240,7 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
         <Panel id="sidebar" defaultSize={240} minSize={160} maxSize={480}>
           <Sidebar
             onSwitchConnection={openSwitcher}
+            openCount={Math.max(openSessions.length, 1)}
             switchHint={shortcutLabel(platform, 'K')}
             name={session.name}
             kind={kind}
@@ -337,6 +366,19 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
           onClose={() => store.getState().closePreview(tab.id)}
         />
       )}
+      {closeSessionAsk && (
+        <ConfirmDialog
+          title="Disconnect with unsaved changes?"
+          message={`That connection has ${closeSessionAsk.changes} staged change${closeSessionAsk.changes === 1 ? '' : 's'} that were not committed. Disconnecting discards them.`}
+          confirmLabel="Discard and disconnect"
+          danger
+          onConfirm={() => {
+            void disconnect(closeSessionAsk.id)
+            setCloseSession(null)
+          }}
+          onCancel={() => setCloseSession(null)}
+        />
+      )}
       {hostKey && <HostKeyDialog info={hostKey.info} busy={hostKey.busy} onAccept={() => void acceptHostKey()} onCancel={dismissHostKey} />}
       {guard && <UnsavedDialog count={guardCount} busy={guard.busy} onChoose={(c) => void store.getState().resolveGuard(c)} />}
       {palette && (
@@ -351,7 +393,8 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
           connections={paletteConnections}
           connectingId={connectingId}
           connectError={connError}
-          onConnect={switchTo}
+          onConnect={(id) => void switchTo(id)}
+          onDisconnect={closeSession}
           onOpenTable={(t, view) => {
             setPalette(null)
             store.getState().openTableView(t.schema, t.name, view)
@@ -393,25 +436,45 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
  */
 export default function Workspace({ platform, api = workspaceApi, editor = editorApi, edits = editApi }: WorkspaceProps) {
   const session = useConnections((s) => s.session)
-  const sessionId = session?.id
-  const kind = session?.kind
-  const connectionId = session?.connectionId
-  const safeMode = session?.safeMode
-  const store = useMemo(
-    () => (sessionId && kind ? createWorkspaceStore({ id: sessionId, kind, connectionId, safeMode }, api, editor, edits) : null),
-    [sessionId, kind, connectionId, safeMode, api, editor, edits],
-  )
+  // One store per open session: switching keeps each session's tabs,
+  // results and staged edits. A store is disposed when its session closes.
+  const stores = useRef(new Map<string, WorkspaceStore>())
+  const inited = useRef(new WeakSet<WorkspaceStore>())
+  let store: WorkspaceStore | null = null
+  if (session) {
+    store = stores.current.get(session.id) ?? null
+    if (!store) {
+      const { id, kind, connectionId, safeMode } = session
+      store = createWorkspaceStore({ id, kind, connectionId, safeMode }, api, editor, edits)
+      stores.current.set(id, store)
+    }
+  }
 
   useEffect(() => {
-    if (!store) return
-    void store.getState().init()
-    return () => store.getState().dispose()
+    if (store && !inited.current.has(store)) {
+      inited.current.add(store)
+      void store.getState().init()
+    }
   }, [store])
 
-  if (!store) return null
+  useEffect(
+    () =>
+      useConnections.subscribe((s) => {
+        const open = new Set(s.sessions.map((x) => x.id))
+        if (s.session) open.add(s.session.id)
+        for (const [id, st] of stores.current) {
+          if (open.has(id)) continue
+          st.getState().dispose()
+          stores.current.delete(id)
+        }
+      }),
+    [],
+  )
+
+  if (!store || !session) return null
   return (
     <WorkspaceContext.Provider value={store}>
-      <WorkspaceView platform={platform} store={store} editor={editor} api={api} />
+      <WorkspaceView key={session.id} platform={platform} store={store} editor={editor} api={api} storeOf={(id) => stores.current.get(id)} />
     </WorkspaceContext.Provider>
   )
 }

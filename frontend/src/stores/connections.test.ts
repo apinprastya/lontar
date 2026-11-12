@@ -164,24 +164,40 @@ describe('SSH host keys on connect', () => {
     expect(ConnectionService.AcceptHostKey).toHaveBeenLastCalledWith('b', 'SHA256:x')
   })
 
-  it('switches: the old session closes only after the new one connected', async () => {
-    useConnections.setState({ session: makeSession() }) // s1 for c1
-    // The same connection: nothing to do.
+  it('keeps several sessions open and switches between them', async () => {
+    ConnectionService.Connect.mockImplementation(async (id: string) => makeSession({ id: `s-${id}`, connectionId: id }))
+    ConnectionService.Disconnect.mockResolvedValue()
     expect(await st().connect('c1')).toBe(true)
-    expect(ConnectionService.Connect).not.toHaveBeenCalled()
-
-    // A failed switch keeps the current session.
-    ConnectionService.Connect.mockRejectedValueOnce(new Error('no route to host'))
-    expect(await st().connect('c2')).toBe(false)
-    expect(st().session?.id).toBe('s1')
+    expect(await st().connect('c2')).toBe(true)
+    expect(st().sessions.map((x) => x.id)).toEqual(['s-c1', 's-c2'])
+    expect(st().session?.id).toBe('s-c2')
     expect(ConnectionService.Disconnect).not.toHaveBeenCalled()
 
-    ConnectionService.Connect.mockResolvedValueOnce(makeSession({ id: 's2', connectionId: 'c2' }))
-    ConnectionService.Disconnect.mockRejectedValueOnce(new Error('already closed'))
-    expect(await st().connect('c2')).toBe(true)
-    expect(st().session?.id).toBe('s2')
-    expect(ConnectionService.Disconnect).toHaveBeenCalledWith('s1')
-    await new Promise((r) => setTimeout(r, 0))
-    expect(st().error).toBe('already closed')
+    // An open connection is brought back without connecting again.
+    expect(await st().connect('c1')).toBe(true)
+    expect(ConnectionService.Connect).toHaveBeenCalledTimes(2)
+    expect(st().session?.id).toBe('s-c1')
+    st().activate('s-c2')
+    expect(st().session?.id).toBe('s-c2')
+    st().activate('nope')
+    expect(st().session?.id).toBe('s-c2')
+
+    // A failed connect keeps the active session.
+    ConnectionService.Connect.mockRejectedValueOnce(new Error('no route to host'))
+    expect(await st().connect('c3')).toBe(false)
+    expect(st().session?.id).toBe('s-c2')
+
+    // Closing a background session leaves the active one; closing the
+    // active one activates the last opened remaining session.
+    await st().connect('c3')
+    await st().disconnect('s-c1')
+    expect(st().session?.id).toBe('s-c3')
+    expect(st().sessions.map((x) => x.id)).toEqual(['s-c2', 's-c3'])
+    await st().disconnect()
+    expect(ConnectionService.Disconnect).toHaveBeenLastCalledWith('s-c3')
+    expect(st().session?.id).toBe('s-c2')
+    await st().disconnect()
+    expect(st().session).toBeNull()
+    expect(st().sessions).toEqual([])
   })
 })

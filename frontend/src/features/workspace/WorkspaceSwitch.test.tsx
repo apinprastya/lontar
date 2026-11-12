@@ -65,28 +65,41 @@ describe('switching connections from the workspace', () => {
     useConnections.setState({
       ...initialConnectionsState,
       session: makeSession(),
+      sessions: [makeSession()],
       connections: [makeConnection({ id: 'c1', name: 'Production' }), makeConnection({ id: 'c2', name: 'Staging', color: '#ff0000' })],
     })
   })
   afterEach(cleanup)
 
-  it('switches with Mod+K, closing the old session after the new one opens', async () => {
+  it('switches with Mod+K and keeps the other connection open with its tabs', async () => {
     const user = userEvent.setup()
     render(<Workspace api={api} platform="linux" editor={fakeEditorApi()} />)
-    await screen.findByRole('button', { name: /^users/ })
+    await user.click(await screen.findByRole('button', { name: /^users/ }))
+    expect(await screen.findByRole('tab', { name: /users/ })).toBeInTheDocument()
     expect(key('k').defaultPrevented).toBe(true)
-    const p = palette()!
-    expect(within(p).getByText('Production').closest('[cmdk-item]')).toHaveTextContent('Connected')
+    expect(within(palette()!).getByText('Production').closest('[cmdk-item]')).toHaveTextContent('Current')
 
     ConnectionService.Connect.mockResolvedValueOnce(makeSession({ id: 's2', connectionId: 'c2', name: 'Staging' }))
     await user.keyboard('stag{Enter}')
     await waitFor(() => expect(useConnections.getState().session?.id).toBe('s2'))
     expect(ConnectionService.Connect).toHaveBeenCalledWith('c2')
-    expect(ConnectionService.Disconnect).toHaveBeenCalledWith('s1')
+    expect(ConnectionService.Disconnect).not.toHaveBeenCalled()
     expect(palette()).toBeNull()
-    // The workspace reloads for the new session.
+    // The workspace loads the new session; Production keeps running.
     await waitFor(() => expect(api.current).toHaveBeenCalledWith('s2'))
     expect(screen.getByRole('button', { name: 'Staging: switch connection' })).toBeInTheDocument()
+    expect(screen.getByTestId('open-count')).toHaveTextContent('2')
+    expect(screen.queryByRole('tab', { name: /users/ })).toBeNull()
+
+    // Back to Production: no reconnect, the tab is still open.
+    key('k')
+    const prod = within(palette()!).getByText('Production').closest('[cmdk-item]') as HTMLElement
+    expect(prod).toHaveTextContent('Connected')
+    await user.click(within(prod).getByText('Production'))
+    expect(useConnections.getState().session?.id).toBe('s1')
+    expect(ConnectionService.Connect).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('tab', { name: /users/ })).toBeInTheDocument()
+    expect((api.current.mock.calls as unknown as string[][]).filter(([sid]) => sid === 's1')).toHaveLength(1)
   })
 
   it('opens from the sidebar header and the command palette; the current connection just closes it', async () => {
@@ -128,23 +141,68 @@ describe('switching connections from the workspace', () => {
     expect(within(palette()!).queryByRole('alert')).toBeNull()
   })
 
-  it('asks to commit or discard staged edits first', async () => {
+  it('keeps staged edits across switches and asks before disconnecting them', async () => {
     const user = userEvent.setup()
     render(<Workspace api={api} platform="linux" editor={fakeEditorApi()} />)
     await user.click(await screen.findByRole('button', { name: /^users/ }))
     await screen.findByTestId('fake-grid')
-    // Stage an insert in the table tab.
-    key('n')
+    key('n') // stage an insert
     await screen.findByTestId('pending')
 
     key('k')
-    ConnectionService.Connect.mockResolvedValueOnce(makeSession({ id: 's2', connectionId: 'c2' }))
+    ConnectionService.Connect.mockResolvedValueOnce(makeSession({ id: 's2', connectionId: 'c2', name: 'Staging' }))
     await user.click(within(palette()!).getByText('Staging'))
-    expect(palette()).toBeNull()
-    const dialog = await screen.findByRole('alertdialog')
-    expect(ConnectionService.Connect).not.toHaveBeenCalled()
-    await user.click(within(dialog).getByRole('button', { name: /discard/i }))
     await waitFor(() => expect(useConnections.getState().session?.id).toBe('s2'))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+
+    // Disconnecting Production from the switcher would drop its edit: ask.
+    key('k')
+    await user.click(within(palette()!).getByRole('button', { name: 'Disconnect Production' }))
+    expect(useConnections.getState().session?.id).toBe('s2') // the click did not switch
+    expect(palette()).toBeNull()
+    const ask = await screen.findByRole('alertdialog')
+    expect(ask).toHaveTextContent('1 staged change')
+    await user.click(within(ask).getByRole('button', { name: 'Cancel' }))
+    expect(ConnectionService.Disconnect).not.toHaveBeenCalled()
+
+    // Switching back shows the staged edit, still pending.
+    key('k')
+    await user.click(within(palette()!).getByText('Production'))
+    expect(await screen.findByTestId('pending')).toHaveTextContent('1 pending change')
+
+    // Back on Staging, disconnect Production for real.
+    key('k')
+    await user.click(within(palette()!).getByText('Staging'))
+    key('k')
+    await user.click(within(palette()!).getByRole('button', { name: 'Disconnect Production' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Discard and disconnect' }))
+    expect(ConnectionService.Disconnect).toHaveBeenCalledWith('s1')
+    expect(useConnections.getState().sessions.map((x) => x.id)).toEqual(['s2'])
+    expect(screen.queryByTestId('open-count')).toBeNull()
+  })
+
+  it('disconnects a clean background session at once, and the toolbar Disconnect falls back to it', async () => {
+    const user = userEvent.setup()
+    render(<Workspace api={api} platform="linux" editor={fakeEditorApi()} />)
+    await screen.findByRole('button', { name: /^users/ })
+    key('k')
+    ConnectionService.Connect.mockResolvedValueOnce(makeSession({ id: 's2', connectionId: 'c2', name: 'Staging' }))
+    await user.click(within(palette()!).getByText('Staging'))
+    await waitFor(() => expect(useConnections.getState().session?.id).toBe('s2'))
+
+    // The toolbar Disconnect closes Staging and shows Production again.
+    await user.click(screen.getByRole('button', { name: 'Disconnect' }))
+    expect(ConnectionService.Disconnect).toHaveBeenCalledWith('s2')
+    expect(await screen.findByRole('button', { name: 'Production: switch connection' })).toBeInTheDocument()
+
+    ConnectionService.Connect.mockResolvedValueOnce(makeSession({ id: 's3', connectionId: 'c2', name: 'Staging' }))
+    key('k')
+    await user.click(within(palette()!).getByText('Staging'))
+    await waitFor(() => expect(useConnections.getState().session?.id).toBe('s3'))
+    key('k')
+    await user.click(within(palette()!).getByRole('button', { name: 'Disconnect Production' }))
+    expect(ConnectionService.Disconnect).toHaveBeenCalledWith('s1')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
   it('asks about an unknown SSH host key inside the workspace', async () => {

@@ -19,6 +19,8 @@ export interface ConnectionsState {
   error: string | null
   /** The active session; null shows the welcome screen. */
   session: SessionInfo | null
+  /** Every open session (the active one included), in the order opened. */
+  sessions: SessionInfo[]
   /** Connection currently being connected to. */
   connectingId: string | null
 
@@ -30,10 +32,12 @@ export interface ConnectionsState {
   /** Returns the server version; throws on failure. */
   test(c: Connection, secrets: Secrets): Promise<string>
   /**
-   * Opens a session. With a session already open this switches: the old
-   * session is closed once the new one is connected (on failure it stays).
+   * Makes a connection active: its open session if there is one, else a
+   * new session. Other open sessions stay connected in the background.
    */
   connect(id: string): Promise<boolean>
+  /** Makes an open session the active one. */
+  activate(sessionId: string): void
   /** Unknown SSH host key met by connect (shown as a dialog). */
   hostKey: HostKeyPrompt | null
   /** Trusts the prompted key (Lontar's own known_hosts) and connects again. */
@@ -41,7 +45,11 @@ export interface ConnectionsState {
   dismissHostKey(): void
   /** Trusts a host key without connecting (the form's Test). */
   trustHostKey(info: HostKeyInfo): Promise<void>
-  disconnect(): Promise<void>
+  /**
+   * Closes a session (default: the active one). Closing the active session
+   * activates the most recently opened remaining one, if any.
+   */
+  disconnect(sessionId?: string): Promise<void>
   clearError(): void
 }
 
@@ -51,6 +59,7 @@ export const initialConnectionsState = {
   loading: false,
   error: null as string | null,
   session: null as SessionInfo | null,
+  sessions: [] as SessionInfo[],
   connectingId: null as string | null,
   hostKey: null as HostKeyPrompt | null,
 }
@@ -108,18 +117,16 @@ export const useConnections = create<ConnectionsState>()((set, get) => ({
   },
 
   async connect(id) {
-    const prev = get().session
-    // Already connected to it: nothing to do.
-    if (prev?.connectionId === id) return true
+    // Already open: just bring it to the front.
+    const open = get().sessions.find((x) => x.connectionId === id)
+    if (open) {
+      set({ session: open, error: null })
+      return true
+    }
     set({ connectingId: id, error: null })
     try {
       const session = await connectionApi.connect(id)
-      set({ session, connectingId: null, hostKey: null })
-      // Switching: the new session is open, so close the one it replaces.
-      // (A failed connect above keeps the current session.)
-      if (prev && prev.id !== session.id) {
-        void connectionApi.disconnect(prev.id).catch((err) => set({ error: errorMessage(err) }))
-      }
+      set((s) => ({ session, sessions: [...s.sessions.filter((x) => x.id !== session.id), session], connectingId: null, hostKey: null }))
       return true
     } catch (err) {
       const info = hostKeyInfo(err)
@@ -130,6 +137,11 @@ export const useConnections = create<ConnectionsState>()((set, get) => ({
       }
       return false
     }
+  },
+
+  activate(sessionId) {
+    const s = get().sessions.find((x) => x.id === sessionId)
+    if (s) set({ session: s })
   },
 
   async acceptHostKey() {
@@ -154,12 +166,16 @@ export const useConnections = create<ConnectionsState>()((set, get) => ({
     await connectionApi.acceptHostKey(info.host, info.fingerprintSHA256)
   },
 
-  async disconnect() {
-    const s = get().session
-    if (!s) return
-    set({ session: null })
+  async disconnect(sessionId) {
+    const id = sessionId ?? get().session?.id
+    if (!id) return
+    set((s) => {
+      const sessions = s.sessions.filter((x) => x.id !== id)
+      const session = s.session?.id === id ? (sessions[sessions.length - 1] ?? null) : s.session
+      return { sessions, session }
+    })
     try {
-      await connectionApi.disconnect(s.id)
+      await connectionApi.disconnect(id)
     } catch (err) {
       set({ error: errorMessage(err) })
     }
