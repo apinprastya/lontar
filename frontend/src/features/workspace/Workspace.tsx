@@ -16,7 +16,19 @@ import { WorkspaceContext, createWorkspaceStore, useActiveTab, useWorkspace, typ
 import { connectionColor } from '../connections/types'
 import RowDetail from '../grid/RowDetail'
 import Sidebar from '../sidebar/Sidebar'
-import { RefreshIcon, ShieldIcon } from '../../components/icons'
+import {
+  ExportIcon,
+  FilterIcon,
+  ImportIcon,
+  NewQueryIcon,
+  PanelRightIcon,
+  RefreshIcon,
+  RowPlusIcon,
+  SearchIcon,
+  ShieldIcon,
+  UnplugIcon,
+} from '../../components/icons'
+import ToolButton from '../../components/ToolButton'
 import { shortcutLabel } from '../../lib/mod'
 import { workspaceApi, type WorkspaceApi } from './api'
 import { handleShortcut, isTextTarget } from './shortcuts'
@@ -269,47 +281,53 @@ function WorkspaceView({
               </div>
             )}
             <div className="toolbar ws-toolbar">
-              <button type="button" onClick={() => void refresh()} title={`Refresh (${shortcutLabel(platform, 'R')})`}>
-                <RefreshIcon /> Refresh
-              </button>
-              <button type="button" onClick={() => store.getState().newQueryTab()} title={`New SQL query (${shortcutLabel(platform, 'T')})`}>
-                New query
-              </button>
+              <ToolButton label="Refresh" title={`Refresh (${shortcutLabel(platform, 'R')})`} icon={<RefreshIcon />} onClick={() => void refresh()} />
+              <span className="toolbar-sep" aria-hidden />
+              <ToolButton
+                label="New query"
+                title={`New SQL query (${shortcutLabel(platform, 'T')})`}
+                icon={<NewQueryIcon />}
+                onClick={() => store.getState().newQueryTab()}
+              />
+              <ToolButton label="Open…" title={`Open a table or view (${shortcutLabel(platform, 'P')})`} icon={<SearchIcon />} onClick={() => setPalette('tables')} />
+              <span className="toolbar-sep" aria-hidden />
               {tab?.kind === 'table' && (
-                <button
-                  type="button"
+                <ToolButton
+                  label="Filter"
+                  title={`Filter (${shortcutLabel(platform, 'F')})`}
+                  icon={<FilterIcon />}
                   aria-pressed={tab.filterOpen}
                   onClick={() => store.getState().toggleFilterBar(tab.id)}
-                  title={`Filter (${shortcutLabel(platform, 'F')})`}
-                >
-                  Filter
-                </button>
+                />
               )}
-              <button type="button" aria-pressed={showDetail} onClick={toggleDetail} title={`Row detail (${shortcutLabel(platform, 'I')} or Space)`}>
-                Row detail
-              </button>
+              <ToolButton
+                label="Row detail"
+                title={`Row detail (${shortcutLabel(platform, 'I')} or Space)`}
+                icon={<PanelRightIcon />}
+                aria-pressed={showDetail}
+                onClick={toggleDetail}
+              />
               {tab && editable && (tableTab?.view ?? 'data') === 'data' && (
-                <button type="button" onClick={() => store.getState().addRow(tab.id)} title={`Insert row (${shortcutLabel(platform, 'N')})`}>
-                  Insert row
-                </button>
+                <ToolButton
+                  label="Insert row"
+                  title={`Insert row (${shortcutLabel(platform, 'N')})`}
+                  icon={<RowPlusIcon />}
+                  onClick={() => store.getState().addRow(tab.id)}
+                />
               )}
               {commandAvailable('exportData', store.getState()) && (
-                <button type="button" onClick={() => runCommand('exportData', commandContext)} title="Export rows to CSV, JSON or SQL">
-                  Export…
-                </button>
+                <ToolButton label="Export…" title="Export rows to CSV, JSON or SQL" icon={<ExportIcon />} onClick={() => runCommand('exportData', commandContext)} />
               )}
               {tableTab && commandAvailable('importCsv', store.getState()) && (
-                <button type="button" onClick={() => runCommand('importCsv', commandContext)} title="Import a CSV file into this table">
-                  Import…
-                </button>
+                <ToolButton label="Import…" title="Import a CSV file into this table" icon={<ImportIcon />} onClick={() => runCommand('importCsv', commandContext)} />
               )}
-              <button type="button" onClick={() => setPalette('tables')} title={`Open a table (${shortcutLabel(platform, 'P')})`}>
-                Open…
-              </button>
               <span className="spacer" />
-              <button type="button" onClick={() => store.getState().guarded(tabIds(), () => void disconnect())}>
-                Disconnect
-              </button>
+              <ToolButton
+                label="Disconnect"
+                title="Disconnect this connection"
+                icon={<UnplugIcon />}
+                onClick={() => store.getState().guarded(tabIds(), () => void disconnect())}
+              />
             </div>
             <TabBar platform={platform} />
             {tab?.kind === 'table' && <TableTab key={tab.id} tab={tab} platform={platform} />}

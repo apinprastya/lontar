@@ -2543,3 +2543,45 @@ textarea.cell-editor-input {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
+
+/* ---- Icon toolbar buttons ------------------------------------------------- */
+
+.tool-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  line-height: 1;
+}
+
+.tool-button .icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: 0;
+}
+
+.tool-button.with-text {
+  padding: 0 11px 0 9px;
+}
+
+.tool-button.run-button .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.toolbar-sep {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+/* Toolbars keep a steady height whichever buttons show. */
+.ws-toolbar,
+.query-toolbar {
+  min-height: 42px;
+}

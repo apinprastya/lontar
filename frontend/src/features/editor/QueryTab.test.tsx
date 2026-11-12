@@ -84,7 +84,7 @@ describe('QueryTab', () => {
     mount()
     expect(screen.getByText(/Run the statement under the cursor with Ctrl\+Enter/)).toBeInTheDocument()
     await waitFor(() => expect(editor.completionSchema).toHaveBeenCalledWith('s1', 'public', false))
-    fireEvent.click(screen.getByText('Run all'))
+    fireEvent.click(screen.getByRole('button', { name: 'Run all' }))
     await waitFor(() => expect(screen.getByRole('tab', { name: /Result 1/ })).toHaveAttribute('aria-selected', 'true'))
     expect(screen.getByRole('tab', { name: /Result 1/ })).toHaveTextContent('3+')
     expect(screen.getByTestId('tx-indicator')).toHaveTextContent('Transaction open')
@@ -117,7 +117,7 @@ describe('QueryTab', () => {
       execResult([stmt(0, 'x', { resultSets: [resultSet('r1', 0, { truncated: true })] }), stmt(1, 'SELEC', { status: 'error', error: { message: 'bad', code: '1', position: null } })]),
     )
     mount()
-    fireEvent.click(screen.getByText('Run all'))
+    fireEvent.click(screen.getByRole('button', { name: 'Run all' }))
     await waitFor(() => expect(screen.getByRole('tab', { name: /Messages/ })).toHaveTextContent('1 ✗'))
     fireEvent.click(screen.getByRole('tab', { name: /Result 1/ }))
     expect(screen.getByText(/Run the query again with a higher row limit/)).toBeInTheDocument()
@@ -133,15 +133,15 @@ describe('QueryTab', () => {
     fireEvent.change(screen.getByLabelText('Max rows'), { target: { value: '5000' } })
     expect(tab().maxRows).toBe(5000)
     fireEvent.click(screen.getByText('Run'))
-    await waitFor(() => expect(screen.getByText('Stop')).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled())
     expect(screen.getAllByText('Running…').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByText('Stop'))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
     expect(editor.cancel).toHaveBeenCalled()
     await act(async () => finish(execResult([stmt(0, 'SELECT 1', { status: 'cancelled' })], { cancelled: true })))
-    await waitFor(() => expect(screen.getByText('Stop')).toBeDisabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Stop' })).toBeDisabled())
 
     // History panel.
-    fireEvent.click(screen.getByText('History'))
+    fireEvent.click(screen.getByRole('button', { name: 'History' }))
     expect(screen.getByLabelText('Query history')).toBeInTheDocument()
     await waitFor(() => expect(editor.historyList).toHaveBeenCalledWith('c1', '', 200, 0))
     fireEvent.click(screen.getByLabelText('Close history'))
@@ -190,7 +190,7 @@ describe('QueryTab', () => {
     expect(editor.cancel).toHaveBeenCalledTimes(1)
 
     // History: click inserts, double-click opens a new tab.
-    fireEvent.click(screen.getByText('History'))
+    fireEvent.click(screen.getByRole('button', { name: 'History' }))
     const entry = await screen.findByText('SELECT 99', { selector: '.history-sql' })
     fireEvent.doubleClick(entry)
     expect(store.getState().tabs).toHaveLength(2)
@@ -209,7 +209,7 @@ describe('QueryTab', () => {
   it('shows run errors before any result', async () => {
     editor.execute.mockRejectedValueOnce(new Error('session not found'))
     mount()
-    fireEvent.click(screen.getByText('Run all'))
+    fireEvent.click(screen.getByRole('button', { name: 'Run all' }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('session not found'))
   })
 

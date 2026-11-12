@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import ToolButton from '../../components/ToolButton'
+import { HistoryIcon, PlayAllIcon, PlayIcon, StopIcon } from '../../components/icons'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { shortcutLabel } from '../../lib/mod'
 import type { QueryTabState } from '../../stores/queryTabs'
@@ -69,15 +71,18 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
   return (
     <div className="query-tab" role="tabpanel" aria-label={tab.title}>
       <div className="toolbar query-toolbar">
-        <button type="button" disabled={tab.running} onClick={() => void s.runQuery(tab.id, 'current')} title={`Run the selection or the statement under the cursor (${run})`}>
-          {tab.selection ? 'Run selection' : 'Run'}
-        </button>
-        <button type="button" disabled={tab.running} onClick={() => void s.runQuery(tab.id, 'all')} title={`Run every statement (${runAll})`}>
-          Run all
-        </button>
-        <button type="button" disabled={!tab.running} onClick={() => s.cancelQuery(tab.id)} title="Stop the running query (Esc)">
-          Stop
-        </button>
+        <ToolButton
+          className="primary run-button"
+          label={tab.selection ? 'Run selection' : 'Run'}
+          text={tab.selection ? 'Run selection' : 'Run'}
+          title={`Run the selection or the statement under the cursor (${run})`}
+          icon={<PlayIcon />}
+          disabled={tab.running}
+          onClick={() => void s.runQuery(tab.id, 'current')}
+        />
+        <ToolButton label="Run all" title={`Run every statement (${runAll})`} icon={<PlayAllIcon />} disabled={tab.running} onClick={() => void s.runQuery(tab.id, 'all')} />
+        <ToolButton label="Stop" title="Stop the running query (Esc)" icon={<StopIcon />} disabled={!tab.running} onClick={() => s.cancelQuery(tab.id)} />
+        <span className="toolbar-sep" aria-hidden />
         <label className="toolbar-check" title="Run the remaining statements after one fails">
           <input type="checkbox" checked={tab.continueOnError} onChange={(e) => s.setContinueOnError(tab.id, e.target.checked)} />
           Continue on error
@@ -95,9 +100,7 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
         <TxIndicator tx={tab.tx} />
         {tab.running && <span className="muted">Running…</span>}
         <span className="spacer" />
-        <button type="button" aria-pressed={historyOpen} onClick={() => s.toggleHistory()}>
-          History
-        </button>
+        <ToolButton label="History" title="Query history" icon={<HistoryIcon />} aria-pressed={historyOpen} onClick={() => s.toggleHistory()} />
       </div>
       <div className="query-body">
         {historyOpen ? (

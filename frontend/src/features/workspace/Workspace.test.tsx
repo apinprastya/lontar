@@ -236,17 +236,17 @@ describe('Workspace', () => {
     await user.click(await screen.findByRole('button', { name: /^users/ }))
     await user.click(await screen.findByText('2 | NULL'))
     await user.click(screen.getByRole('button', { name: 'Row detail' }))
-    const detail = screen.getByLabelText('Row detail')
+    const detail = screen.getByRole('complementary', { name: 'Row detail' })
     expect(detail).toHaveTextContent('Row 2')
     expect(detail).toHaveTextContent('email')
     expect(detail.querySelector('.null-value')).toHaveTextContent('NULL')
     // Space in the grid toggles it off.
     fireEvent.keyDown(screen.getByTestId('fake-grid'), { key: ' ' })
-    expect(screen.queryByLabelText('Row detail')).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Row detail' })).toBeNull()
     fireEvent.keyDown(window, { key: 'i', ctrlKey: true })
-    expect(screen.getByLabelText('Row detail')).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: 'Row detail' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Close row detail' }))
-    expect(screen.queryByLabelText('Row detail')).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Row detail' })).toBeNull()
   })
 
   it('handles keyboard shortcuts', async () => {
@@ -387,8 +387,8 @@ describe('Workspace SQL tabs', () => {
     act(() => {
       fireEvent.keyDown(window, { key: 'i', ctrlKey: true })
     })
-    expect(screen.getByLabelText('Row detail')).toHaveTextContent('Row 2')
-    expect(screen.getByLabelText('Row detail')).toHaveTextContent('n2')
+    expect(screen.getByRole('complementary', { name: 'Row detail' })).toHaveTextContent('Row 2')
+    expect(screen.getByRole('complementary', { name: 'Row detail' })).toHaveTextContent('n2')
 
     // Run all, and Esc stops a running query.
     let finish: (v: unknown) => void = () => {}
@@ -396,7 +396,7 @@ describe('Workspace SQL tabs', () => {
     act(() => {
       fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true, shiftKey: true })
     })
-    await waitFor(() => expect(screen.getByText('Stop')).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled())
     act(() => {
       fireEvent.keyDown(window, { key: 'Escape' })
     })
