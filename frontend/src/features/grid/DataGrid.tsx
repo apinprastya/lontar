@@ -1,3 +1,4 @@
+import { useResolvedTheme } from '../../stores/settings'
 import {
   CompactSelection,
   DataEditor,
@@ -40,6 +41,8 @@ export interface DataGridProps {
   editing?: GridEditing
   /** Foreign key navigation (table tabs); absent = no links. */
   links?: GridLinks
+  /** "Export selection…" in the context menu; absent = not offered. */
+  onExportSelection?(sel: SelectionSpec): void
 }
 
 /** Foreign key affordances of a table grid. Rows/cols are grid indexes. */
@@ -269,7 +272,7 @@ export function selectedRowOf(sel: GridSelection): number | null {
  * are unit-testable with a mocked DataEditor.
  */
 export default function DataGrid(props: DataGridProps) {
-  const { columns, rows, offset, sort, columnWidths, platform, onHeaderClick, onColumnResize, onSelectRow, onToggleDetail, editing, links } = props
+  const { columns, rows, offset, sort, columnWidths, platform, onHeaderClick, onColumnResize, onSelectRow, onToggleDetail, editing, links, onExportSelection } = props
   const [selection, setSelection] = useState<GridSelection>(emptySelection)
   const [edit, setEditState] = useState<EditingCell | null>(null)
   // Synchronous view of the open editor: keys can reach the grid before
@@ -283,7 +286,10 @@ export default function DataGrid(props: DataGridProps) {
   const [menu, setMenu] = useState<MenuState | null>(null)
   const gridRef = useRef<DataEditorRef>(null)
   const boxRef = useRef<HTMLDivElement>(null)
-  const theme = useMemo(() => gridTheme(), [])
+  // Recomputed when the theme changes (the CSS variables are already
+  // switched by then; see bindAppearance).
+  const resolvedTheme = useResolvedTheme()
+  const theme = useMemo(() => gridTheme(), [resolvedTheme]) // eslint-disable-line react-hooks/exhaustive-deps
   const muted = theme.textMedium as string
 
   // A new page (or table) starts without a selection.
@@ -461,6 +467,11 @@ export default function DataGrid(props: DataGridProps) {
     const cells = selectedCells(selection, columns.length)
     return cells.some(([c, r]) => c === m.col && r === m.row) ? cells : [[m.col, m.row]]
   }
+  /** The selection when the menu's cell is in it, else that cell. */
+  const menuSelection = (m: MenuState): SelectionSpec => {
+    const inSel = menuCells(m).length > 1 || menuRows(m).length > 1 || selection.columns.length > 0
+    return inSel ? toSelectionSpec(selection) : { range: { x: m.col, y: m.row, width: 1, height: 1 } }
+  }
   const menuRows = (m: MenuState): number[] => {
     const rs = selectedRows(selection)
     return rs.includes(m.row) ? rs : [m.row]
@@ -492,7 +503,7 @@ export default function DataGrid(props: DataGridProps) {
         }
         onCellActivated={editing ? ([col, row]) => startEdit(col, row) : undefined}
         onCellContextMenu={
-          editing || links
+          editing || links || onExportSelection
             ? ([col, row], e) => {
                 e.preventDefault()
                 setMenu({ col, row, x: e.bounds.x + e.localEventX, y: e.bounds.y + e.localEventY })
@@ -548,7 +559,7 @@ export default function DataGrid(props: DataGridProps) {
           />
         </div>
       )}
-      {menu && (editing || links) && (
+      {menu && (editing || links || onExportSelection) && (
         <div className="context-menu-backdrop" onMouseDown={() => setMenu(null)} onContextMenu={(e) => (e.preventDefault(), setMenu(null))}>
           <ul
             className="context-menu"
@@ -576,6 +587,12 @@ export default function DataGrid(props: DataGridProps) {
                 <MenuItem label="Insert row" hint={mod('N')} onClick={menuAction(editing.onInsertRow)} />
                 <MenuItem label="Duplicate row" hint={mod('D')} onClick={menuAction(() => editing.onDuplicateRow(menu.row))} />
                 <MenuItem label="Delete row" hint="Del" onClick={menuAction(() => editing.onDeleteRows(menuRows(menu)))} />
+              </>
+            )}
+            {onExportSelection && (
+              <>
+                {(links || editing) && <li role="separator" />}
+                <MenuItem label="Export selection…" onClick={menuAction(() => onExportSelection(menuSelection(menu)))} />
               </>
             )}
           </ul>

@@ -1,9 +1,10 @@
 import { ConnectionService } from '../../../bindings/dbedit/internal/services'
-import type { Connection, DriverInfo, SessionInfo } from './types'
+import type { Connection, DriverInfo, Secrets, SessionInfo } from './types'
 
 // The generated bindings type kind/tag as TS enums; the JSON is identical,
 // so the casts below only bridge the static types.
 type BindingConnection = Parameters<typeof ConnectionService.Save>[0]
+type BindingSecrets = Parameters<typeof ConnectionService.Save>[1]
 
 /** Typed wrapper around the generated ConnectionService bindings. */
 export const connectionApi = {
@@ -13,8 +14,8 @@ export const connectionApi = {
   async list(): Promise<Connection[]> {
     return ((await ConnectionService.List()) ?? []) as unknown as Connection[]
   },
-  async save(c: Connection, password: string | null): Promise<Connection> {
-    return (await ConnectionService.Save(c as unknown as BindingConnection, password)) as unknown as Connection
+  async save(c: Connection, secrets: Secrets): Promise<Connection> {
+    return (await ConnectionService.Save(c as unknown as BindingConnection, secrets as unknown as BindingSecrets)) as unknown as Connection
   },
   async remove(id: string): Promise<void> {
     await ConnectionService.Delete(id)
@@ -22,8 +23,11 @@ export const connectionApi = {
   async duplicate(id: string): Promise<Connection> {
     return (await ConnectionService.Duplicate(id)) as unknown as Connection
   },
-  async test(c: Connection, password: string | null): Promise<string> {
-    return ConnectionService.Test(c as unknown as BindingConnection, password)
+  async test(c: Connection, secrets: Secrets): Promise<string> {
+    return ConnectionService.Test(c as unknown as BindingConnection, secrets as unknown as BindingSecrets)
+  },
+  async acceptHostKey(host: string, fingerprint: string): Promise<void> {
+    await ConnectionService.AcceptHostKey(host, fingerprint)
   },
   async connect(id: string): Promise<SessionInfo> {
     return (await ConnectionService.Connect(id)) as unknown as SessionInfo

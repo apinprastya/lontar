@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Cell, ResultColumn } from '../workspace/types'
-import { binaryLabel, cellCopyText, cellDisplay, cellText, defaultColumnWidth, headerTitle, isNull, isNumeric, selectionToTSV, MAX_CELL_CHARS } from './cells'
+import { binaryLabel, cellCopyText, cellDisplay, cellText, defaultColumnWidth, headerTitle, isNull, isNumeric, selectionToTSV, selectionToCSV, MAX_CELL_CHARS } from './cells'
 
 const cols: ResultColumn[] = [
   { name: 'id', type: 'int', isPK: true, nullable: false },
@@ -77,5 +77,24 @@ describe('headers', () => {
   it('sizes columns from name and type', () => {
     expect(defaultColumnWidth(cols[0])).toBe(120)
     expect(defaultColumnWidth({ name: 'x'.repeat(100), type: 't', isPK: false, nullable: true })).toBe(320)
+  })
+})
+
+describe('selectionToCSV', () => {
+  const cols = [
+    { name: 'id', type: 'int', isPK: true, nullable: false },
+    { name: 'say "x"', type: 'text', isPK: false, nullable: true },
+  ]
+  const rows: Cell[][] = [
+    [{ k: 'num', v: 1 }, { k: 'str', v: 'a,b\nc' }],
+    [{ k: 'num', v: 2 }, { k: 'null' }],
+    [{ k: 'num', v: 3 }, { k: 'bytes', v: 'ff00', len: 2 }],
+    [{ k: 'num', v: 4 }, { k: 'str', v: '' }],
+  ]
+  it('quotes when needed, keeps values intact and marks NULL', () => {
+    const csv = selectionToCSV(cols, rows, { rows: [0, 1, 2, 3] }, { delimiter: ',', quote: '"', header: true, nullText: '', crlf: true })
+    expect(csv).toBe('id,"say ""x"""\r\n1,"a,b\nc"\r\n2,\r\n3,ff00\r\n4,""\r\n')
+    expect(selectionToCSV(cols, rows, { range: { x: 1, y: 1, width: 1, height: 1 } }, { delimiter: '\t', quote: '"', header: false, nullText: '\\N', crlf: false })).toBe('\\N\n')
+    expect(selectionToCSV(cols, rows, {}, { delimiter: ',', quote: '"', header: true, nullText: '', crlf: false })).toBe('')
   })
 })

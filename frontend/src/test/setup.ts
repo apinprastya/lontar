@@ -25,3 +25,22 @@ if (typeof Range !== 'undefined' && !Range.prototype.getClientRects) {
     return rect as DOMRect
   }
 }
+
+// jsdom has no scrollIntoView (cmdk scrolls the selected item into view).
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function () {}
+}
+
+// jsdom has no matchMedia (the "system" theme follows prefers-color-scheme).
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = ((query: string) => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia
+}

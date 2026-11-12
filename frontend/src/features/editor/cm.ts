@@ -163,7 +163,7 @@ export const editorTheme = EditorView.theme({
     height: '100%',
     backgroundColor: 'var(--bg)',
     color: 'var(--text)',
-    fontSize: '13px',
+    fontSize: 'var(--editor-font-size, 13px)',
   },
   '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.5' },
   '.cm-content': { caretColor: 'var(--text)' },

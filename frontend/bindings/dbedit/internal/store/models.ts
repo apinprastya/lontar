@@ -45,16 +45,21 @@ export interface Connection {
      * ignored). It lets the UI show "saved" without touching the keychain.
      */
     "hasPassword": boolean;
+
+    /**
+     * HasSSHPassword and HasSSHPassphrase report saved SSH secrets, like
+     * HasPassword (maintained by Store; the secrets are never returned).
+     */
+    "hasSshPassword": boolean;
+    "hasSshPassphrase": boolean;
     "createdAt": string;
     "updatedAt": string;
 }
 
 /**
- * SSHConfig describes an SSH tunnel. Reserved for milestone M6: it is
- * persisted but not applied yet, and conn refuses to connect while it is
- * enabled so that a connection never silently bypasses its tunnel. Secrets
- * (SSH password / key passphrase) will live in the SecretStore under
- * SecretKey(id, "ssh"), never in this struct.
+ * SSHConfig describes an SSH tunnel to the database host. Secrets (the SSH
+ * password and the key passphrase) are kept in the SecretStore under
+ * SecretKey(id, SecretSSHPassword / SecretSSHPassphrase), never here.
  */
 export interface SSHConfig {
     "enabled": boolean;
@@ -63,21 +68,22 @@ export interface SSHConfig {
     "user"?: string;
 
     /**
-     * "password", "key" or "agent"
+     * AuthMethod is "password", "key" or "agent".
      */
     "authMethod"?: string;
+
+    /**
+     * KeyPath is the private key file for "key" ("~" is expanded).
+     */
     "keyPath"?: string;
 }
 
 /**
- * SSLConfig describes TLS settings. Reserved for milestone M6, like
- * SSHConfig: conn refuses to connect when a mode other than "" or "disable"
- * is set, rather than connecting without the requested TLS.
+ * SSLConfig describes TLS settings. An empty Mode leaves TLS to the
+ * driver options (sslmode / tls) and defaults, as before M6; a set Mode
+ * wins over those options.
  */
 export interface SSLConfig {
-    /**
-     * disable, prefer, require, verify-ca, verify-full
-     */
     "mode"?: string;
     "caFile"?: string;
     "certFile"?: string;
@@ -114,6 +120,16 @@ export enum SafeMode {
      */
     SafeReadOnly = "readonly",
 };
+
+/**
+ * Secrets are the secrets passed to SaveSecrets. For each one, nil keeps
+ * the stored value, "" removes it and anything else replaces it.
+ */
+export interface Secrets {
+    "password": string | null;
+    "sshPassword": string | null;
+    "sshPassphrase": string | null;
+}
 
 /**
  * Tag classifies a connection's environment. It drives the colour strip in

@@ -1,4 +1,10 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import ConfirmDialog from '../../components/ConfirmDialog'
+import { matchesShortcut } from '../../lib/mod'
+import ExportDialog from '../export/ExportDialog'
+import ImportWizard from '../import/ImportWizard'
+import CommandPalette, { type PaletteMode, type PaletteTable } from '../palette/CommandPalette'
+import { commandAvailable, runCommand } from '../palette/commands'
 import { activeResultView } from '../../stores/queryTabs'
 import { editorApi, type EditorApi } from '../editor/api'
 import QueryTab from '../editor/QueryTab'
@@ -62,7 +68,37 @@ function detailEditing(tab: TabState, kind: Kind, store: WorkspaceStore) {
   }
 }
 
-function WorkspaceView({ platform, store, editor }: { platform?: string; store: WorkspaceStore; editor: EditorApi }) {
+/** Tables for quick open: the current schema's, then other schemas' (loaded when the palette opens). */
+function usePaletteTables(store: WorkspaceStore, api: WorkspaceApi, open: boolean): { tables: PaletteTable[]; loading: boolean } {
+  const schema = useWorkspace((s) => s.schema)
+  const schemas = useWorkspace((s) => s.schemas)
+  const current = useWorkspace((s) => s.tables)
+  const [other, setOther] = useState<PaletteTable[]>([])
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const rest = schemas.filter((x) => x !== schema).slice(0, 20)
+    if (rest.length === 0) return
+    let live = true
+    setLoading(true)
+    const sid = store.getState().sessionId
+    Promise.all(rest.map((x) => api.listTables(sid, x).catch(() => [])))
+      .then((lists) => {
+        if (live) setOther(lists.flat().map((t) => ({ schema: t.schema, name: t.name, type: t.type, current: false })))
+      })
+      .finally(() => live && setLoading(false))
+    return () => {
+      live = false
+    }
+  }, [open, schema, schemas, store, api])
+  const tables = useMemo(
+    () => [...current.map((t) => ({ schema: t.schema, name: t.name, type: t.type, current: true })), ...other.filter((t) => t.schema !== schema)],
+    [current, other, schema],
+  )
+  return { tables, loading }
+}
+
+function WorkspaceView({ platform, store, editor, api }: { platform?: string; store: WorkspaceStore; editor: EditorApi; api: WorkspaceApi }) {
   const session = useConnections((s) => s.session)
   const connection = useConnections((s) => s.connections.find((c) => c.id === s.session?.connectionId))
   const disconnect = useConnections((s) => s.disconnect)
@@ -74,16 +110,39 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
   const safeMode = useWorkspace((s) => s.safeMode)
   const guard = useWorkspace((s) => s.guard)
   const tabs = useWorkspace((s) => s.tabs)
+  const exportRequest = useWorkspace((s) => s.exportRequest)
+  const importRequest = useWorkspace((s) => s.importRequest)
+  const closeConfirm = useWorkspace((s) => s.closeConfirm)
+  const [palette, setPalette] = useState<PaletteMode | null>(null)
+  const paletteTables = usePaletteTables(store, api, palette === 'tables')
+  // Overlays (palette, dialogs) own the keyboard while open.
+  const overlay = Boolean(palette || exportRequest || importRequest || closeConfirm)
+  const overlayRef = useRef(overlay)
+  overlayRef.current = overlay
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Keys the SQL editor (or another widget) already handled.
       if (e.defaultPrevented) return
+      // Mod+P / Mod+Shift+P: the palette (and never the webview's print dialog).
+      if (matchesShortcut(e, platform, 'p', { shift: e.shiftKey })) {
+        e.preventDefault()
+        setPalette(e.shiftKey ? 'commands' : 'tables')
+        return
+      }
+      if (overlayRef.current) return
       if (handleShortcut(e, platform, store.getState(), isTextTarget(e.target))) e.preventDefault()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [platform, store])
+
+  const commandContext = {
+    platform,
+    store,
+    openPalette: (m: PaletteMode) => setPalette(m),
+    disconnect: () => store.getState().guarded(store.getState().tabs.filter((t) => t.kind === 'table').map((t) => t.id), () => void disconnect()),
+  }
 
   const q = tab?.kind === 'query' ? tab : null
   const [qResult, qActive, qSorts] = [q?.result ?? null, q?.activeResult ?? '', q?.sorts ?? null]
@@ -113,7 +172,21 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
     <section className="ws" aria-label="Workspace" style={color ? { borderTopColor: color } : undefined}>
       <Group orientation="horizontal" className="ws-panels">
         <Panel id="sidebar" defaultSize={240} minSize={160} maxSize={480}>
-          <Sidebar name={session.name} kind={kind} color={color} badge={<SafeModeBadge mode={safeMode} />} />
+          <Sidebar
+            name={session.name}
+            kind={kind}
+            color={color}
+            badge={
+              <>
+                <SafeModeBadge mode={safeMode} />
+                {session.tunneled && (
+                  <span className="ssh-badge" title="Connected through an SSH tunnel" data-testid="ssh-badge">
+                    SSH
+                  </span>
+                )}
+              </>
+            }
+          />
         </Panel>
         <Separator className="resize-handle" />
         <Panel id="main" minSize={300}>
@@ -143,6 +216,19 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
                   Insert row
                 </button>
               )}
+              {commandAvailable('exportData', store.getState()) && (
+                <button type="button" onClick={() => runCommand('exportData', commandContext)} title="Export rows to CSV, JSON or SQL">
+                  Export…
+                </button>
+              )}
+              {tableTab && commandAvailable('importCsv', store.getState()) && (
+                <button type="button" onClick={() => runCommand('importCsv', commandContext)} title="Import a CSV file into this table">
+                  Import…
+                </button>
+              )}
+              <button type="button" onClick={() => setPalette('tables')} title={`Open a table (${shortcutLabel(platform, 'P')})`}>
+                Open…
+              </button>
               <span className="spacer" />
               <button type="button" onClick={() => store.getState().guarded(tableIds(), () => void disconnect())}>
                 Disconnect
@@ -204,6 +290,46 @@ function WorkspaceView({ platform, store, editor }: { platform?: string; store: 
         />
       )}
       {guard && <UnsavedDialog count={guardCount} busy={guard.busy} onChoose={(c) => void store.getState().resolveGuard(c)} />}
+      {palette && (
+        <CommandPalette
+          mode={palette}
+          platform={platform}
+          tables={paletteTables.tables}
+          loading={paletteTables.loading}
+          disabled={(id) => !commandAvailable(id, store.getState())}
+          onModeChange={setPalette}
+          onClose={() => setPalette(null)}
+          onOpenTable={(t, view) => {
+            setPalette(null)
+            store.getState().openTableView(t.schema, t.name, view)
+          }}
+          onCommand={(id) => {
+            setPalette(null)
+            runCommand(id, commandContext)
+          }}
+        />
+      )}
+      {exportRequest && <ExportDialog sessionId={session.id} source={exportRequest} onClose={() => store.getState().requestExport(null)} />}
+      {importRequest && (
+        <ImportWizard
+          sessionId={session.id}
+          schema={importRequest.schema}
+          table={importRequest.table}
+          safeMode={safeMode}
+          onClose={() => store.getState().requestImport(null)}
+          onImported={() => void store.getState().refresh()}
+        />
+      )}
+      {closeConfirm && (
+        <ConfirmDialog
+          title="Close query tab?"
+          message="This tab has SQL that was changed since it last ran. Closing it discards the text."
+          confirmLabel="Close tab"
+          danger
+          onConfirm={() => store.getState().resolveCloseConfirm(true)}
+          onCancel={() => store.getState().resolveCloseConfirm(false)}
+        />
+      )}
     </section>
   )
 }
@@ -232,7 +358,7 @@ export default function Workspace({ platform, api = workspaceApi, editor = edito
   if (!store) return null
   return (
     <WorkspaceContext.Provider value={store}>
-      <WorkspaceView platform={platform} store={store} editor={editor} />
+      <WorkspaceView platform={platform} store={store} editor={editor} api={api} />
     </WorkspaceContext.Provider>
   )
 }

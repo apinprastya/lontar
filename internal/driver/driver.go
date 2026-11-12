@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"sync"
 	"time"
@@ -73,7 +74,22 @@ type Config struct {
 	// ConnectTimeout bounds establishing a single connection. Zero means
 	// DefaultConnectTimeout.
 	ConnectTimeout time.Duration
+
+	// TLS holds the connection's SSL/TLS settings. nil (or an empty Mode)
+	// leaves TLS to the driver options ("sslmode" for PostgreSQL, "tls"
+	// for MySQL/MariaDB) and the driver defaults. A non-empty Mode wins
+	// over those options. Ignored for file-based kinds.
+	TLS *TLSConfig
+
+	// Dial, when set, opens every network connection of the pool instead
+	// of a direct TCP dial (the SSH tunnel's in-process dialer). Host and
+	// port are passed to it unresolved, so name resolution happens on the
+	// far side of the tunnel.
+	Dial DialFunc
 }
+
+// DialFunc opens a network connection to addr ("host:port").
+type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 
 // DefaultConnectTimeout is used when Config.ConnectTimeout is zero.
 const DefaultConnectTimeout = 10 * time.Second

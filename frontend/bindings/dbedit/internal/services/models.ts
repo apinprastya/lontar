@@ -9,7 +9,22 @@ import * as driver$0 from "../driver/models.js";
 import * as edits$0 from "../edits/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as export$0 from "../export/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as importer$0 from "../importer/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as query$0 from "../query/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as settings$0 from "../settings/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as store$0 from "../store/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as values$0 from "../values/models.js";
 
 /**
  * ApplyResult is the outcome of EditService.Apply. A change set that was
@@ -58,6 +73,60 @@ export interface CompletionTable {
 }
 
 /**
+ * ExportRequest describes an export.
+ */
+export interface ExportRequest {
+    "jobId": string;
+    "sessionId": string;
+    "path": string;
+    "options": export$0.Options;
+
+    /**
+     * Source is "table" (Table: every row with the tab's filters and
+     * sort), "query" (SQL run again; read-only statements only) or "rows"
+     * (Columns/Rows already loaded in the UI).
+     */
+    "source": string;
+    "table": query$0.Request;
+    "sql": string;
+    "columns": export$0.Column[] | null;
+    "rows": (values$0.Cell[] | null)[] | null;
+}
+
+/**
+ * ExportResult reports a finished export.
+ */
+export interface ExportResult {
+    "rows": number;
+    "path": string;
+}
+
+/**
+ * FileFilter restricts a file dialog ("CSV files", "*.csv;*.tsv").
+ */
+export interface FileFilter {
+    "displayName": string;
+    "pattern": string;
+}
+
+/**
+ * ImportResult is the outcome of ImportService.Import. A failed import is
+ * not a Go error when it names a line: Failure then says where (nothing was
+ * imported).
+ */
+export interface ImportResult {
+    "ok": boolean;
+    "rows": number;
+
+    /**
+     * NeedsConfirm: the connection is in "confirm" safe mode and the
+     * import was not confirmed; nothing ran.
+     */
+    "needsConfirm": boolean;
+    "failure": importer$0.RowError | null;
+}
+
+/**
  * Location is the database and default schema a session is browsing.
  */
 export interface Location {
@@ -80,6 +149,20 @@ export interface SessionInfo {
      * SafeMode is the session's safe mode (fixed until reconnect).
      */
     "safeMode": store$0.SafeMode;
+
+    /**
+     * Tunneled reports a connection through an SSH tunnel.
+     */
+    "tunneled": boolean;
+}
+
+/**
+ * SettingsState is what SettingsService.Get returns: the settings and, when
+ * settings.json could not be read, why (the defaults are used then).
+ */
+export interface SettingsState {
+    "settings": settings$0.Settings;
+    "error": string;
 }
 
 /**

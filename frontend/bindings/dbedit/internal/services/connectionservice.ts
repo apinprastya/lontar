@@ -25,6 +25,17 @@ import * as store$0 from "../store/models.js";
 import * as $models from "./models.js";
 
 /**
+ * AcceptHostKey trusts the SSH host key with the given SHA256 fingerprint
+ * that host presented in the last refused attempt (see
+ * sshtunnel.HostKeyUnknownError). It is appended to dbedit's own
+ * known_hosts file; the user's ~/.ssh/known_hosts is never written. A
+ * changed key cannot be accepted here.
+ */
+export function AcceptHostKey(host: string, fingerprint: string): $CancellablePromise<void> {
+    return $Call.ByID(954147804, host, fingerprint);
+}
+
+/**
  * Connect opens a session for a saved connection.
  */
 export function Connect(connectionID: string): $CancellablePromise<$models.SessionInfo> {
@@ -74,18 +85,21 @@ export function List(): $CancellablePromise<store$0.Connection[] | null> {
 }
 
 /**
- * Save creates (empty ID) or updates a connection. password: null keeps the
- * stored password, "" removes it, anything else replaces it.
+ * Save creates (empty ID) or updates a connection. For each secret (the
+ * database password, the SSH password and the SSH key passphrase): null
+ * keeps the stored value, "" removes it, anything else replaces it.
  */
-export function Save(c: store$0.Connection, password: string | null): $CancellablePromise<store$0.Connection> {
-    return $Call.ByID(2220670130, c, password);
+export function Save(c: store$0.Connection, secrets: store$0.Secrets): $CancellablePromise<store$0.Connection> {
+    return $Call.ByID(2220670130, c, secrets);
 }
 
 /**
- * Test connects with the given settings without saving them and returns
- * the server version. A null password on an existing connection (non-empty
- * ID) uses the stored password.
+ * Test connects with the given settings (through the SSH tunnel and with
+ * the TLS settings) without saving them and returns the server version. A
+ * null secret on an existing connection (non-empty ID) uses the stored
+ * one. An unknown or changed SSH host key is returned as a structured
+ * error (see hostKeyError).
  */
-export function Test(c: store$0.Connection, password: string | null): $CancellablePromise<string> {
-    return $Call.ByID(2991644019, c, password);
+export function Test(c: store$0.Connection, secrets: store$0.Secrets): $CancellablePromise<string> {
+    return $Call.ByID(2991644019, c, secrets);
 }

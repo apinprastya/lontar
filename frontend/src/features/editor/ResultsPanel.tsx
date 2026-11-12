@@ -81,6 +81,7 @@ export default function ResultsPanel({ tab, platform }: { tab: QueryTabState; pl
                 onColumnResize={(col, w) => setWidths((cur) => ({ ...cur, [view.set.id]: { ...cur[view.set.id], [col]: w } }))}
                 onSelectRow={(row) => s.selectResultRow(tab.id, row)}
                 onToggleDetail={s.toggleDetail}
+                onExportSelection={(spec) => s.requestExport({ type: 'selection', columns: view.set.columns, rows: view.rows, spec, title: tab.title })}
               />
             )}
             {view.rows.length === 0 && <p className="grid-empty muted">No rows.</p>}

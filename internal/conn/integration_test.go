@@ -68,7 +68,7 @@ func TestServersIntegration(t *testing.T) {
 			ctx := context.Background()
 
 			// Test: opens, pings, reports the version, keeps nothing open.
-			v, err := m.Test(ctx, c, pw)
+			v, err := m.Test(ctx, c, Secrets{Password: pw})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -80,7 +80,7 @@ func TestServersIntegration(t *testing.T) {
 			}
 
 			// Wrong password.
-			if _, err := m.Test(ctx, c, "definitely-wrong"); err == nil || !strings.Contains(err.Error(), tc.badPwMatch) {
+			if _, err := m.Test(ctx, c, Secrets{Password: "definitely-wrong"}); err == nil || !strings.Contains(err.Error(), tc.badPwMatch) {
 				t.Fatalf("wrong password err = %v, want %q", err, tc.badPwMatch)
 			}
 
@@ -106,7 +106,7 @@ func TestServersIntegration(t *testing.T) {
 	// MariaDB saved as "mysql" is detected from the version string.
 	t.Run("mariadb-as-mysql", func(t *testing.T) {
 		c, pw := fromDSN(t, driver.MySQL, testutil.SharedMariaDB(t).DSN)
-		v, err := NewManager(newFakeSource(), all.Registry()).Test(context.Background(), c, pw)
+		v, err := NewManager(newFakeSource(), all.Registry()).Test(context.Background(), c, Secrets{Password: pw})
 		if err != nil {
 			t.Fatal(err)
 		}

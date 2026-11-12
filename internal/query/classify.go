@@ -83,3 +83,10 @@ func containsAny(words []string, set map[string]bool) bool {
 	}
 	return false
 }
+
+// ReturnsRows reports whether a statement is one that returns rows, by its
+// leading keyword (the classification Execute uses).
+func ReturnsRows(kind dbdriver.Kind, text string) bool {
+	words := sqlsplit.Words(kind, text, 0)
+	return len(words) > 0 && returnsRows(words)
+}

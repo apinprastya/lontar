@@ -161,6 +161,16 @@ func Convert(v any, dbType string) Cell {
 // ConvertCat is Convert with a precomputed category (use it per column to
 // avoid re-categorising every row).
 func ConvertCat(v any, cat Category) Cell {
+	return convert(v, cat, true)
+}
+
+// ConvertFull is ConvertCat without the display limits: text and bytes are
+// never cut (Trunc is never set). Used by export.
+func ConvertFull(v any, cat Category) Cell {
+	return convert(v, cat, false)
+}
+
+func convert(v any, cat Category, limit bool) Cell {
 	switch x := v.(type) {
 	case nil:
 		return NullCell
@@ -190,13 +200,13 @@ func ConvertCat(v any, cat Category) Cell {
 	case time.Time:
 		return timeCell(x, cat)
 	case string:
-		return stringCell(x, cat)
+		return stringCell(x, cat, limit)
 	case []byte:
-		return bytesCell(x, cat)
+		return bytesCell(x, cat, limit)
 	case interface{ String() string }:
-		return textCell(x.String())
+		return textCell(x.String(), limit)
 	default:
-		return textCell(fallbackString(v))
+		return textCell(fallbackString(v), limit)
 	}
 }
 
@@ -227,7 +237,7 @@ func timeCell(t time.Time, cat Category) Cell {
 }
 
 // stringCell handles drivers that return text (pgx for most types).
-func stringCell(s string, cat Category) Cell {
+func stringCell(s string, cat Category, limit bool) Cell {
 	switch cat {
 	case CatDecimal, CatInt, CatFloat:
 		return numText(s)
@@ -240,7 +250,7 @@ func stringCell(s string, cat Category) Cell {
 	case CatDate, CatTimestamp, CatTimestampTZ:
 		return Cell{K: Time, V: s}
 	}
-	return textCell(s)
+	return textCell(s, limit)
 }
 
 // numText keeps a numeric value given as text exact. Integers that fit a
@@ -253,10 +263,10 @@ func numText(s string) Cell {
 	return Cell{K: Num, V: s}
 }
 
-func bytesCell(b []byte, cat Category) Cell {
+func bytesCell(b []byte, cat Category, limit bool) Cell {
 	switch cat {
 	case CatBinary:
-		return hexCell(b)
+		return hexCell(b, limit)
 	case CatInt:
 		return numText(string(b))
 	case CatDecimal, CatFloat:
@@ -273,15 +283,15 @@ func bytesCell(b []byte, cat Category) Cell {
 		}
 	case CatText, CatTime:
 		if utf8.Valid(b) {
-			return textCell(string(b))
+			return textCell(string(b), limit)
 		}
 	}
-	return hexCell(b)
+	return hexCell(b, limit)
 }
 
-func hexCell(b []byte) Cell {
+func hexCell(b []byte, limit bool) Cell {
 	c := Cell{K: Bytes, Len: len(b)}
-	if len(b) > MaxBytes {
+	if limit && len(b) > MaxBytes {
 		b = b[:MaxBytes]
 		c.Trunc = true
 	}
@@ -289,8 +299,8 @@ func hexCell(b []byte) Cell {
 	return c
 }
 
-func textCell(s string) Cell {
-	if len(s) <= MaxText {
+func textCell(s string, limit bool) Cell {
+	if !limit || len(s) <= MaxText {
 		return Cell{K: Str, V: s}
 	}
 	cut := MaxText

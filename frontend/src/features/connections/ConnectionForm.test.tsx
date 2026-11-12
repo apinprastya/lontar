@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DRIVERS, makeConnection } from '../../test/mockBindings'
 import ConnectionForm, { ConnectionFormProps, GO_ZERO_TIME, safeModeForTag, validateDraft } from './ConnectionForm'
-import type { Connection } from './types'
+import { NO_SECRETS, type Connection } from './types'
 
 function setup(over: Partial<ConnectionFormProps> = {}) {
   const props: ConnectionFormProps = {
@@ -39,7 +39,7 @@ describe('ConnectionForm', () => {
 
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ id: '', name: 'Local PG', kind: 'postgres', host: 'localhost', port: 5432, user: 'me', database: 'app', tag: 'none', color: '' }),
-      null,
+      NO_SECRETS,
     )
     expect(props.onClose).toHaveBeenCalled()
   })
@@ -52,8 +52,8 @@ describe('ConnectionForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     const zero = expect.objectContaining({ createdAt: GO_ZERO_TIME, updatedAt: GO_ZERO_TIME })
-    expect(props.onTest).toHaveBeenCalledWith(zero, null)
-    expect(props.onSave).toHaveBeenCalledWith(zero, null)
+    expect(props.onTest).toHaveBeenCalledWith(zero, NO_SECRETS)
+    expect(props.onSave).toHaveBeenCalledWith(zero, NO_SECRETS)
     // Must be a valid RFC 3339 timestamp (Go's time.Time rejects "").
     expect(Number.isNaN(Date.parse(GO_ZERO_TIME))).toBe(false)
   })
@@ -64,7 +64,7 @@ describe('ConnectionForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ createdAt: initial.createdAt, updatedAt: initial.updatedAt }),
-      null,
+      NO_SECRETS,
     )
   })
 
@@ -92,7 +92,7 @@ describe('ConnectionForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'sqlite', filePath: '/tmp/x.db', readOnly: true, createIfMissing: true, host: '', port: 0 }),
-      null,
+      NO_SECRETS,
     )
   })
 
@@ -118,7 +118,8 @@ describe('ConnectionForm', () => {
   })
 
   it('validateDraft covers SQLite and port edge cases', () => {
-    const base = { name: 'n', kind: 'postgres' as const, host: 'h', port: '1', user: '', database: '', filePath: '', readOnly: false, createIfMissing: false, tag: 'none' as const, color: '', safeMode: 'off' as const }
+    const base = { name: 'n', kind: 'postgres' as const, host: 'h', port: '1', user: '', database: '', filePath: '', readOnly: false, createIfMissing: false, tag: 'none' as const, color: '', safeMode: 'off' as const,
+      sshEnabled: false, sshHost: '', sshPort: '22', sshUser: '', sshAuth: 'password' as const, sshKeyPath: '', sslMode: '' as const, sslCA: '', sslCert: '', sslKey: '' }
     expect(validateDraft(base)).toEqual({})
     expect(validateDraft({ ...base, port: '65535' })).toEqual({})
     expect(validateDraft({ ...base, port: '0' }).port).toBeDefined()
@@ -140,7 +141,7 @@ describe('ConnectionForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'c1', name: 'Renamed', options: { sslmode: 'require' } }),
-      null,
+      NO_SECRETS,
     )
   })
 
@@ -149,7 +150,7 @@ describe('ConnectionForm', () => {
     await user.type(field('Password'), `p@ss:w/rd'"%`)
     expect(field('Password')).toHaveAttribute('placeholder', '')
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(props.onSave).toHaveBeenCalledWith(expect.anything(), `p@ss:w/rd'"%`)
+    expect(props.onSave).toHaveBeenCalledWith(expect.anything(), { ...NO_SECRETS, password: `p@ss:w/rd'"%` })
   })
 
   it('clears a saved password with an empty string', async () => {
@@ -158,7 +159,7 @@ describe('ConnectionForm', () => {
     expect(screen.getByText('Saved password will be removed')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Clear saved' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(props.onSave).toHaveBeenCalledWith(expect.anything(), '')
+    expect(props.onSave).toHaveBeenCalledWith(expect.anything(), { ...NO_SECRETS, password: '' })
   })
 
   it('has no saved placeholder without a stored password', () => {
@@ -174,7 +175,7 @@ describe('ConnectionForm', () => {
     await user.click(screen.getByRole('button', { name: 'Test' }))
     expect(screen.getByText('Testing…')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Test' })).toBeDisabled()
-    expect(onTest).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }), null)
+    expect(onTest).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }), NO_SECRETS)
     resolve('PostgreSQL 16.4')
     expect(await screen.findByText('Connection OK · PostgreSQL 16.4')).toBeInTheDocument()
 
@@ -192,7 +193,7 @@ describe('ConnectionForm', () => {
     await user.type(field('Password'), 'typed')
     await user.click(screen.getByRole('button', { name: 'Test' }))
     expect(await screen.findByText('password authentication failed for user "app"')).toBeInTheDocument()
-    expect(onTest).toHaveBeenCalledWith(expect.anything(), 'typed')
+    expect(onTest).toHaveBeenCalledWith(expect.anything(), { ...NO_SECRETS, password: 'typed' })
   })
 
   it('shows save errors and stays open', async () => {
@@ -256,14 +257,14 @@ describe('ConnectionForm', () => {
     await user.selectOptions(field('Tag'), 'dev')
     expect(field('Safe mode').value).toBe('readonly')
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ tag: 'dev', safeMode: 'readonly' }), null)
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ tag: 'dev', safeMode: 'readonly' }), NO_SECRETS)
   })
 
   it('keeps a saved safe mode when editing', async () => {
     const { props, user } = setup({ initial: makeConnection({ tag: 'prod', safeMode: 'off' }) })
     expect(field('Safe mode').value).toBe('off')
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ safeMode: 'off' }), null)
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ safeMode: 'off' }), NO_SECRETS)
     expect(safeModeForTag('prod', 'off')).toBe('confirm')
     expect(safeModeForTag('prod', 'readonly')).toBe('readonly')
     expect(safeModeForTag('dev', 'off')).toBe('off')

@@ -1,7 +1,15 @@
 import { create } from 'zustand'
 import { connectionApi } from '../features/connections/api'
-import type { Connection, DriverInfo, SessionInfo } from '../features/connections/types'
+import type { Connection, DriverInfo, Secrets, SessionInfo } from '../features/connections/types'
 import { errorMessage } from '../lib/errors'
+import { hostKeyInfo, type HostKeyInfo } from '../lib/hostkey'
+
+/** An SSH host key waiting for the user's decision (connect retries after Accept). */
+export interface HostKeyPrompt {
+  info: HostKeyInfo
+  connectionId: string
+  busy: boolean
+}
 
 export interface ConnectionsState {
   connections: Connection[]
@@ -16,12 +24,19 @@ export interface ConnectionsState {
 
   load(): Promise<void>
   /** Saves and returns the connection; throws so forms can show the error. */
-  save(c: Connection, password: string | null): Promise<Connection>
+  save(c: Connection, secrets: Secrets): Promise<Connection>
   remove(id: string): Promise<void>
   duplicate(id: string): Promise<Connection | null>
   /** Returns the server version; throws on failure. */
-  test(c: Connection, password: string | null): Promise<string>
+  test(c: Connection, secrets: Secrets): Promise<string>
   connect(id: string): Promise<boolean>
+  /** Unknown SSH host key met by connect (shown as a dialog). */
+  hostKey: HostKeyPrompt | null
+  /** Trusts the prompted key (dbedit's own known_hosts) and connects again. */
+  acceptHostKey(): Promise<boolean>
+  dismissHostKey(): void
+  /** Trusts a host key without connecting (the form's Test). */
+  trustHostKey(info: HostKeyInfo): Promise<void>
   disconnect(): Promise<void>
   clearError(): void
 }
@@ -33,6 +48,7 @@ export const initialConnectionsState = {
   error: null as string | null,
   session: null as SessionInfo | null,
   connectingId: null as string | null,
+  hostKey: null as HostKeyPrompt | null,
 }
 
 function sortByName(list: Connection[]): Connection[] {
@@ -52,8 +68,8 @@ export const useConnections = create<ConnectionsState>()((set, get) => ({
     }
   },
 
-  async save(c, password) {
-    const saved = await connectionApi.save(c, password)
+  async save(c, secrets) {
+    const saved = await connectionApi.save(c, secrets)
     const others = get().connections.filter((x) => x.id !== saved.id)
     set({ connections: sortByName([...others, saved]) })
     return saved
@@ -83,20 +99,47 @@ export const useConnections = create<ConnectionsState>()((set, get) => ({
     }
   },
 
-  test(c, password) {
-    return connectionApi.test(c, password)
+  test(c, secrets) {
+    return connectionApi.test(c, secrets)
   },
 
   async connect(id) {
     set({ connectingId: id, error: null })
     try {
       const session = await connectionApi.connect(id)
-      set({ session, connectingId: null })
+      set({ session, connectingId: null, hostKey: null })
       return true
     } catch (err) {
-      set({ connectingId: null, error: errorMessage(err) })
+      const info = hostKeyInfo(err)
+      if (info?.kind === 'hostKeyUnknown') {
+        set({ connectingId: null, hostKey: { info, connectionId: id, busy: false } })
+      } else {
+        set({ connectingId: null, hostKey: null, error: errorMessage(err) })
+      }
       return false
     }
+  },
+
+  async acceptHostKey() {
+    const prompt = get().hostKey
+    if (!prompt) return false
+    set({ hostKey: { ...prompt, busy: true } })
+    try {
+      await connectionApi.acceptHostKey(prompt.info.host, prompt.info.fingerprintSHA256)
+    } catch (err) {
+      set({ hostKey: null, error: errorMessage(err) })
+      return false
+    }
+    set({ hostKey: null })
+    return get().connect(prompt.connectionId)
+  },
+
+  dismissHostKey() {
+    set({ hostKey: null })
+  },
+
+  async trustHostKey(info) {
+    await connectionApi.acceptHostKey(info.host, info.fingerprintSHA256)
   },
 
   async disconnect() {

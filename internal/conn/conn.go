@@ -7,12 +7,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
+	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"dbedit/internal/driver"
+	"dbedit/internal/sshtunnel"
 	"dbedit/internal/store"
 
 	"github.com/google/uuid"
@@ -35,19 +38,49 @@ const DefaultPingTimeout = 15 * time.Second
 var (
 	ErrSessionNotFound = errors.New("session not found (it may have been disconnected)")
 	ErrClosed          = errors.New("session manager is shut down")
-	// ErrUnsupported is returned for settings that are stored but not
-	// implemented yet (SSH tunnels, SSL options). Connecting without them
-	// would silently bypass what the user configured.
-	ErrUnsupported = errors.New("not supported yet")
+	// ErrUnsupported is returned for operations a kind does not support
+	// (switching databases on SQLite).
+	ErrUnsupported = errors.New("not supported")
+	// ErrNoTunnels is returned when a connection uses SSH but the manager
+	// has no tunnel opener.
+	ErrNoTunnels = errors.New("SSH tunnels are not available")
 	// ErrUnknownDatabase is returned by UseDatabase for a database that is
 	// not in the server's database list.
 	ErrUnknownDatabase = errors.New("database not found")
 )
 
-// Source provides saved connections and their passwords (store.Store).
+// Source provides saved connections and their secrets (store.Store).
 type Source interface {
 	Get(id string) (store.Connection, error)
 	Password(id string) (string, error)
+	SSHSecrets(id string) (password, passphrase string, err error)
+}
+
+// Secrets are the secrets used to open a connection.
+type Secrets struct {
+	Password      string
+	SSHPassword   string
+	SSHPassphrase string
+}
+
+// Tunnel is an open SSH tunnel (*sshtunnel.Tunnel).
+type Tunnel interface {
+	Dial(ctx context.Context, network, addr string) (net.Conn, error)
+	Close() error
+}
+
+// TunnelOpener opens an SSH tunnel.
+type TunnelOpener func(ctx context.Context, cfg sshtunnel.Config) (Tunnel, error)
+
+// SSHTunnels adapts an *sshtunnel.Dialer to a TunnelOpener.
+func SSHTunnels(d *sshtunnel.Dialer) TunnelOpener {
+	return func(ctx context.Context, cfg sshtunnel.Config) (Tunnel, error) {
+		t, err := d.Open(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		return t, nil
+	}
 }
 
 // Session is an open connection. Its fields are immutable; DB is safe for
@@ -68,6 +101,23 @@ type Session struct {
 	// to the saved connection applies from the next connect). In
 	// SafeReadOnly the pool itself is read-only (driver.Config.ReadOnly).
 	SafeMode store.SafeMode
+	// Tunneled reports a connection through an SSH tunnel.
+	Tunneled bool
+
+	// tunnel is the session's SSH tunnel (nil without SSH). It lives as
+	// long as the session: UseDatabase reuses it, Disconnect closes it.
+	tunnel Tunnel
+}
+
+// close closes the pool, then the tunnel.
+func (s *Session) close() error {
+	err := s.DB.Close()
+	if s.tunnel != nil {
+		if terr := s.tunnel.Close(); err == nil {
+			err = terr
+		}
+	}
+	return err
 }
 
 // Manager owns all open sessions. It is safe for concurrent use.
@@ -77,6 +127,10 @@ type Manager struct {
 
 	// PingTimeout bounds Connect and Test. Zero means DefaultPingTimeout.
 	PingTimeout time.Duration
+	// Tunnels opens SSH tunnels; nil refuses SSH connections.
+	Tunnels TunnelOpener
+	// HomeDir expands "~" in certificate paths (default os.UserHomeDir).
+	HomeDir func() (string, error)
 
 	mu        sync.Mutex
 	sessions  map[string]*Session
@@ -141,36 +195,26 @@ func (m *Manager) pingTimeout() time.Duration {
 	return DefaultPingTimeout
 }
 
-// checkSupported rejects settings that later milestones implement.
-func checkSupported(c store.Connection) error {
-	if c.SSH != nil && c.SSH.Enabled {
-		return fmt.Errorf("SSH tunnels are %w", ErrUnsupported)
-	}
-	if c.SSL != nil && c.SSL.Mode != "" && c.SSL.Mode != "disable" {
-		return fmt.Errorf("SSL options are %w; set sslmode/tls in the connection options instead", ErrUnsupported)
-	}
-	return nil
+// opened is the result of openDB.
+type opened struct {
+	db      *sql.DB
+	version string
+	current string
+	tunnel  Tunnel
 }
 
-// open validates c, opens it, pings it and reads the server version. The
-// returned DB is configured with the pool limits.
-func (m *Manager) open(ctx context.Context, c store.Connection, password string) (*sql.DB, string, error) {
-	db, version, _, err := m.openDB(ctx, c, password)
-	return db, version, err
-}
-
-// openDB is open that also reports the current database.
-func (m *Manager) openDB(ctx context.Context, c store.Connection, password string) (*sql.DB, string, string, error) {
+// openDB validates c, opens it (through tun, or a new SSH tunnel when c
+// uses SSH and tun is nil), pings it and reads the server version and
+// current database. The returned DB is configured with the pool limits. A
+// tunnel opened here is closed again on failure.
+func (m *Manager) openDB(ctx context.Context, c store.Connection, sec Secrets, tun Tunnel) (_ *opened, err error) {
 	c.Normalize()
 	if err := c.Validate(); err != nil {
-		return nil, "", "", err
-	}
-	if err := checkSupported(c); err != nil {
-		return nil, "", "", err
+		return nil, err
 	}
 	d, err := m.drivers.Get(c.Kind)
 	if err != nil {
-		return nil, "", "", err
+		return nil, err
 	}
 	timeout := m.pingTimeout()
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -178,29 +222,82 @@ func (m *Manager) openDB(ctx context.Context, c store.Connection, password strin
 
 	cfg := c.DriverConfig()
 	cfg.ConnectTimeout = timeout
-	db, err := d.Open(ctx, cfg, password)
+	if cfg.TLS != nil {
+		if err := m.expandTLS(cfg.TLS); err != nil {
+			return nil, err
+		}
+	}
+	switch {
+	case tun != nil:
+		cfg.Dial = tun.Dial
+	case c.SSHEnabled():
+		if m.Tunnels == nil {
+			return nil, ErrNoTunnels
+		}
+		tun, err = m.Tunnels(ctx, sshConfig(c, sec))
+		if err != nil {
+			return nil, err
+		}
+		opened := tun
+		defer func() {
+			if err != nil {
+				_ = opened.Close()
+			}
+		}()
+		cfg.Dial = tun.Dial
+	}
+	db, err := d.Open(ctx, cfg, sec.Password)
 	if err != nil {
-		return nil, "", "", err
+		return nil, err
 	}
 	db.SetMaxOpenConns(MaxOpenConns)
 	db.SetMaxIdleConns(MaxIdleConns)
 	db.SetConnMaxIdleTime(ConnMaxIdleTime)
 	db.SetConnMaxLifetime(ConnMaxLifetime)
 
-	if err := db.PingContext(ctx); err != nil {
+	if err = db.PingContext(ctx); err != nil {
 		_ = db.Close()
-		return nil, "", "", friendly(err, timeout)
+		return nil, friendly(err, timeout)
 	}
 	version, err := d.ServerVersion(ctx, db)
 	if err != nil {
 		_ = db.Close()
-		return nil, "", "", friendly(err, timeout)
+		return nil, friendly(err, timeout)
 	}
-	current, err := d.CurrentDatabase(ctx, db)
-	if err != nil {
+	current, cerr := d.CurrentDatabase(ctx, db)
+	if cerr != nil {
 		current = c.Database
 	}
-	return db, version, current, nil
+	return &opened{db: db, version: version, current: current, tunnel: tun}, nil
+}
+
+// sshConfig builds the tunnel settings of c.
+func sshConfig(c store.Connection, sec Secrets) sshtunnel.Config {
+	return sshtunnel.Config{
+		Host:       c.SSH.Host,
+		Port:       c.SSH.Port,
+		User:       c.SSH.User,
+		Auth:       sshtunnel.AuthMethod(c.SSH.AuthMethod),
+		KeyPath:    c.SSH.KeyPath,
+		Password:   sec.SSHPassword,
+		Passphrase: sec.SSHPassphrase,
+	}
+}
+
+// expandTLS expands "~" in the certificate paths.
+func (m *Manager) expandTLS(t *driver.TLSConfig) error {
+	home := m.HomeDir
+	if home == nil {
+		home = os.UserHomeDir
+	}
+	for _, p := range []*string{&t.CAFile, &t.CertFile, &t.KeyFile} {
+		v, err := sshtunnel.ExpandHome(*p, home)
+		if err != nil {
+			return err
+		}
+		*p = v
+	}
+	return nil
 }
 
 // friendly turns timeouts into a readable message; other driver errors are
@@ -212,15 +309,32 @@ func friendly(err error, timeout time.Duration) error {
 	return err
 }
 
-// Test opens c with password, pings it and returns the server version. The
-// connection is closed afterwards and nothing is stored.
-func (m *Manager) Test(ctx context.Context, c store.Connection, password string) (string, error) {
-	db, version, err := m.open(ctx, c, password)
+// Test opens c with the given secrets (through its SSH tunnel, with its
+// TLS settings), pings it and returns the server version. The connection
+// and tunnel are closed afterwards and nothing is stored.
+func (m *Manager) Test(ctx context.Context, c store.Connection, sec Secrets) (string, error) {
+	o, err := m.openDB(ctx, c, sec, nil)
 	if err != nil {
 		return "", err
 	}
-	_ = db.Close()
-	return version, nil
+	s := &Session{DB: o.db, tunnel: o.tunnel}
+	_ = s.close()
+	return o.version, nil
+}
+
+// secrets loads the stored secrets of a connection.
+func (m *Manager) secrets(c store.Connection) (Secrets, error) {
+	var sec Secrets
+	var err error
+	if sec.Password, err = m.src.Password(c.ID); err != nil {
+		return Secrets{}, err
+	}
+	if c.SSHEnabled() {
+		if sec.SSHPassword, sec.SSHPassphrase, err = m.src.SSHSecrets(c.ID); err != nil {
+			return Secrets{}, err
+		}
+	}
+	return sec, nil
 }
 
 // Connect opens the saved connection connectionID and returns the new
@@ -233,31 +347,33 @@ func (m *Manager) Connect(ctx context.Context, connectionID string) (string, err
 	if err != nil {
 		return "", err
 	}
-	password, err := m.src.Password(connectionID)
-	if err != nil {
-		return "", err
-	}
-	db, version, current, err := m.openDB(ctx, c, password)
-	if err != nil {
-		return "", err
-	}
 	c.Normalize()
+	sec, err := m.secrets(c)
+	if err != nil {
+		return "", err
+	}
+	o, err := m.openDB(ctx, c, sec, nil)
+	if err != nil {
+		return "", err
+	}
 	s := &Session{
 		SafeMode:      c.SafeMode,
-		Database:      current,
+		Database:      o.current,
 		ID:            m.newID(),
 		ConnectionID:  c.ID,
 		Name:          c.Name,
 		Kind:          c.Kind,
-		ServerVersion: version,
+		ServerVersion: o.version,
 		ConnectedAt:   m.now(),
-		DB:            db,
+		DB:            o.db,
+		Tunneled:      o.tunnel != nil,
+		tunnel:        o.tunnel,
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed { // shut down while we were connecting
-		_ = db.Close()
+		_ = s.close()
 		return "", ErrClosed
 	}
 	m.sessions[s.ID] = s
@@ -303,7 +419,7 @@ func (m *Manager) Disconnect(sessionID string) error {
 		return ErrSessionNotFound
 	}
 	m.emit(Event{SessionID: sessionID, Kind: SessionClosed})
-	return s.DB.Close()
+	return s.close()
 }
 
 // DisconnectAll closes every session and refuses new ones. It is called on
@@ -318,7 +434,7 @@ func (m *Manager) DisconnectAll() error {
 	var errs []error
 	for _, s := range sessions {
 		m.emit(Event{SessionID: s.ID, Kind: SessionClosed})
-		if err := s.DB.Close(); err != nil {
+		if err := s.close(); err != nil {
 			errs = append(errs, fmt.Errorf("close %s: %w", s.Name, err))
 		}
 	}
@@ -356,7 +472,8 @@ func (m *Manager) UseDatabase(ctx context.Context, sessionID, database string) (
 	if err != nil {
 		return nil, err
 	}
-	password, err := m.src.Password(old.ConnectionID)
+	c.Normalize()
+	sec, err := m.secrets(c)
 	if err != nil {
 		return nil, err
 	}
@@ -364,18 +481,21 @@ func (m *Manager) UseDatabase(ctx context.Context, sessionID, database string) (
 	// Keep the session's safe mode (and so its read-only pool) even if the
 	// saved connection changed since it was opened.
 	c.SafeMode = old.SafeMode
-	db, version, current, err := m.openDB(ctx, c, password)
+	// Reuse the session's tunnel, if any. A change to the saved SSH
+	// settings applies from the next connect, like safe mode.
+	c.SSH = nil
+	o, err := m.openDB(ctx, c, sec, old.tunnel)
 	if err != nil {
 		return nil, err
 	}
 	next := *old
-	next.DB, next.ServerVersion, next.Database = db, version, current
+	next.DB, next.ServerVersion, next.Database = o.db, o.version, o.current
 
 	m.mu.Lock()
 	cur, ok := m.sessions[sessionID]
 	if !ok || m.closed {
 		m.mu.Unlock()
-		_ = db.Close()
+		_ = o.db.Close()
 		return nil, ErrSessionNotFound
 	}
 	m.sessions[sessionID] = &next

@@ -22,6 +22,8 @@ import { copyText } from '../lib/clipboard'
 import { referenceFilters } from '../features/structure/fk'
 import type { ForeignKey, StructureSection, TableDetail } from '../features/structure/types'
 import { createQueryActions, loadDrafts, newQueryTabState, type QueryState, type QueryTabState } from './queryTabs'
+import { useSettings } from './settings'
+import type { ExportSource } from '../features/export/ExportDialog'
 import { editApi as defaultEditApi, type EditApi } from '../features/edits/api'
 import type { EditValue, PreviewStatement, SafeMode } from '../features/edits/types'
 import {
@@ -228,6 +230,23 @@ export interface WorkspaceState extends QueryState {
   commit(id: string): Promise<boolean>
   /** Mod+S: commits, or opens the preview first in confirm safe mode. */
   requestCommit(id: string): Promise<void>
+
+  /** The export dialog to show (table, query result or selection). */
+  exportRequest: ExportSource | null
+  requestExport(source: ExportSource | null): void
+  /** The CSV import wizard to show (target table). */
+  importRequest: { schema: string; table: string } | null
+  requestImport(target: { schema: string; table: string } | null): void
+  /** A query tab with unrun changes waiting for "close anyway" (setting). */
+  closeConfirm: string | null
+  /** Closes a tab; force skips the unrun-changes question. */
+  closeTabNow(id: string): void
+  resolveCloseConfirm(close: boolean): void
+}
+
+/** A query tab whose SQL changed since it last ran. */
+export function queryDirty(tab: QueryTabState): boolean {
+  return tab.sql.trim() !== '' && tab.sql !== (tab.ranSql ?? '')
 }
 
 export type WorkspaceStore = StoreApi<WorkspaceState>
@@ -276,7 +295,7 @@ function newTab(t: TableInfo, pinned: boolean): TabState {
     appliedRawWhere: '',
     sort: [],
     offset: 0,
-    limit: PAGE_SIZE,
+    limit: useSettings.getState().settings.gridPageSize || PAGE_SIZE,
     columns: [],
     rows: [],
     hasMore: false,
@@ -761,6 +780,15 @@ export function createWorkspaceStore(
           get().guarded([id], () => get().closeTab(id))
           return
         }
+        const tab = findTab(id) ?? get().tabs.find((t) => t.id === id)
+        if (tab?.kind === 'query' && useSettings.getState().settings.confirmCloseDirtyQuery && queryDirty(tab)) {
+          set({ closeConfirm: id })
+          return
+        }
+        get().closeTabNow(id)
+      },
+
+      closeTabNow(id) {
         const { tabs, activeTabId } = get()
         const i = tabs.findIndex((t) => t.id === id)
         if (i < 0) return
@@ -772,6 +800,22 @@ export function createWorkspaceStore(
         if (tab.kind === 'table') cancelRequests(tab)
         else get().releaseQueryTab(tab)
       },
+
+      resolveCloseConfirm(close) {
+        const id = get().closeConfirm
+        set({ closeConfirm: null })
+        if (close && id) get().closeTabNow(id)
+      },
+
+      exportRequest: null,
+      requestExport(source) {
+        set({ exportRequest: source })
+      },
+      importRequest: null,
+      requestImport(target) {
+        set({ importRequest: target })
+      },
+      closeConfirm: null,
 
       activateTab(id) {
         if (findTab(id)) set({ activeTabId: id })

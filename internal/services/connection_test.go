@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"dbedit/internal/sshtunnel"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,7 +20,9 @@ type fakeSessions struct {
 	connectErr error
 	getErr     error
 	testedPw   string
+	testedSec  conn.Secrets
 	testedConn store.Connection
+	testErr    error
 	closedAll  bool
 	session    *conn.Session
 }
@@ -42,8 +46,11 @@ func (f *fakeSessions) Get(string) (*conn.Session, error) {
 	}
 	return f.session, nil
 }
-func (f *fakeSessions) Test(_ context.Context, c store.Connection, pw string) (string, error) {
-	f.testedConn, f.testedPw = c, pw
+func (f *fakeSessions) Test(_ context.Context, c store.Connection, sec conn.Secrets) (string, error) {
+	f.testedConn, f.testedPw, f.testedSec = c, sec.Password, sec
+	if f.testErr != nil {
+		return "", f.testErr
+	}
 	return "PostgreSQL 16.4", nil
 }
 func (f *fakeSessions) DisconnectAll() error { f.closedAll = true; return nil }
@@ -65,7 +72,7 @@ func TestConnectionServiceCRUD(t *testing.T) {
 		t.Fatalf("Drivers() = %+v", d)
 	}
 
-	c, err := svc.Save(store.Connection{Name: "pg", Kind: driver.Postgres, Host: "h"}, ptr("pw"))
+	c, err := svc.Save(store.Connection{Name: "pg", Kind: driver.Postgres, Host: "h"}, store.Secrets{Password: ptr("pw")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +102,7 @@ func TestConnectionServiceCRUD(t *testing.T) {
 	}
 
 	// Errors are readable strings.
-	_, err = svc.Save(store.Connection{Kind: driver.Postgres, Host: "h"}, nil)
+	_, err = svc.Save(store.Connection{Kind: driver.Postgres, Host: "h"}, store.Secrets{})
 	if err == nil || err.Error() != "name is required" {
 		t.Fatalf("err = %v", err)
 	}
@@ -103,30 +110,30 @@ func TestConnectionServiceCRUD(t *testing.T) {
 
 func TestConnectionServiceTestPassword(t *testing.T) {
 	svc, _, sec, fs := newService(t)
-	c, _ := svc.Save(store.Connection{Name: "pg", Kind: driver.Postgres, Host: "h"}, ptr("stored"))
+	c, _ := svc.Save(store.Connection{Name: "pg", Kind: driver.Postgres, Host: "h"}, store.Secrets{Password: ptr("stored")})
 
 	// nil password on a saved connection uses the stored one.
-	v, err := svc.Test(context.Background(), c, nil)
+	v, err := svc.Test(context.Background(), c, store.Secrets{})
 	if err != nil || v != "PostgreSQL 16.4" || fs.testedPw != "stored" {
 		t.Fatalf("Test = %q, %v, pw %q", v, err, fs.testedPw)
 	}
 	// An explicit password wins, even an empty one.
-	_, _ = svc.Test(context.Background(), c, ptr("typed"))
+	_, _ = svc.Test(context.Background(), c, store.Secrets{Password: ptr("typed")})
 	if fs.testedPw != "typed" {
 		t.Fatalf("pw = %q", fs.testedPw)
 	}
-	_, _ = svc.Test(context.Background(), c, ptr(""))
+	_, _ = svc.Test(context.Background(), c, store.Secrets{Password: ptr("")})
 	if fs.testedPw != "" {
 		t.Fatalf("pw = %q", fs.testedPw)
 	}
 	// Unsaved connection with nil password: no password.
-	_, _ = svc.Test(context.Background(), store.Connection{Name: "new", Kind: driver.Postgres, Host: "h"}, nil)
+	_, _ = svc.Test(context.Background(), store.Connection{Name: "new", Kind: driver.Postgres, Host: "h"}, store.Secrets{})
 	if fs.testedPw != "" || fs.testedConn.Name != "new" {
 		t.Fatalf("pw = %q", fs.testedPw)
 	}
 	// Keychain failure is reported.
 	sec.Err = errors.New("keychain locked")
-	if _, err := svc.Test(context.Background(), c, nil); err == nil || !strings.Contains(err.Error(), "keychain locked") {
+	if _, err := svc.Test(context.Background(), c, store.Secrets{}); err == nil || !strings.Contains(err.Error(), "keychain locked") {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -169,11 +176,11 @@ func TestConnectionServiceSQLite(t *testing.T) {
 	reg := all.Registry()
 	svc := NewConnectionService(st, conn.NewManager(st, reg), reg)
 
-	c, err := svc.Save(store.Connection{Name: "local", Kind: driver.SQLite, FilePath: filepath.Join(dir, "x.db"), CreateIfMissing: true}, nil)
+	c, err := svc.Save(store.Connection{Name: "local", Kind: driver.SQLite, FilePath: filepath.Join(dir, "x.db"), CreateIfMissing: true}, store.Secrets{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, err := svc.Test(context.Background(), c, nil); err != nil || !strings.HasPrefix(v, "SQLite ") {
+	if v, err := svc.Test(context.Background(), c, store.Secrets{}); err != nil || !strings.HasPrefix(v, "SQLite ") {
 		t.Fatalf("Test = %q, %v", v, err)
 	}
 	info, err := svc.Connect(context.Background(), c.ID)
@@ -185,5 +192,69 @@ func TestConnectionServiceSQLite(t *testing.T) {
 	}
 	if err := svc.Disconnect(info.ID); !errors.Is(err, conn.ErrSessionNotFound) {
 		t.Fatalf("session should be gone after shutdown, err = %v", err)
+	}
+}
+
+type fakeAccepter struct{ host, fp string }
+
+func (f *fakeAccepter) Accept(host, fp string) error {
+	f.host, f.fp = host, fp
+	if fp == "bad" {
+		return sshtunnel.ErrNoPendingKey
+	}
+	return nil
+}
+
+func TestConnectionServiceSSH(t *testing.T) {
+	svc, _, sec, fs := newService(t)
+	c := store.Connection{Name: "pg", Kind: driver.Postgres, Host: "h",
+		SSH: &store.SSHConfig{Enabled: true, Host: "b", User: "u", AuthMethod: store.SSHAuthKey, KeyPath: "/k"}}
+	saved, err := svc.Save(c, store.Secrets{Password: ptr("db"), SSHPassword: ptr("sp"), SSHPassphrase: ptr("pp")})
+	if err != nil || !saved.HasSSHPassword || !saved.HasSSHPassphrase {
+		t.Fatalf("save = %+v, %v", saved, err)
+	}
+	// Stored SSH secrets are used when not typed; typed ones win.
+	if _, err := svc.Test(context.Background(), saved, store.Secrets{SSHPassphrase: ptr("typed")}); err != nil {
+		t.Fatal(err)
+	}
+	if fs.testedSec != (conn.Secrets{Password: "db", SSHPassword: "sp", SSHPassphrase: "typed"}) {
+		t.Fatalf("secrets = %+v", fs.testedSec)
+	}
+	// Disabled SSH sends no SSH secrets.
+	off := saved
+	off.SSH = &store.SSHConfig{Enabled: false}
+	_, _ = svc.Test(context.Background(), off, store.Secrets{})
+	if fs.testedSec.SSHPassword != "" {
+		t.Fatal("ssh secrets for a disabled tunnel")
+	}
+	// Keychain errors on SSH secrets.
+	sec.Err = errors.New("locked")
+	if _, err := svc.Test(context.Background(), saved, store.Secrets{Password: ptr("x")}); err == nil {
+		t.Fatal("expected keychain error")
+	}
+	sec.Err = nil
+
+	// Host key errors come back unwrapped (structured for the UI).
+	unknown := &sshtunnel.HostKeyUnknownError{Kind: "hostKeyUnknown", Host: "b", FingerprintSHA256: "SHA256:x", Message: "unknown"}
+	fs.testErr = fmt.Errorf("open: %w", unknown)
+	if _, err := svc.Test(context.Background(), saved, store.Secrets{}); err != error(unknown) {
+		t.Fatalf("err = %#v", err)
+	}
+	changed := &sshtunnel.HostKeyChangedError{Kind: "hostKeyChanged", Message: "changed"}
+	fs.connectErr = fmt.Errorf("x: %w", changed)
+	if _, err := svc.Connect(context.Background(), saved.ID); err != error(changed) {
+		t.Fatalf("err = %#v", err)
+	}
+
+	if err := svc.AcceptHostKey("b", "SHA256:x"); !errors.Is(err, conn.ErrNoTunnels) {
+		t.Fatalf("no accepter: %v", err)
+	}
+	acc := &fakeAccepter{}
+	svc.HostKeys = acc
+	if err := svc.AcceptHostKey("b", "SHA256:x"); err != nil || acc.host != "b" || acc.fp != "SHA256:x" {
+		t.Fatalf("accept: %v %+v", err, acc)
+	}
+	if err := svc.AcceptHostKey("b", "bad"); !errors.Is(err, sshtunnel.ErrNoPendingKey) {
+		t.Fatalf("err = %v", err)
 	}
 }

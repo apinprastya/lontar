@@ -25,12 +25,62 @@ export interface Connection {
   color?: string
   /** Guards against accidental writes; "off" when absent. */
   safeMode?: SafeMode
-  ssh?: unknown
-  ssl?: unknown
+  ssh?: SSHConfig | null
+  ssl?: SSLConfig | null
   /** Set by the backend; the password itself never reaches the frontend. */
   hasPassword: boolean
+  /** Saved SSH password / key passphrase (flags only, never the values). */
+  hasSshPassword?: boolean
+  hasSshPassphrase?: boolean
   createdAt: string
   updatedAt: string
+}
+
+export type SSHAuthMethod = 'password' | 'key' | 'agent'
+
+/** SSH tunnel settings (secrets are passed separately, see Secrets). */
+export interface SSHConfig {
+  enabled: boolean
+  host?: string
+  port?: number
+  user?: string
+  authMethod?: SSHAuthMethod
+  keyPath?: string
+}
+
+export type SSLMode = '' | 'disable' | 'preferred' | 'require' | 'verify-ca' | 'verify-full'
+
+/** TLS settings; an empty mode leaves TLS to the driver options. */
+export interface SSLConfig {
+  mode?: SSLMode
+  caFile?: string
+  certFile?: string
+  keyFile?: string
+}
+
+/** Secrets sent with Save/Test: null keeps the stored value, '' clears it. */
+export interface Secrets {
+  password: string | null
+  sshPassword: string | null
+  sshPassphrase: string | null
+}
+
+export const NO_SECRETS: Secrets = { password: null, sshPassword: null, sshPassphrase: null }
+
+/** SSL modes offered per kind ('' = driver options / default). */
+export function sslModes(kind: Kind): { value: SSLMode; label: string }[] {
+  if (kind === 'sqlite') return []
+  const modes: { value: SSLMode; label: string }[] = [
+    { value: '', label: 'Default (driver options)' },
+    { value: 'disable', label: 'Disable' },
+  ]
+  if (kind !== 'postgres') modes.push({ value: 'preferred', label: 'Preferred (TLS if offered, not verified)' })
+  modes.push(
+    { value: 'require', label: 'Require (encrypted, not verified)' },
+    { value: 'verify-ca', label: 'Verify CA (chain, no host name)' },
+    { value: 'verify-full', label: 'Verify full (chain and host name)' },
+  )
+  return modes
 }
 
 export interface DriverInfo {
@@ -49,6 +99,8 @@ export interface SessionInfo {
   connectedAt: string
   /** Safe mode of the session (fixed until reconnect). */
   safeMode?: SafeMode
+  /** Connected through an SSH tunnel. */
+  tunneled?: boolean
 }
 
 export const TAGS: { value: Tag; label: string; color: string }[] = [

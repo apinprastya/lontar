@@ -85,7 +85,7 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
         <label className="toolbar-select">
           Max rows
           <select value={tab.maxRows} onChange={(e) => s.setMaxRows(tab.id, Number(e.target.value))} aria-label="Max rows">
-            {MAX_ROWS_OPTIONS.map((n) => (
+            {(MAX_ROWS_OPTIONS.includes(tab.maxRows) ? MAX_ROWS_OPTIONS : [...MAX_ROWS_OPTIONS, tab.maxRows].sort((a, b) => a - b)).map((n) => (
               <option key={n} value={n}>
                 {n.toLocaleString('en-US')}
               </option>

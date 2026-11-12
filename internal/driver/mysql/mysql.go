@@ -71,7 +71,7 @@ func (d *Driver) Config(cfg driver.Config, password string) (*gomysql.Config, er
 	// one row, and an update that writes the current value must count.
 	mc.ClientFoundRows = true
 	if len(cfg.Options) == 0 {
-		return d.readOnly(mc, cfg), nil
+		return d.finish(mc, cfg)
 	}
 	// Route options through the driver's own DSN parser so known keys
 	// (charset, tls, readTimeout, ...) are validated and applied exactly as
@@ -89,7 +89,31 @@ func (d *Driver) Config(cfg driver.Config, password string) (*gomysql.Config, er
 	// exactly as given, whatever characters they contain.
 	parsed.User, parsed.Passwd, parsed.DBName, parsed.Addr = mc.User, mc.Passwd, mc.DBName, mc.Addr
 	parsed.ClientFoundRows = true
-	return d.readOnly(parsed, cfg), nil
+	return d.finish(parsed, cfg)
+}
+
+// finish applies the dialer (SSH tunnel), the TLS settings and read-only
+// mode. A TLS mode set in cfg.TLS wins over a "tls" option: the
+// *tls.Config goes into Config.TLS directly (no global RegisterTLSConfig
+// name), so nothing needs to be deregistered when the pool closes.
+func (d *Driver) finish(mc *gomysql.Config, cfg driver.Config) (*gomysql.Config, error) {
+	if cfg.Dial != nil {
+		mc.DialFunc = cfg.Dial
+	}
+	if cfg.TLS.Active() {
+		if err := driver.CheckTLS(d.kind, cfg.TLS); err != nil {
+			return nil, err
+		}
+		t, fallback, err := driver.ClientTLS(cfg.TLS, cfg.Host)
+		if err != nil {
+			return nil, err
+		}
+		mc.TLS, mc.TLSConfig, mc.AllowFallbackToPlaintext = t, "", fallback
+		if t == nil {
+			mc.TLSConfig = "false"
+		}
+	}
+	return d.readOnly(mc, cfg), nil
 }
 
 // ReadOnlyVariable returns the session variable that makes transactions

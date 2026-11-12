@@ -197,7 +197,7 @@ func TestVersionHandling(t *testing.T) {
 		}
 	}
 
-	write(`{"version": 3, "connections": []}`)
+	write(`{"version": 4, "connections": []}`)
 	if _, err := s.List(); !errors.Is(err, ErrNewerVersion) {
 		t.Fatalf("err = %v, want ErrNewerVersion", err)
 	}
@@ -205,7 +205,7 @@ func TestVersionHandling(t *testing.T) {
 		t.Fatalf("Save must refuse to overwrite a newer file, err = %v", err)
 	}
 	data, _ := os.ReadFile(s.Path())
-	if !strings.Contains(string(data), `"version": 3`) {
+	if !strings.Contains(string(data), `"version": 4`) {
 		t.Fatal("newer file was modified")
 	}
 
@@ -228,7 +228,7 @@ func TestVersionHandling(t *testing.T) {
 
 	// Unknown future fields in a v1 file are tolerated (SSH/SSL round trip).
 	write(`{"version":1,"connections":[{"id":"1","name":"n","kind":"postgres","host":"h","tag":"prod",
-	  "ssh":{"enabled":true,"host":"bastion","authMethod":"agent"},"ssl":{"mode":"require"},"futureField":1}]}`)
+	  "ssh":{"enabled":true,"host":"bastion","user":"me","authMethod":"agent"},"ssl":{"mode":"require"},"futureField":1}]}`)
 	c, err := s.Get("1")
 	if err != nil {
 		t.Fatal(err)
@@ -535,7 +535,7 @@ func TestMigrateV1ToV2(t *testing.T) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		t.Fatal(err)
 	}
-	if f["version"] != float64(2) {
+	if f["version"] != float64(CurrentVersion) {
 		t.Fatalf("version = %v", f["version"])
 	}
 	conns := f["connections"].([]any)

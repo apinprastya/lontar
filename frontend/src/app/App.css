@@ -1,3 +1,8 @@
+/*
+ * Colours are custom properties with a light and a dark set. The theme is
+ * chosen by data-theme on <html> (set from the settings: system follows
+ * prefers-color-scheme live). Dark is the default until it is set.
+ */
 :root {
   --bg: #f6f6f7;
   --bg-sidebar: #ececee;
@@ -29,11 +34,20 @@
   --syn-ident: #2d5bb8;
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Noto Sans', sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace;
-  color-scheme: light dark;
+  --tag-text-mix: 100%;
+  --kind-table: #2d5bb8;
+  --kind-view: #7c3aed;
+  --kind-mview: #0e7c86;
+  --key-icon: #9a6700;
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+:root:not([data-theme='light']) {
+    color-scheme: dark;
+    --kind-table: #4c82f0;
+    --kind-view: #a371f7;
+    --kind-mview: #39c5cf;
+    --key-icon: #d29922;
     --bg: #18191e;
     --bg-sidebar: #1f2026;
     --bg-status: #24252c;
@@ -61,11 +75,20 @@
     --syn-number: #f78c6c;
     --syn-type: #7fdbca;
     --syn-ident: #82aaff;
-  }
+}
+
+/* Tag colours are tuned for the dark theme; darken their text on light. */
+:root[data-theme='light'] {
+  --tag-text-mix: 62%;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* The hidden attribute wins over display rules (e.g. hidden form tabs). */
+[hidden] {
+  display: none !important;
 }
 
 html,
@@ -386,6 +409,7 @@ input[type='checkbox'] {
 }
 
 .tag-label {
+  color: color-mix(in srgb, var(--tag) var(--tag-text-mix), var(--text));
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -700,13 +724,13 @@ input[type='checkbox'] {
 }
 
 .table-icon-table {
-  color: #4c82f0;
+  color: var(--kind-table);
 }
 .table-icon-view {
-  color: #a371f7;
+  color: var(--kind-view);
 }
 .table-icon-materialized-view {
-  color: #39c5cf;
+  color: var(--kind-mview);
 }
 
 /* Main area */
@@ -920,7 +944,7 @@ input[type='checkbox'] {
 }
 
 .pk-icon {
-  color: #d29922;
+  color: var(--key-icon);
 }
 
 .row-detail-item dd {
@@ -1589,7 +1613,7 @@ textarea.cell-editor-input {
 }
 
 .structure-table .key-icon {
-  color: #d29922;
+  color: var(--key-icon);
   vertical-align: -2px;
 }
 
@@ -1619,4 +1643,367 @@ textarea.cell-editor-input {
 .ddl-view {
   flex: 1;
   min-height: 0;
+}
+
+/* ---- M6: connection form tabs, file pickers ----------------------------- */
+
+.form-tabs {
+  display: flex;
+  gap: 2px;
+  margin: -4px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.form-tabs button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.form-tabs button.has-error {
+  color: var(--danger);
+}
+
+.tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.form-grid > .checks,
+.form-grid > label.checks {
+  text-align: left;
+  color: var(--text);
+}
+
+.path-field {
+  display: flex;
+  gap: 6px;
+}
+
+.path-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+.inline-fields {
+  flex-direction: row;
+  gap: 6px;
+}
+
+.form-section {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  justify-self: start;
+}
+
+.segmented label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  color: var(--text);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+}
+
+.segmented label:last-child {
+  border-right: none;
+}
+
+.segmented label:has(input:checked) {
+  background: var(--bg-selected);
+}
+
+.segmented input {
+  margin: 0;
+}
+
+.plain-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.warning-box {
+  border: 1px solid var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  color: var(--text);
+}
+
+.warning-box p {
+  margin: 0 0 6px;
+}
+
+.warning-box pre {
+  margin: 0;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+
+.warning-text {
+  color: var(--warning);
+}
+
+.export-status {
+  min-height: 22px;
+  margin: 10px 0 0;
+}
+
+.spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--muted);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: -1px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.export-dialog,
+.settings-dialog {
+  width: min(600px, calc(100vw - 32px));
+}
+
+/* ---- Host key dialog ------------------------------------------------------ */
+
+.hostkey-dialog {
+  width: min(560px, calc(100vw - 32px));
+  border-top-color: var(--warning);
+}
+
+.hostkey-dialog.hostkey-changed {
+  border-top-color: var(--danger);
+}
+
+.hostkey-facts {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 4px 10px;
+  margin: 10px 0;
+}
+
+.hostkey-facts dt {
+  color: var(--muted);
+}
+
+.hostkey-facts dd {
+  margin: 0;
+  user-select: text;
+  -webkit-user-select: text;
+  word-break: break-all;
+}
+
+/* ---- Import wizard -------------------------------------------------------- */
+
+.import-wizard {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.import-preview {
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.import-preview table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.import-preview th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-sidebar);
+  vertical-align: top;
+}
+
+.import-preview td {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-head {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* ---- Command palette ------------------------------------------------------ */
+
+.palette-backdrop {
+  place-items: start center;
+  padding-top: 12vh;
+}
+
+.ssh-badge {
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid var(--ok);
+  color: var(--ok);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: 4px;
+}
+
+.palette {
+  width: min(620px, calc(100vw - 32px));
+  background: var(--bg-dialog);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.palette [cmdk-input] {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  padding: 12px 14px;
+  outline: none;
+}
+
+.palette [cmdk-list] {
+  max-height: min(380px, 50vh);
+  overflow: auto;
+  padding: 6px;
+}
+
+.palette [cmdk-group-heading] {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 8px 4px;
+}
+
+.palette [cmdk-item] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.palette [cmdk-item][data-selected='true'] {
+  background: var(--bg-selected);
+}
+
+.palette [cmdk-item][data-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.palette [cmdk-empty],
+.palette [cmdk-loading] {
+  color: var(--muted);
+  padding: 10px 8px;
+}
+
+.palette-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-kind {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--kind-table);
+  border: 1px solid currentColor;
+}
+
+.palette-view,
+.palette-materialized-view {
+  color: var(--kind-view);
+}
+
+.palette-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.palette-kbd {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: var(--bg-sidebar);
+}
+
+.palette-footer {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 6px 12px;
+}
+
+.statusbar-button {
+  border: none;
+  background: none;
+  color: var(--muted);
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.statusbar-button:hover {
+  color: var(--text);
+}
+
+.form-grid > span.hint,
+.form-grid > span.warning-text {
+  text-align: left;
 }

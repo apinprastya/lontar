@@ -169,6 +169,7 @@ export default function TableTab({ tab, platform }: { tab: TabState; platform?: 
             onToggleDetail={s.toggleDetail}
             editing={editing}
             links={links}
+            onExportSelection={(spec) => s.requestExport({ type: 'selection', columns: tab.columns, rows: cells, spec, title: tab.table })}
           />
         )}
         {tab.loading && (

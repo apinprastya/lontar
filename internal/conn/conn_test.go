@@ -27,6 +27,7 @@ type fakeSource struct {
 	conns     map[string]store.Connection
 	passwords map[string]string
 	pwErr     error
+	sshErr    error
 }
 
 func newFakeSource(conns ...store.Connection) *fakeSource {
@@ -51,6 +52,12 @@ func (f *fakeSource) Password(id string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.passwords[id], f.pwErr
+}
+
+func (f *fakeSource) SSHSecrets(id string) (string, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.passwords[id+":ssh-password"], f.passwords[id+":ssh-passphrase"], f.sshErr
 }
 
 func sqliteConn(t *testing.T, id string, create bool) store.Connection {
@@ -149,7 +156,7 @@ func TestTest(t *testing.T) {
 	ctx := context.Background()
 	m := NewManager(newFakeSource(), all.Registry())
 
-	v, err := m.Test(ctx, sqliteConn(t, "t", true), "")
+	v, err := m.Test(ctx, sqliteConn(t, "t", true), Secrets{Password: ""})
 	if err != nil || !strings.HasPrefix(v, "SQLite ") {
 		t.Fatalf("Test = %q, %v", v, err)
 	}
@@ -160,14 +167,15 @@ func TestTest(t *testing.T) {
 		want string
 	}{
 		{"invalid", store.Connection{Kind: driver.Postgres, Host: "h"}, "name is required"},
-		{"ssh", store.Connection{Name: "x", Kind: driver.Postgres, Host: "h", SSH: &store.SSHConfig{Enabled: true}}, "SSH tunnels are not supported yet"},
-		{"ssl", store.Connection{Name: "x", Kind: driver.Postgres, Host: "h", SSL: &store.SSLConfig{Mode: "require"}}, "SSL options are not supported yet"},
+		{"ssh invalid", store.Connection{Name: "x", Kind: driver.Postgres, Host: "h", SSH: &store.SSHConfig{Enabled: true}}, "SSH host is required"},
+		{"ssh no tunnels", store.Connection{Name: "x", Kind: driver.Postgres, Host: "h", SSH: &store.SSHConfig{Enabled: true, Host: "b", User: "u"}}, "SSH tunnels are not available"},
+		{"ssl", store.Connection{Name: "x", Kind: driver.Postgres, Host: "h", SSL: &store.SSLConfig{Mode: "preferred"}}, "not supported for postgres"},
 		{"refused", store.Connection{Name: "x", Kind: driver.Postgres, Host: "127.0.0.1", Port: 1}, "127.0.0.1"},
 		{"bad option", store.Connection{Name: "x", Kind: driver.Postgres, Host: "h", Options: map[string]string{"password": "x"}}, "not allowed"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := m.Test(ctx, tc.c, "")
+			_, err := m.Test(ctx, tc.c, Secrets{Password: ""})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("err = %v, want %q", err, tc.want)
 			}
@@ -178,19 +186,19 @@ func TestTest(t *testing.T) {
 	ok := sqliteConn(t, "ok", true)
 	ok.SSH = &store.SSHConfig{Enabled: false}
 	ok.SSL = &store.SSLConfig{Mode: "disable"}
-	if _, err := m.Test(ctx, ok, ""); err != nil {
+	if _, err := m.Test(ctx, ok, Secrets{Password: ""}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Unregistered kind.
 	m2 := NewManager(newFakeSource(), driver.NewRegistry(sqlite.New()))
-	if _, err := m2.Test(ctx, store.Connection{Name: "x", Kind: driver.MySQL, Host: "h"}, ""); !errors.Is(err, driver.ErrUnknownKind) {
+	if _, err := m2.Test(ctx, store.Connection{Name: "x", Kind: driver.MySQL, Host: "h"}, Secrets{Password: ""}); !errors.Is(err, driver.ErrUnknownKind) {
 		t.Fatalf("err = %v", err)
 	}
 
 	// Server version failure closes the DB and reports the error.
 	m3 := NewManager(newFakeSource(), driver.NewRegistry(badVersion{sqlite.New()}))
-	if _, err := m3.Test(ctx, sqliteConn(t, "v", true), ""); err == nil || !strings.Contains(err.Error(), "version unavailable") {
+	if _, err := m3.Test(ctx, sqliteConn(t, "v", true), Secrets{}); err == nil || !strings.Contains(err.Error(), "version unavailable") {
 		t.Fatalf("err = %v", err)
 	}
 }

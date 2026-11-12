@@ -138,3 +138,37 @@ describe('DataGrid foreign key links', () => {
     expect(ctx.fillText).toHaveBeenCalledWith('→', 60 - LINK_HIT_WIDTH / 2, 30)
   })
 })
+
+describe('DataGrid export selection', () => {
+  afterEach(cleanup)
+
+  it('offers "Export selection…" for the clicked cell or the selection', () => {
+    const onExportSelection = vi.fn()
+    render(
+      <DataGrid
+        columns={columns}
+        rows={rows}
+        offset={0}
+        sort={[]}
+        columnWidths={{}}
+        platform="linux"
+        onHeaderClick={vi.fn()}
+        onColumnResize={vi.fn()}
+        onSelectRow={vi.fn()}
+        onToggleDetail={vi.fn()}
+        onExportSelection={onExportSelection}
+      />,
+    )
+    const p = () => lastProps as FakeProps
+    const ctxEv = (x: number) => ({ preventDefault: vi.fn(), bounds: { x, y: 0 }, localEventX: 1, localEventY: 1 })
+    act(() => p().onCellContextMenu?.([1, 0], ctxEv(0)))
+    expect(screen.queryByRole('menuitem', { name: /Open referenced row/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Export selection…' }))
+    expect(onExportSelection).toHaveBeenCalledWith({ range: { x: 1, y: 0, width: 1, height: 1 } })
+    // With whole rows selected, the selection is exported.
+    act(() => p().onGridSelectionChange({ columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection([0, 2]) }))
+    act(() => p().onCellContextMenu?.([0, 1], ctxEv(0)))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Export selection…' }))
+    expect(onExportSelection).toHaveBeenLastCalledWith({ rows: [0, 1] })
+  })
+})

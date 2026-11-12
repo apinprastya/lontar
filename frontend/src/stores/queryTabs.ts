@@ -1,6 +1,7 @@
 import type { Kind } from '../features/connections/types'
 import type { EditorApi } from '../features/editor/api'
 import { cycleSort, sortRows } from '../features/grid/sort'
+import { useSettings } from './settings'
 import { DEFAULT_MAX_ROWS, type CompletionSchema, type ExecResult, type ResultSet, type TxInfo } from '../features/editor/types'
 import type { SortSpec } from '../features/workspace/types'
 import { errorMessage } from '../lib/errors'
@@ -56,6 +57,8 @@ export interface QueryTabState {
   editorRequest: EditorRequest | null
   /** Confirm safe mode: a run waiting for the user to confirm its writes. */
   confirm: PendingRun | null
+  /** The SQL when the tab last ran (unrun changes: sql differs). */
+  ranSql: string | null
 }
 
 /** A run that needs confirmation before it executes. */
@@ -153,10 +156,11 @@ export function newQueryTabState(title: string, sql = ''): QueryTabState {
     loadingMore: false,
     error: null,
     tx: null,
-    maxRows: DEFAULT_MAX_ROWS,
+    maxRows: useSettings.getState().settings.editorMaxRows || DEFAULT_MAX_ROWS,
     continueOnError: false,
     editorRequest: null,
     confirm: null,
+    ranSql: null,
   }
 }
 
@@ -328,6 +332,7 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
     async runQuery(id, mode) {
       const tab = findQuery(id)
       if (!tab || tab.running) return
+      patch(id, { ranSql: tab.sql })
       let text = tab.sql
       let base = 0
       if (mode === 'current') {

@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -65,25 +66,44 @@ func (m SafeMode) Valid() bool {
 	return false
 }
 
-// SSHConfig describes an SSH tunnel. Reserved for milestone M6: it is
-// persisted but not applied yet, and conn refuses to connect while it is
-// enabled so that a connection never silently bypasses its tunnel. Secrets
-// (SSH password / key passphrase) will live in the SecretStore under
-// SecretKey(id, "ssh"), never in this struct.
+// SSH authentication methods (SSHConfig.AuthMethod).
+const (
+	SSHAuthPassword = "password"
+	SSHAuthKey      = "key"
+	SSHAuthAgent    = "agent"
+)
+
+// DefaultSSHPort is used when SSHConfig.Port is 0.
+const DefaultSSHPort = 22
+
+// SSHConfig describes an SSH tunnel to the database host. Secrets (the SSH
+// password and the key passphrase) are kept in the SecretStore under
+// SecretKey(id, SecretSSHPassword / SecretSSHPassphrase), never here.
 type SSHConfig struct {
-	Enabled    bool   `json:"enabled"`
-	Host       string `json:"host,omitempty"`
-	Port       int    `json:"port,omitempty"`
-	User       string `json:"user,omitempty"`
-	AuthMethod string `json:"authMethod,omitempty"` // "password", "key" or "agent"
-	KeyPath    string `json:"keyPath,omitempty"`
+	Enabled bool   `json:"enabled"`
+	Host    string `json:"host,omitempty"`
+	Port    int    `json:"port,omitempty"`
+	User    string `json:"user,omitempty"`
+	// AuthMethod is "password", "key" or "agent".
+	AuthMethod string `json:"authMethod,omitempty"`
+	// KeyPath is the private key file for "key" ("~" is expanded).
+	KeyPath string `json:"keyPath,omitempty"`
 }
 
-// SSLConfig describes TLS settings. Reserved for milestone M6, like
-// SSHConfig: conn refuses to connect when a mode other than "" or "disable"
-// is set, rather than connecting without the requested TLS.
+// SSL modes (SSLConfig.Mode). See driver.TLSDisable etc. for their meaning.
+const (
+	SSLDisable    = driver.TLSDisable
+	SSLPreferred  = driver.TLSPreferred // MySQL/MariaDB only
+	SSLRequire    = driver.TLSRequire
+	SSLVerifyCA   = driver.TLSVerifyCA
+	SSLVerifyFull = driver.TLSVerifyFull
+)
+
+// SSLConfig describes TLS settings. An empty Mode leaves TLS to the
+// driver options (sslmode / tls) and defaults, as before M6; a set Mode
+// wins over those options.
 type SSLConfig struct {
-	Mode     string `json:"mode,omitempty"` // disable, prefer, require, verify-ca, verify-full
+	Mode     string `json:"mode,omitempty"`
 	CAFile   string `json:"caFile,omitempty"`
 	CertFile string `json:"certFile,omitempty"`
 	KeyFile  string `json:"keyFile,omitempty"`
@@ -119,6 +139,10 @@ type Connection struct {
 	// HasPassword is maintained by Store (values passed to Save are
 	// ignored). It lets the UI show "saved" without touching the keychain.
 	HasPassword bool `json:"hasPassword"`
+	// HasSSHPassword and HasSSHPassphrase report saved SSH secrets, like
+	// HasPassword (maintained by Store; the secrets are never returned).
+	HasSSHPassword   bool `json:"hasSshPassword"`
+	HasSSHPassphrase bool `json:"hasSshPassphrase"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -136,7 +160,20 @@ func (c Connection) DriverConfig() driver.Config {
 		CreateIfMissing: c.CreateIfMissing,
 		ReadOnly:        c.ReadOnly || c.SafeMode == SafeReadOnly,
 		Options:         c.Options,
+		TLS:             c.tls(),
 	}
+}
+
+func (c Connection) tls() *driver.TLSConfig {
+	if c.SSL == nil || c.SSL.Mode == "" || c.Kind.IsFileBased() {
+		return nil
+	}
+	return &driver.TLSConfig{Mode: c.SSL.Mode, CAFile: c.SSL.CAFile, CertFile: c.SSL.CertFile, KeyFile: c.SSL.KeyFile}
+}
+
+// SSHEnabled reports whether the connection goes through an SSH tunnel.
+func (c Connection) SSHEnabled() bool {
+	return c.SSH != nil && c.SSH.Enabled && !c.Kind.IsFileBased()
 }
 
 // ValidationError is returned for invalid connection settings. Its message
@@ -174,11 +211,36 @@ func (c *Connection) Normalize() {
 	}
 	if c.Kind.IsFileBased() {
 		c.Host, c.Port, c.User, c.Database = "", 0, "", ""
+		// No network: SSH and SSL do not apply.
+		c.SSH, c.SSL = nil, nil
 	} else {
 		c.FilePath, c.ReadOnly, c.CreateIfMissing = "", false, false
 	}
 	if len(c.Options) == 0 {
 		c.Options = nil
+	}
+	if c.SSH != nil {
+		c.SSH.Host = strings.TrimSpace(c.SSH.Host)
+		c.SSH.User = strings.TrimSpace(c.SSH.User)
+		c.SSH.KeyPath = strings.TrimSpace(c.SSH.KeyPath)
+		if c.SSH.AuthMethod == "" {
+			c.SSH.AuthMethod = SSHAuthPassword
+		}
+		if c.SSH.Port == 0 {
+			c.SSH.Port = DefaultSSHPort
+		}
+		if !c.SSH.Enabled && c.SSH.Host == "" && c.SSH.User == "" && c.SSH.KeyPath == "" {
+			c.SSH = nil
+		}
+	}
+	if c.SSL != nil {
+		c.SSL.Mode = strings.TrimSpace(c.SSL.Mode)
+		c.SSL.CAFile = strings.TrimSpace(c.SSL.CAFile)
+		c.SSL.CertFile = strings.TrimSpace(c.SSL.CertFile)
+		c.SSL.KeyFile = strings.TrimSpace(c.SSL.KeyFile)
+		if *c.SSL == (SSLConfig{}) {
+			c.SSL = nil
+		}
 	}
 }
 
@@ -214,6 +276,50 @@ func (c *Connection) Validate() error {
 		if strings.TrimSpace(k) == "" {
 			return invalid("options", "option names must not be empty")
 		}
+	}
+	if err := c.validateSSH(); err != nil {
+		return err
+	}
+	return c.validateSSL()
+}
+
+func (c *Connection) validateSSH() error {
+	s := c.SSH
+	if s == nil {
+		return nil
+	}
+	switch s.AuthMethod {
+	case SSHAuthPassword, SSHAuthKey, SSHAuthAgent:
+	default:
+		return invalid("ssh.authMethod", "unknown SSH authentication method %q", s.AuthMethod)
+	}
+	if s.Port < 1 || s.Port > 65535 {
+		return invalid("ssh.port", "SSH port must be between 1 and 65535")
+	}
+	if !s.Enabled {
+		return nil
+	}
+	switch {
+	case s.Host == "":
+		return invalid("ssh.host", "SSH host is required")
+	case s.User == "":
+		return invalid("ssh.user", "SSH user is required")
+	case s.AuthMethod == SSHAuthKey && s.KeyPath == "":
+		return invalid("ssh.keyPath", "SSH private key file is required")
+	}
+	return nil
+}
+
+func (c *Connection) validateSSL() error {
+	s := c.SSL
+	if s == nil {
+		return nil
+	}
+	if s.Mode != "" && !slices.Contains(driver.TLSModes(c.Kind), s.Mode) {
+		return invalid("ssl.mode", "SSL mode %q is not supported for %s", s.Mode, c.Kind)
+	}
+	if (s.CertFile == "") != (s.KeyFile == "") {
+		return invalid("ssl.certFile", "a client certificate needs both the certificate and the key file")
 	}
 	return nil
 }

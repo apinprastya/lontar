@@ -1,3 +1,4 @@
+import type React from 'react'
 import { KeyboardEvent, RefObject, useMemo } from 'react'
 import { Connection, KIND_BADGES, KIND_LABELS, TAGS, connectionColor, connectionSummary } from './types'
 
@@ -120,7 +121,7 @@ export default function ConnectionList({
                   <span className="connection-summary mono">{connectionSummary(c)}</span>
                 </span>
                 {c.tag !== 'none' && tag && (
-                  <span className="tag-label" style={{ color: tag.color }}>
+                  <span className="tag-label" style={{ '--tag': tag.color } as React.CSSProperties}>
                     {tag.label}
                   </span>
                 )}

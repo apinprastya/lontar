@@ -4,6 +4,7 @@ import { matchesShortcut, shortcutLabel } from '../../lib/mod'
 import { useConnections } from '../../stores/connections'
 import ConnectionForm from './ConnectionForm'
 import ConnectionList from './ConnectionList'
+import HostKeyDialog from './HostKeyDialog'
 import type { Connection } from './types'
 
 type Dialog = { type: 'form'; connection?: Connection } | { type: 'delete'; connection: Connection } | null
@@ -15,6 +16,10 @@ type Dialog = { type: 'form'; connection?: Connection } | { type: 'delete'; conn
 export default function Welcome({ platform }: { platform?: string }) {
   const { connections, drivers, loading, error, connectingId, load, save, remove, duplicate, test, connect, clearError } =
     useConnections()
+  const hostKey = useConnections((s) => s.hostKey)
+  const acceptHostKey = useConnections((s) => s.acceptHostKey)
+  const dismissHostKey = useConnections((s) => s.dismissHostKey)
+  const trustHostKey = useConnections((s) => s.trustHostKey)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -126,8 +131,11 @@ export default function Welcome({ platform }: { platform?: string }) {
           onTest={test}
           onConnect={(c) => connect(c.id)}
           onClose={() => setDialog(null)}
+          onTrustHostKey={trustHostKey}
         />
       )}
+
+      {hostKey && <HostKeyDialog info={hostKey.info} busy={hostKey.busy} onAccept={() => void acceptHostKey()} onCancel={dismissHostKey} />}
 
       {dialog?.type === 'delete' && (
         <ConfirmDialog

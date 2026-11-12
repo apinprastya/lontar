@@ -401,3 +401,27 @@ func TestApplyReadOnly(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestBindTextExecArgsDecodeHex(t *testing.T) {
+	intCol := driver.Column{Name: "n", DataType: "int"}
+	if v := BindText(driver.MySQL, intCol, "9007199254740993"); v != int64(9007199254740993) {
+		t.Fatalf("mysql int = %#v", v)
+	}
+	if v := BindText(driver.Postgres, intCol, "12"); v != "12" {
+		t.Fatalf("pg = %#v", v)
+	}
+	if a := ExecArgs(driver.Postgres, []any{1}); len(a) != 2 {
+		t.Fatal("pg exec mode missing")
+	}
+	if a := ExecArgs(driver.SQLite, []any{1}); len(a) != 1 {
+		t.Fatal("sqlite args changed")
+	}
+	for _, s := range []string{"0xdead", `\xdead`, " de ad "} {
+		if b, err := DecodeHex(s); err != nil || len(b) != 2 {
+			t.Errorf("%q: %v %v", s, b, err)
+		}
+	}
+	if _, err := DecodeHex("zz"); err == nil {
+		t.Fatal("bad hex")
+	}
+}

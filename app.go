@@ -2,12 +2,16 @@ package main
 
 import (
 	"io/fs"
+	"os"
+	"path/filepath"
 
 	"dbedit/internal/conn"
 	"dbedit/internal/driver/all"
 	"dbedit/internal/history"
 	"dbedit/internal/query"
 	"dbedit/internal/services"
+	"dbedit/internal/settings"
+	"dbedit/internal/sshtunnel"
 	"dbedit/internal/store"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -24,24 +28,53 @@ type backend struct {
 	editor      *services.EditorService
 	history     *services.HistoryService
 	edit        *services.EditService
+	dialogs     *services.DialogService
+	export      *services.ExportService
+	importer    *services.ImportService
+	settings    *services.SettingsService
+}
+
+// KnownHostsFile is dbedit's own known_hosts in the config directory (the
+// only known_hosts file dbedit writes).
+const KnownHostsFile = "known_hosts"
+
+// userKnownHosts returns ~/.ssh/known_hosts (read only), or nil without a
+// home directory.
+func userKnownHosts() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return []string{filepath.Join(home, ".ssh", "known_hosts")}
 }
 
 // newBackend wires the connection store (JSON + OS keychain, with the
-// encrypted-file fallback on Linux), the session manager, the driver
-// registry and the query history (history.db), keeping everything under
-// configDir. All services share one session manager.
+// encrypted-file fallback on Linux), the session manager with its SSH
+// tunnels (host keys checked against ~/.ssh/known_hosts and dbedit's own
+// known_hosts), the driver registry, the query history (history.db) and the
+// settings (settings.json), keeping everything under configDir. All
+// services share one session manager.
 func newBackend(configDir string) backend {
 	st := store.New(configDir, store.NewSecretStore(configDir))
 	drivers := all.Registry()
 	sessions := conn.NewManager(st, drivers)
+	hostKeys := &sshtunnel.HostKeys{UserFiles: userKnownHosts(), AppFile: filepath.Join(configDir, KnownHostsFile)}
+	sessions.Tunnels = conn.SSHTunnels(sshtunnel.New(sshtunnel.Options{HostKeys: hostKeys}))
 	hist := history.New(configDir)
+	connections := services.NewConnectionService(st, sessions, drivers)
+	connections.HostKeys = hostKeys
+	events := WailsEmitter{}
 	return backend{
-		connections: services.NewConnectionService(st, sessions, drivers),
+		connections: connections,
 		schema:      services.NewSchemaService(sessions, drivers),
 		browse:      services.NewBrowseService(sessions, drivers, query.NewRunner()),
 		editor:      services.NewEditorService(sessions, drivers, hist),
 		history:     services.NewHistoryService(hist),
 		edit:        services.NewEditService(sessions, drivers),
+		dialogs:     services.NewDialogService(WailsDialogs{}),
+		export:      services.NewExportService(sessions, drivers, events),
+		importer:    services.NewImportService(sessions, drivers, events),
+		settings:    services.NewSettingsService(settings.New(configDir)),
 	}
 }
 
@@ -61,6 +94,10 @@ func appOptions(assets fs.FS, b backend) application.Options {
 			application.NewService(b.editor),
 			application.NewService(b.history),
 			application.NewService(b.edit),
+			application.NewService(b.dialogs),
+			application.NewService(b.export),
+			application.NewService(b.importer),
+			application.NewService(b.settings),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

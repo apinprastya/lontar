@@ -11,8 +11,13 @@ func TestAppOptions(t *testing.T) {
 	if opts.Name != "dbedit" {
 		t.Fatalf("Name = %q, want dbedit", opts.Name)
 	}
-	if len(opts.Services) != 7 {
-		t.Fatalf("expected 7 bound services, got %d", len(opts.Services))
+	if len(opts.Services) != 11 {
+		t.Fatalf("expected 11 bound services, got %d", len(opts.Services))
+	}
+	for i, inst := range []any{b.dialogs, b.export, b.importer, b.settings} {
+		if opts.Services[7+i].Instance() != inst {
+			t.Fatalf("service %d not registered", 7+i)
+		}
 	}
 	if opts.Services[1].Instance() != b.connections {
 		t.Fatal("ConnectionService not registered")
@@ -36,8 +41,14 @@ func TestAppOptions(t *testing.T) {
 
 func TestNewBackend(t *testing.T) {
 	b := newBackend(t.TempDir())
-	if b.schema == nil || b.browse == nil || b.editor == nil || b.history == nil {
+	if b.schema == nil || b.browse == nil || b.editor == nil || b.history == nil || b.connections.HostKeys == nil {
 		t.Fatal("services missing")
+	}
+	if st := b.settings.Get(); st.Error != "" || st.Settings.GridPageSize != 300 {
+		t.Fatalf("settings = %+v", st)
+	}
+	if len(userKnownHosts()) != 1 {
+		t.Fatal("user known_hosts path")
 	}
 	svc := b.connections
 	if got := svc.Drivers(); len(got) != 4 {
@@ -66,4 +77,14 @@ func TestMainWindowOptions(t *testing.T) {
 	if w.Width < w.MinWidth || w.Height < w.MinHeight {
 		t.Fatalf("default size %dx%d is below the minimum %dx%d", w.Width, w.Height, w.MinWidth, w.MinHeight)
 	}
+}
+
+func TestWailsAdaptersWithoutApp(t *testing.T) {
+	if _, err := (WailsDialogs{}).OpenFile("t", nil); err == nil {
+		t.Fatal("OpenFile without an app")
+	}
+	if _, err := (WailsDialogs{}).SaveFile("t", "f", nil); err == nil {
+		t.Fatal("SaveFile without an app")
+	}
+	WailsEmitter{}.Emit("x", 1) // no app: dropped, no panic
 }

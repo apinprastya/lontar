@@ -32,6 +32,11 @@ func ensureDir(dir string) error {
 	return nil
 }
 
+// WriteFileAtomic writes data to path atomically with FilePerm, creating
+// the directory with DirPerm (see writeFileAtomic). Used for other files in
+// the config directory (settings.json).
+func WriteFileAtomic(path string, data []byte) error { return writeFileAtomic(path, data) }
+
 // writeFileAtomic writes data to path via a temporary file in the same
 // directory followed by a rename, so readers see either the old or the new
 // content, never a partial file. The file gets FilePerm.

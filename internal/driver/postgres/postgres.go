@@ -91,6 +91,16 @@ func (d *Driver) BuildDSN(cfg driver.Config, password string) (string, error) {
 	for k, v := range cfg.Options {
 		q.Set(k, v)
 	}
+	if cfg.TLS.Active() {
+		// The SSL settings win over any ssl* driver options.
+		for _, k := range sslParams {
+			q.Del(k)
+		}
+		q.Set("sslmode", cfg.TLS.Mode)
+		setIf(q, "sslrootcert", cfg.TLS.CAFile)
+		setIf(q, "sslcert", cfg.TLS.CertFile)
+		setIf(q, "sslkey", cfg.TLS.KeyFile)
+	}
 	if cfg.ReadOnly {
 		// A runtime parameter sent at connection start: every transaction
 		// of every pooled connection is read-only, so the server rejects
@@ -102,8 +112,25 @@ func (d *Driver) BuildDSN(cfg driver.Config, password string) (string, error) {
 	return u.String(), nil
 }
 
-// Open implements driver.Driver.
+// sslParams are the libpq TLS parameters replaced by Config.TLS.
+var sslParams = []string{"sslmode", "sslrootcert", "sslcert", "sslkey", "sslpassword", "sslsni"}
+
+func setIf(q url.Values, k, v string) {
+	if v != "" {
+		q.Set(k, v)
+	}
+}
+
+// Open implements driver.Driver. TLS is configured by pgx from the libpq
+// parameters (sslmode, sslrootcert, sslcert, sslkey): verify-ca checks the
+// chain without the host name, verify-full also the host name, and require
+// with a CA file behaves like verify-ca. With cfg.Dial (SSH tunnel) every
+// connection is opened through it and the host name is not resolved
+// locally; TLS still verifies against the configured host.
 func (d *Driver) Open(_ context.Context, cfg driver.Config, password string) (*sql.DB, error) {
+	if err := driver.CheckTLS(driver.Postgres, cfg.TLS); err != nil {
+		return nil, err
+	}
 	dsn, err := d.BuildDSN(cfg, password)
 	if err != nil {
 		return nil, err
@@ -112,7 +139,17 @@ func (d *Driver) Open(_ context.Context, cfg driver.Config, password string) (*s
 	if err != nil {
 		return nil, fmt.Errorf("postgres: invalid connection settings: %w", err)
 	}
+	if cfg.Dial != nil {
+		applyDial(pc, cfg.Dial)
+	}
 	return OpenConfig(pc), nil
+}
+
+// applyDial routes every connection attempt (including TLS fallbacks)
+// through dial and skips local DNS resolution.
+func applyDial(pc *pgx.ConnConfig, dial driver.DialFunc) {
+	pc.DialFunc = pgconn.DialFunc(dial)
+	pc.LookupFunc = func(_ context.Context, host string) ([]string, error) { return []string{host}, nil }
 }
 
 // OpenConfig opens a pool for a parsed pgx configuration, with cancelled

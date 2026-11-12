@@ -4,18 +4,26 @@
 import * as AppService from "./appservice.js";
 import * as BrowseService from "./browseservice.js";
 import * as ConnectionService from "./connectionservice.js";
+import * as DialogService from "./dialogservice.js";
 import * as EditService from "./editservice.js";
 import * as EditorService from "./editorservice.js";
+import * as ExportService from "./exportservice.js";
 import * as HistoryService from "./historyservice.js";
+import * as ImportService from "./importservice.js";
 import * as SchemaService from "./schemaservice.js";
+import * as SettingsService from "./settingsservice.js";
 export {
     AppService,
     BrowseService,
     ConnectionService,
+    DialogService,
     EditService,
     EditorService,
+    ExportService,
     HistoryService,
-    SchemaService
+    ImportService,
+    SchemaService,
+    SettingsService
 };
 
 export type {
@@ -23,7 +31,12 @@ export type {
     CompletionColumn,
     CompletionSchema,
     CompletionTable,
+    ExportRequest,
+    ExportResult,
+    FileFilter,
+    ImportResult,
     Location,
     SessionInfo,
+    SettingsState,
     Statement
 } from "./models.js";

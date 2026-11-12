@@ -1,10 +1,12 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../bindings/dbedit/internal/services', () => import('../test/mockBindings'))
 
 import { initialConnectionsState, useConnections } from '../stores/connections'
-import { AppService, ConnectionService, makeConnection, makeSession, resetBindings } from '../test/mockBindings'
+import { AppService, ConnectionService, SettingsService, makeConnection, makeSession, resetBindings } from '../test/mockBindings'
+import { useSettings } from '../stores/settings'
+import { DEFAULT_SETTINGS } from '../features/settings/types'
 import App, { platformLabel } from './App'
 
 const { Version, Platform } = AppService
@@ -106,5 +108,37 @@ describe('platformLabel', () => {
     ['freebsd', 'freebsd'],
   ])('%s -> %s', (goos, label) => {
     expect(platformLabel(goos)).toBe(label)
+  })
+})
+
+describe('App appearance and settings', () => {
+  beforeEach(() => {
+    resetBindings()
+    useConnections.setState(initialConnectionsState)
+    useSettings.setState({ settings: DEFAULT_SETTINGS, open: false, loaded: false })
+  })
+  afterEach(cleanup)
+
+  it('loads the settings, applies the theme and opens settings with Mod+,', async () => {
+    SettingsService.Get.mockResolvedValue({ settings: { ...DEFAULT_SETTINGS, theme: 'light', editorFontSize: 16 }, error: '' })
+    render(<App />)
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
+    expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('16px')
+    await screen.findByTestId('app-platform')
+
+    const print = new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true, cancelable: true })
+    act(() => {
+      window.dispatchEvent(print)
+    })
+    expect(print.defaultPrevented).toBe(true)
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true, bubbles: true, cancelable: true }))
+    })
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: 'Settings' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
   })
 })

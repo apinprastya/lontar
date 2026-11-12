@@ -34,7 +34,10 @@ const ConnectionsFile = "connections.json"
 //
 //	1: M1 (connections, tags, colours, optional SSH/SSL)
 //	2: M4 adds "safeMode" ("off" | "confirm" | "readonly")
-const CurrentVersion = 2
+//	3: M6 makes SSH/SSL live and adds "hasSshPassword"/"hasSshPassphrase";
+//	   the SSL mode "prefer" becomes "preferred" (MySQL/MariaDB) or
+//	   "require" (PostgreSQL, which has no preferred mode in dbedit)
+const CurrentVersion = 3
 
 // ErrNotFound is returned for unknown connection IDs.
 var ErrNotFound = errors.New("connection not found")
@@ -124,6 +127,19 @@ func migrate(f *file) {
 		}
 		f.Version = 2
 	}
+	if f.Version < 3 {
+		for i := range f.Connections {
+			c := &f.Connections[i]
+			if c.SSL != nil && c.SSL.Mode == "prefer" {
+				if c.Kind == "postgres" {
+					c.SSL.Mode = SSLRequire // never silently weaker
+				} else {
+					c.SSL.Mode = SSLPreferred
+				}
+			}
+		}
+		f.Version = 3
+	}
 }
 
 func (s *Store) write(f *file) error {
@@ -180,10 +196,52 @@ func (s *Store) Get(id string) (Connection, error) {
 	return f.Connections[i].clone(), nil
 }
 
+// Secret purposes for SecretKey: "" is the database password.
+const (
+	SecretSSHPassword   = "ssh-password"
+	SecretSSHPassphrase = "ssh-passphrase"
+)
+
+// secretPurposes lists every secret a connection may have.
+var secretPurposes = []string{"", SecretSSHPassword, SecretSSHPassphrase}
+
+// Secrets are the secrets passed to SaveSecrets. For each one, nil keeps
+// the stored value, "" removes it and anything else replaces it.
+type Secrets struct {
+	Password      *string `json:"password"`
+	SSHPassword   *string `json:"sshPassword"`
+	SSHPassphrase *string `json:"sshPassphrase"`
+}
+
+func (s Secrets) value(purpose string) *string {
+	switch purpose {
+	case SecretSSHPassword:
+		return s.SSHPassword
+	case SecretSSHPassphrase:
+		return s.SSHPassphrase
+	}
+	return s.Password
+}
+
+func hasFlag(c *Connection, purpose string) *bool {
+	switch purpose {
+	case SecretSSHPassword:
+		return &c.HasSSHPassword
+	case SecretSSHPassphrase:
+		return &c.HasSSHPassphrase
+	}
+	return &c.HasPassword
+}
+
 // Save creates c (when c.ID is empty) or updates the existing connection
 // with that ID. password controls the stored secret: nil keeps it, an empty
-// string removes it, anything else replaces it.
+// string removes it, anything else replaces it. SSH secrets are kept.
 func (s *Store) Save(c Connection, password *string) (Connection, error) {
+	return s.SaveSecrets(c, Secrets{Password: password})
+}
+
+// SaveSecrets is Save with every secret (see Secrets).
+func (s *Store) SaveSecrets(c Connection, sec Secrets) (Connection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	f, err := s.load()
@@ -201,31 +259,47 @@ func (s *Store) Save(c Connection, password *string) (Connection, error) {
 	if c.ID == "" {
 		c.ID = s.newID()
 		c.CreatedAt = now
-		c.HasPassword = false
+		c.HasPassword, c.HasSSHPassword, c.HasSSHPassphrase = false, false, false
 	} else {
 		idx = f.index(c.ID)
 		if idx < 0 {
 			return Connection{}, fmt.Errorf("%w: %s", ErrNotFound, c.ID)
 		}
-		c.CreatedAt = f.Connections[idx].CreatedAt
-		c.HasPassword = f.Connections[idx].HasPassword
+		old := f.Connections[idx]
+		c.CreatedAt = old.CreatedAt
+		c.HasPassword, c.HasSSHPassword, c.HasSSHPassphrase = old.HasPassword, old.HasSSHPassword, old.HasSSHPassphrase
 	}
 	c.UpdatedAt = now
 
-	// Write the secret first: if that fails, nothing changed on disk.
-	setNew := false
-	if password != nil {
-		if *password == "" {
-			if err := s.secrets.Delete(c.ID); err != nil {
-				return Connection{}, fmt.Errorf("remove saved password: %w", err)
+	// Write the secrets first: if that fails, nothing changed on disk.
+	var setNew []string
+	undo := func() {
+		for _, key := range setNew {
+			_ = s.secrets.Delete(key) // do not leave orphaned secrets
+		}
+	}
+	for _, purpose := range secretPurposes {
+		v := sec.value(purpose)
+		if v == nil {
+			continue
+		}
+		key, flag := SecretKey(c.ID, purpose), hasFlag(&c, purpose)
+		what := secretName(purpose)
+		if *v == "" {
+			if err := s.secrets.Delete(key); err != nil {
+				undo()
+				return Connection{}, fmt.Errorf("remove saved %s: %w", what, err)
 			}
-			c.HasPassword = false
-		} else {
-			if err := s.secrets.Set(c.ID, *password); err != nil {
-				return Connection{}, fmt.Errorf("save password: %w", err)
-			}
-			c.HasPassword = true
-			setNew = idx < 0
+			*flag = false
+			continue
+		}
+		if err := s.secrets.Set(key, *v); err != nil {
+			undo()
+			return Connection{}, fmt.Errorf("save %s: %w", what, err)
+		}
+		*flag = true
+		if idx < 0 {
+			setNew = append(setNew, key)
 		}
 	}
 
@@ -235,12 +309,20 @@ func (s *Store) Save(c Connection, password *string) (Connection, error) {
 		f.Connections[idx] = c
 	}
 	if err := s.write(f); err != nil {
-		if setNew {
-			_ = s.secrets.Delete(c.ID) // do not leave an orphaned secret
-		}
+		undo()
 		return Connection{}, err
 	}
 	return c.clone(), nil
+}
+
+func secretName(purpose string) string {
+	switch purpose {
+	case SecretSSHPassword:
+		return "SSH password"
+	case SecretSSHPassphrase:
+		return "SSH key passphrase"
+	}
+	return "password"
 }
 
 // Delete removes the connection and its stored password.
@@ -259,8 +341,14 @@ func (s *Store) Delete(id string) error {
 	if err := s.write(f); err != nil {
 		return err
 	}
-	if err := s.secrets.Delete(id); err != nil {
-		return fmt.Errorf("connection deleted, but its password could not be removed: %w", err)
+	var errs []error
+	for _, purpose := range secretPurposes {
+		if err := s.secrets.Delete(SecretKey(id, purpose)); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("connection deleted, but its password could not be removed: %w", errors.Join(errs...))
 	}
 	return nil
 }
@@ -283,22 +371,36 @@ func (s *Store) Duplicate(id string) (Connection, error) {
 	c.Name = copyName(c.Name)
 	c.CreatedAt = s.now()
 	c.UpdatedAt = c.CreatedAt
-	if c.HasPassword {
-		pw, err := s.secrets.Get(id)
+	var copied []string
+	undo := func() {
+		for _, key := range copied {
+			_ = s.secrets.Delete(key)
+		}
+	}
+	for _, purpose := range secretPurposes {
+		flag := hasFlag(&c, purpose)
+		if !*flag {
+			continue
+		}
+		v, err := s.secrets.Get(SecretKey(id, purpose))
 		switch {
 		case errors.Is(err, ErrSecretNotFound):
-			c.HasPassword = false
+			*flag = false
 		case err != nil:
-			return Connection{}, fmt.Errorf("read password: %w", err)
+			undo()
+			return Connection{}, fmt.Errorf("read %s: %w", secretName(purpose), err)
 		default:
-			if err := s.secrets.Set(c.ID, pw); err != nil {
-				return Connection{}, fmt.Errorf("save password: %w", err)
+			key := SecretKey(c.ID, purpose)
+			if err := s.secrets.Set(key, v); err != nil {
+				undo()
+				return Connection{}, fmt.Errorf("save %s: %w", secretName(purpose), err)
 			}
+			copied = append(copied, key)
 		}
 	}
 	f.Connections = append(f.Connections, c)
 	if err := s.write(f); err != nil {
-		_ = s.secrets.Delete(c.ID)
+		undo()
 		return Connection{}, err
 	}
 	return c.clone(), nil
@@ -314,12 +416,39 @@ func copyName(name string) string {
 
 // Password returns the stored password for id, or "" when none is stored.
 func (s *Store) Password(id string) (string, error) {
-	pw, err := s.secrets.Get(id)
+	return s.secret(id, "")
+}
+
+// SSHSecrets returns the stored SSH password and key passphrase for id
+// ("" when not stored).
+func (s *Store) SSHSecrets(id string) (password, passphrase string, err error) {
+	if password, err = s.secret(id, SecretSSHPassword); err != nil {
+		return "", "", err
+	}
+	if passphrase, err = s.secret(id, SecretSSHPassphrase); err != nil {
+		return "", "", err
+	}
+	return password, passphrase, nil
+}
+
+// secret reads one secret. When the connection's flag says none is saved,
+// the keychain is not touched at all (so a missing or locked keychain does
+// not break connections that never stored that secret).
+func (s *Store) secret(id, purpose string) (string, error) {
+	s.mu.Lock()
+	f, lerr := s.load()
+	s.mu.Unlock()
+	if lerr == nil {
+		if i := f.index(id); i >= 0 && !*hasFlag(&f.Connections[i], purpose) {
+			return "", nil
+		}
+	}
+	v, err := s.secrets.Get(SecretKey(id, purpose))
 	if errors.Is(err, ErrSecretNotFound) {
 		return "", nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("read saved password: %w", err)
+		return "", fmt.Errorf("read saved %s: %w", secretName(purpose), err)
 	}
-	return pw, nil
+	return v, nil
 }

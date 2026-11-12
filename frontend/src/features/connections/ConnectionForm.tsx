@@ -1,7 +1,10 @@
 import { FormEvent, KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
 import { errorMessage } from '../../lib/errors'
+import { hostKeyInfo, type HostKeyInfo } from '../../lib/hostkey'
 import { SAFE_MODES, type SafeMode } from '../edits/types'
 import { matchesShortcut, shortcutLabel } from '../../lib/mod'
+import HostKeyDialog from './HostKeyDialog'
+import { dialogApi, type FileFilter } from './dialogApi'
 import {
   Connection,
   DriverInfo,
@@ -12,6 +15,10 @@ import {
   Tag,
   connectionColor,
   isFileBased,
+  sslModes,
+  type SSHAuthMethod,
+  type SSLMode,
+  type Secrets,
 } from './types'
 
 export interface ConnectionFormProps {
@@ -19,11 +26,15 @@ export interface ConnectionFormProps {
   initial?: Connection
   drivers: DriverInfo[]
   platform?: string
-  onSave(c: Connection, password: string | null): Promise<Connection>
-  onTest(c: Connection, password: string | null): Promise<string>
+  onSave(c: Connection, secrets: Secrets): Promise<Connection>
+  onTest(c: Connection, secrets: Secrets): Promise<string>
   /** Called after Save when the user chose Connect. */
   onConnect(c: Connection): Promise<unknown> | void
   onClose(): void
+  /** Trusts an unknown SSH host key (Test asks first). */
+  onTrustHostKey?(info: HostKeyInfo): Promise<void>
+  /** Native file picker; resolves "" when cancelled. */
+  pickFile?(title: string, filters: FileFilter[]): Promise<string>
 }
 
 interface Draft {
@@ -39,9 +50,29 @@ interface Draft {
   tag: Tag
   color: string
   safeMode: SafeMode
+  sshEnabled: boolean
+  sshHost: string
+  sshPort: string
+  sshUser: string
+  sshAuth: SSHAuthMethod
+  sshKeyPath: string
+  sslMode: SSLMode
+  sslCA: string
+  sslCert: string
+  sslKey: string
 }
 
 type Errors = Partial<Record<keyof Draft, string>>
+
+type FormTab = 'general' | 'ssh' | 'ssl'
+
+/** A secret field: what was typed and whether it was touched. */
+interface SecretState {
+  value: string
+  touched: boolean
+}
+
+const untouched: SecretState = { value: '', touched: false }
 
 type TestState = { status: 'idle' } | { status: 'running' } | { status: 'ok'; version: string } | { status: 'error'; message: string }
 
@@ -67,8 +98,20 @@ function toDraft(c: Connection | undefined, drivers: DriverInfo[]): Draft {
     tag: c?.tag ?? 'none',
     color: c?.color ?? '',
     safeMode: c?.safeMode ?? 'off',
+    sshEnabled: c?.ssh?.enabled ?? false,
+    sshHost: c?.ssh?.host ?? '',
+    sshPort: String(c?.ssh?.port || 22),
+    sshUser: c?.ssh?.user ?? '',
+    sshAuth: c?.ssh?.authMethod ?? 'password',
+    sshKeyPath: c?.ssh?.keyPath ?? '',
+    sslMode: c?.ssl?.mode ?? '',
+    sslCA: c?.ssl?.caFile ?? '',
+    sslCert: c?.ssl?.certFile ?? '',
+    sslKey: c?.ssl?.keyFile ?? '',
   }
 }
+
+const validPort = (p: string) => /^\d+$/.test(p.trim()) && Number(p) >= 1 && Number(p) <= 65535
 
 /** Validates a draft; returns field errors (empty when valid). */
 export function validateDraft(d: Draft): Errors {
@@ -80,8 +123,22 @@ export function validateDraft(d: Draft): Errors {
     if (!d.host.trim()) errors.host = 'Host is required'
     const port = Number(d.port)
     if (!/^\d+$/.test(d.port.trim()) || port < 1 || port > 65535) errors.port = 'Port must be between 1 and 65535'
+    if (d.sshEnabled) {
+      if (!d.sshHost.trim()) errors.sshHost = 'SSH host is required'
+      if (!validPort(d.sshPort)) errors.sshPort = 'Port must be between 1 and 65535'
+      if (!d.sshUser.trim()) errors.sshUser = 'SSH user is required'
+      if (d.sshAuth === 'key' && !d.sshKeyPath.trim()) errors.sshKeyPath = 'Private key file is required'
+    }
+    if (Boolean(d.sslCert.trim()) !== Boolean(d.sslKey.trim())) errors.sslKey = 'Give both the client certificate and its key'
   }
   return errors
+}
+
+/** The tab that holds a field (to show the first error). */
+function tabOf(field: keyof Draft): FormTab {
+  if (field.startsWith('ssh')) return 'ssh'
+  if (field.startsWith('ssl')) return 'ssl'
+  return 'general'
 }
 
 /** JSON form of Go's zero time.Time; "" fails to unmarshal. */
@@ -106,6 +163,17 @@ function toConnection(d: Draft, initial: Connection | undefined): Connection {
     tag: d.tag,
     color: d.color,
     safeMode: d.safeMode,
+    ssh: file
+      ? null
+      : {
+          enabled: d.sshEnabled,
+          host: d.sshHost.trim(),
+          port: validPort(d.sshPort) ? Number(d.sshPort) : 22,
+          user: d.sshUser.trim(),
+          authMethod: d.sshAuth,
+          keyPath: d.sshKeyPath.trim(),
+        },
+    ssl: file ? null : { mode: d.sslMode, caFile: d.sslCA.trim(), certFile: d.sslCert.trim(), keyFile: d.sslKey.trim() },
   }
 }
 
@@ -117,7 +185,23 @@ export function safeModeForTag(tag: Tag, current: SafeMode): SafeMode {
   return tag === 'prod' && current === 'off' ? 'confirm' : current
 }
 
-export default function ConnectionForm({ initial, drivers, platform, onSave, onTest, onConnect, onClose }: ConnectionFormProps) {
+const KEY_FILTERS: FileFilter[] = [{ displayName: 'All files', pattern: '*' }]
+const CERT_FILTERS: FileFilter[] = [
+  { displayName: 'Certificates and keys (*.pem, *.crt, *.key)', pattern: '*.pem;*.crt;*.cer;*.key' },
+  { displayName: 'All files', pattern: '*' },
+]
+
+export default function ConnectionForm({
+  initial,
+  drivers,
+  platform,
+  onSave,
+  onTest,
+  onConnect,
+  onClose,
+  onTrustHostKey,
+  pickFile = dialogApi.openFile,
+}: ConnectionFormProps) {
   const uid = useId()
   const [draft, setDraft] = useState<Draft>(() => toDraft(initial, drivers))
   const [password, setPassword] = useState('')
@@ -126,6 +210,11 @@ export default function ConnectionForm({ initial, drivers, platform, onSave, onT
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [test, setTest] = useState<TestState>({ status: 'idle' })
+  const [tab, setTab] = useState<FormTab>('general')
+  const [sshPassword, setSshPassword] = useState<SecretState>(untouched)
+  const [sshPassphrase, setSshPassphrase] = useState<SecretState>(untouched)
+  const [hostKey, setHostKey] = useState<{ info: HostKeyInfo; busy: boolean } | null>(null)
+  const [pickError, setPickError] = useState<string | null>(null)
   // The connection once saved (so a second Save updates instead of creating).
   const savedRef = useRef<Connection | undefined>(initial)
   const nameRef = useRef<HTMLInputElement>(null)
@@ -146,20 +235,32 @@ export default function ConnectionForm({ initial, drivers, platform, onSave, onT
   }
 
   function changeKind(kind: Kind) {
-    setDraft((d) => ({ ...d, kind, port: isFileBased(kind) ? '' : String(defaultPort(drivers, kind)) }))
+    setDraft((d) => {
+      const modes = sslModes(kind).map((m) => m.value)
+      return { ...d, kind, port: isFileBased(kind) ? '' : String(defaultPort(drivers, kind)), sslMode: modes.includes(d.sslMode) ? d.sslMode : '' }
+    })
     setErrors({})
     setTest({ status: 'idle' })
+    if (isFileBased(kind)) setTab('general')
   }
 
-  /** null = keep the stored password; '' = clear it. */
-  function passwordArg(): string | null {
-    return passwordTouched ? password : null
+  /** null = keep the stored secret; '' = clear it. */
+  function secrets(): Secrets {
+    return {
+      password: passwordTouched ? password : null,
+      sshPassword: sshPassword.touched ? sshPassword.value : null,
+      sshPassphrase: sshPassphrase.touched ? sshPassphrase.value : null,
+    }
   }
 
   function check(): Connection | null {
     const errs = validateDraft(draft)
     setErrors(errs)
-    if (Object.keys(errs).length) return null
+    const first = Object.keys(errs)[0] as keyof Draft | undefined
+    if (first) {
+      setTab(tabOf(first))
+      return null
+    }
     return toConnection(draft, savedRef.current)
   }
 
@@ -168,9 +269,39 @@ export default function ConnectionForm({ initial, drivers, platform, onSave, onT
     if (!c) return
     setTest({ status: 'running' })
     try {
-      setTest({ status: 'ok', version: await onTest(c, passwordArg()) })
+      setTest({ status: 'ok', version: await onTest(c, secrets()) })
     } catch (err) {
+      const info = hostKeyInfo(err)
+      if (info) {
+        setTest({ status: 'error', message: info.message })
+        setHostKey({ info, busy: false })
+        return
+      }
       setTest({ status: 'error', message: errorMessage(err) })
+    }
+  }
+
+  async function trustHostKey() {
+    if (!hostKey || !onTrustHostKey) return
+    setHostKey({ ...hostKey, busy: true })
+    try {
+      await onTrustHostKey(hostKey.info)
+    } catch (err) {
+      setHostKey(null)
+      setTest({ status: 'error', message: errorMessage(err) })
+      return
+    }
+    setHostKey(null)
+    await runTest()
+  }
+
+  async function browse(key: 'sshKeyPath' | 'sslCA' | 'sslCert' | 'sslKey', title: string, filters: FileFilter[]) {
+    setPickError(null)
+    try {
+      const path = await pickFile(title, filters)
+      if (path) update(key, path)
+    } catch (err) {
+      setPickError(errorMessage(err))
     }
   }
 
@@ -180,10 +311,12 @@ export default function ConnectionForm({ initial, drivers, platform, onSave, onT
     setBusy(true)
     setSubmitError(null)
     try {
-      const saved = await onSave(c, passwordArg())
+      const saved = await onSave(c, secrets())
       savedRef.current = saved
       setPassword('')
       setPasswordTouched(false)
+      setSshPassword(untouched)
+      setSshPassphrase(untouched)
       return saved
     } catch (err) {
       setSubmitError(errorMessage(err))
@@ -229,6 +362,51 @@ export default function ConnectionForm({ initial, drivers, platform, onSave, onT
     'aria-describedby': errors[name] ? `${field(name)}-error` : undefined,
   })
   const accent = connectionColor(draft)
+  const tabErr = (t: FormTab) => (Object.keys(errors) as (keyof Draft)[]).some((k) => errors[k] && tabOf(k) === t)
+  const secretField = (
+    id: string,
+    label: string,
+    state: SecretState,
+    setState: (s: SecretState) => void,
+    saved: boolean,
+  ) => (
+    <>
+      <label htmlFor={`${uid}-${id}`}>{label}</label>
+      <div className="field password-field">
+        <input
+          id={`${uid}-${id}`}
+          type="password"
+          autoComplete="new-password"
+          placeholder={saved && !state.touched ? '•••••••• saved' : ''}
+          value={state.value}
+          onChange={(e) => {
+            setState({ value: e.target.value, touched: true })
+            setTest({ status: 'idle' })
+          }}
+        />
+        {saved && !(state.touched && state.value === '') && (
+          <button type="button" className="link-button" aria-label={`Clear saved ${label.toLowerCase()}`} onClick={() => setState({ value: '', touched: true })}>
+            Clear saved
+          </button>
+        )}
+        {saved && state.touched && state.value === '' && <span className="hint">Saved {label.toLowerCase()} will be removed</span>}
+      </div>
+    </>
+  )
+  const pathField = (key: 'sshKeyPath' | 'sslCA' | 'sslCert' | 'sslKey', label: string, title: string, filters: FileFilter[], placeholder: string) => (
+    <>
+      <label htmlFor={field(key)}>{label}</label>
+      <div className="field">
+        <div className="path-field">
+          <input {...aria(key)} className="mono" placeholder={placeholder} value={draft[key]} onChange={(e) => update(key, e.target.value)} />
+          <button type="button" onClick={() => void browse(key, title, filters)} aria-label={`Browse for ${label.toLowerCase()}`}>
+            Browse…
+          </button>
+        </div>
+        {err(key)}
+      </div>
+    </>
+  )
 
   return (
     <div className="dialog-backdrop">
@@ -244,7 +422,117 @@ export default function ConnectionForm({ initial, drivers, platform, onSave, onT
       >
         <h2 id={`${uid}-title`}>{editing ? 'Edit connection' : 'New connection'}</h2>
 
-        <div className="form-grid">
+        {!file && (
+          <div className="form-tabs" role="tablist" aria-label="Connection settings">
+            {(
+              [
+                ['general', 'General'],
+                ['ssh', 'SSH'],
+                ['ssl', 'SSL'],
+              ] as [FormTab, string][]
+            ).map(([t, label]) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={tab === t}
+                className={`${tab === t ? 'active' : ''}${tabErr(t) ? ' has-error' : ''}`}
+                onClick={() => setTab(t)}
+              >
+                {label}
+                {t === 'ssh' && draft.sshEnabled && <span className="tab-dot" aria-label="enabled" />}
+                {t === 'ssl' && draft.sslMode && draft.sslMode !== 'disable' && <span className="tab-dot" aria-label="enabled" />}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === 'ssh' && !file && (
+          <div className="form-grid" role="tabpanel" aria-label="SSH">
+            <span />
+            <label className="checks">
+              <input type="checkbox" checked={draft.sshEnabled} onChange={(e) => update('sshEnabled', e.target.checked)} /> Connect through an SSH
+              tunnel
+            </label>
+
+            <label htmlFor={field('sshHost')}>SSH host</label>
+            <div className="field host-port">
+              <div className="field">
+                <input {...aria('sshHost')} placeholder="bastion.example.com" value={draft.sshHost} disabled={!draft.sshEnabled} onChange={(e) => update('sshHost', e.target.value)} />
+                {err('sshHost')}
+              </div>
+              <label htmlFor={field('sshPort')} className="inline-label">
+                SSH port
+              </label>
+              <div className="field port">
+                <input {...aria('sshPort')} inputMode="numeric" value={draft.sshPort} disabled={!draft.sshEnabled} onChange={(e) => update('sshPort', e.target.value)} />
+                {err('sshPort')}
+              </div>
+            </div>
+
+            <label htmlFor={field('sshUser')}>SSH user</label>
+            <div className="field">
+              <input {...aria('sshUser')} autoComplete="off" value={draft.sshUser} disabled={!draft.sshEnabled} onChange={(e) => update('sshUser', e.target.value)} />
+              {err('sshUser')}
+            </div>
+
+            <label htmlFor={field('sshAuth')}>Authentication</label>
+            <select id={field('sshAuth')} value={draft.sshAuth} disabled={!draft.sshEnabled} onChange={(e) => update('sshAuth', e.target.value as SSHAuthMethod)}>
+              <option value="password">Password</option>
+              <option value="key">Private key</option>
+              <option value="agent">SSH agent</option>
+            </select>
+
+            {draft.sshAuth === 'password' && secretField('ssh-password', 'SSH password', sshPassword, setSshPassword, Boolean(savedRef.current?.hasSshPassword))}
+            {draft.sshAuth === 'key' && (
+              <>
+                {pathField('sshKeyPath', 'Private key', 'Choose an SSH private key', KEY_FILTERS, '~/.ssh/id_ed25519')}
+                {secretField('ssh-passphrase', 'Passphrase', sshPassphrase, setSshPassphrase, Boolean(savedRef.current?.hasSshPassphrase))}
+              </>
+            )}
+            {draft.sshAuth === 'agent' && (
+              <>
+                <span />
+                <span className="hint">Uses the running SSH agent ({platform === 'windows' ? 'OpenSSH agent service' : '$SSH_AUTH_SOCK'}).</span>
+              </>
+            )}
+            <span />
+            <span className="hint">
+              The database host and port are reached from the SSH server. Unknown host keys are shown for you to confirm; jump hosts are not
+              supported.
+            </span>
+          </div>
+        )}
+
+        {tab === 'ssl' && !file && (
+          <div className="form-grid" role="tabpanel" aria-label="SSL">
+            <label htmlFor={field('sslMode')}>SSL mode</label>
+            <div className="field">
+              <select id={field('sslMode')} value={draft.sslMode} onChange={(e) => update('sslMode', e.target.value as SSLMode)}>
+                {sslModes(draft.kind).map((m) => (
+                  <option key={m.value || 'default'} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              <span className="hint">
+                {draft.sslMode === ''
+                  ? `Uses the ${draft.kind === 'postgres' ? 'sslmode' : 'tls'} driver option if set (otherwise the driver default).`
+                  : 'Overrides any sslmode / tls driver option.'}
+              </span>
+            </div>
+            {pathField('sslCA', 'CA certificate', 'Choose the CA certificate', CERT_FILTERS, '/path/to/ca.pem')}
+            {pathField('sslCert', 'Client certificate', 'Choose the client certificate', CERT_FILTERS, 'optional')}
+            {pathField('sslKey', 'Client key', 'Choose the client key', CERT_FILTERS, 'optional')}
+          </div>
+        )}
+        {pickError && (
+          <p className="hint" role="status">
+            {pickError}
+          </p>
+        )}
+
+        <div className="form-grid" hidden={tab !== 'general'}>
           <label htmlFor={field('kind')}>Type</label>
           <select id={field('kind')} value={draft.kind} onChange={(e) => changeKind(e.target.value as Kind)}>
             {kinds.map((k) => (
@@ -438,6 +726,7 @@ export default function ConnectionForm({ initial, drivers, platform, onSave, onT
           </button>
         </div>
       </form>
+      {hostKey && <HostKeyDialog info={hostKey.info} busy={hostKey.busy} onAccept={() => void trustHostKey()} onCancel={() => setHostKey(null)} />}
     </div>
   )
 }

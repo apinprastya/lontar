@@ -8,6 +8,7 @@
 import { vi } from 'vitest'
 import type { Connection, DriverInfo, SessionInfo } from '../features/connections/types'
 import type { Location, Page, TableInfo } from '../features/workspace/types'
+import { DEFAULT_SETTINGS } from '../features/settings/types'
 
 export const AppService = {
   Version: vi.fn<() => Promise<string>>(),
@@ -18,10 +19,11 @@ export const ConnectionService = {
   Drivers: vi.fn<() => Promise<DriverInfo[] | null>>(),
   List: vi.fn<() => Promise<Connection[] | null>>(),
   Get: vi.fn<(id: string) => Promise<Connection>>(),
-  Save: vi.fn<(c: Connection, password: string | null) => Promise<Connection>>(),
+  Save: vi.fn<(c: Connection, secrets: unknown) => Promise<Connection>>(),
   Delete: vi.fn<(id: string) => Promise<void>>(),
   Duplicate: vi.fn<(id: string) => Promise<Connection>>(),
-  Test: vi.fn<(c: Connection, password: string | null) => Promise<string>>(),
+  Test: vi.fn<(c: Connection, secrets: unknown) => Promise<string>>(),
+  AcceptHostKey: vi.fn<(host: string, fingerprint: string) => Promise<void>>(),
   Connect: vi.fn<(id: string) => Promise<SessionInfo>>(),
   Disconnect: vi.fn<(id: string) => Promise<void>>(),
 }
@@ -65,6 +67,30 @@ export const HistoryService = {
   List: vi.fn<(connectionId: string, search: string, limit: number, offset: number) => Promise<unknown>>(),
   Delete: vi.fn<(id: number) => Promise<void>>(),
   Clear: vi.fn<(connectionId: string) => Promise<number>>(),
+}
+
+export const DialogService = {
+  OpenFile: vi.fn<(title: string, filters: unknown) => Promise<string>>(),
+  SaveFile: vi.fn<(title: string, filename: string, filters: unknown) => Promise<string>>(),
+}
+
+export const ExportService = {
+  Export: vi.fn<(req: unknown) => Promise<unknown>>(),
+  Cancel: vi.fn<(jobId: string) => Promise<boolean>>(),
+  CheckQuery: vi.fn<(sessionId: string, sql: string) => Promise<void>>(),
+  SaveText: vi.fn<(path: string, text: string) => Promise<void>>(),
+}
+
+export const ImportService = {
+  Preview: vi.fn<(sessionId: string, path: string, opts: unknown, schema: string, table: string) => Promise<unknown>>(),
+  Import: vi.fn<(jobId: string, sessionId: string, req: unknown, confirmed: boolean) => Promise<unknown>>(),
+  Cancel: vi.fn<(jobId: string) => Promise<boolean>>(),
+}
+
+export const SettingsService = {
+  Get: vi.fn<() => Promise<unknown>>(),
+  Save: vi.fn<(s: unknown) => Promise<unknown>>(),
+  Defaults: vi.fn<() => Promise<unknown>>(),
 }
 
 export const DRIVERS: DriverInfo[] = [
@@ -113,6 +139,10 @@ export function resetBindings() {
     ...Object.values(EditorService),
     ...Object.values(HistoryService),
     ...Object.values(EditService),
+    ...Object.values(DialogService),
+    ...Object.values(ExportService),
+    ...Object.values(ImportService),
+    ...Object.values(SettingsService),
   ])
     fn.mockReset()
   AppService.Version.mockResolvedValue('0.0.1')
@@ -124,4 +154,12 @@ export function resetBindings() {
   SchemaService.ListSchemas.mockResolvedValue(['public'])
   SchemaService.ListTables.mockResolvedValue([])
   BrowseService.CancelFetch.mockResolvedValue(true)
+  ConnectionService.AcceptHostKey.mockResolvedValue(undefined)
+  DialogService.OpenFile.mockResolvedValue('')
+  DialogService.SaveFile.mockResolvedValue('')
+  ExportService.Cancel.mockResolvedValue(true)
+  ExportService.CheckQuery.mockResolvedValue(undefined)
+  ImportService.Cancel.mockResolvedValue(true)
+  SettingsService.Get.mockResolvedValue({ settings: DEFAULT_SETTINGS, error: '' })
+  SettingsService.Save.mockImplementation(async (s) => s)
 }

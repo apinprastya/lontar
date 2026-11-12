@@ -569,6 +569,33 @@ func intParam(s string) (param, bool) {
 	return param{}, false
 }
 
+// BindText converts text typed (or imported) for column c into the value to
+// bind, with the same rules as grid edits (see the package docs): a Go
+// string on PostgreSQL (the server parses it with the column type's input
+// function; run with ExecArgs), integers and booleans as int64/uint64 on
+// MySQL/MariaDB/SQLite, MySQL date-times with a space separator.
+func BindText(kind driver.Kind, c driver.Column, text string) any {
+	return textParam(kind, c, text).bound
+}
+
+// ExecArgs prepends what the engine needs to bind BindText values: on
+// PostgreSQL pgx's QueryExecModeDescribeExec, so the server infers every
+// parameter's type from its context and no statement is cached.
+func ExecArgs(kind driver.Kind, args []any) []any {
+	if kind == driver.Postgres {
+		return append([]any{pgx.QueryExecModeDescribeExec}, args...)
+	}
+	return args
+}
+
+// DecodeHex decodes binary data given as hex (an optional 0x or \x prefix
+// and spaces are allowed).
+func DecodeHex(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, `\x`)
+	return decodeHex(s)
+}
+
 // textParam converts typed text for a column (see the package docs).
 func textParam(kind driver.Kind, c driver.Column, text string) param {
 	cat := values.Categorize(c.DataType)
@@ -889,12 +916,9 @@ func failure(st Statement, kind FailureKind, err error, detail string) *ChangeEr
 }
 
 func run(ctx context.Context, tx *sql.Tx, kind driver.Kind, st Statement, res *Result) error {
-	args := st.Args
-	if kind == driver.Postgres {
-		// Describe first so the server infers parameter types; no
-		// statement cache, so schema changes never break a commit.
-		args = append([]any{pgx.QueryExecModeDescribeExec}, args...)
-	}
+	// PostgreSQL: describe first so the server infers parameter types; no
+	// statement cache, so schema changes never break a commit.
+	args := ExecArgs(kind, st.Args)
 	if len(st.returning) > 0 {
 		dest := make([]any, len(st.returning))
 		ptrs := make([]any, len(dest))

@@ -260,6 +260,26 @@ func NormalizeLimit(limit int) int {
 // there is a next page. Without an explicit sort it orders by the primary
 // key (when there is one) so that paging is stable.
 func BuildSelect(d driver.Dialect, cols []driver.Column, req Request) (Built, error) {
+	b, err := buildSelect(d, cols, req)
+	if err != nil {
+		return Built{}, err
+	}
+	offset := req.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	b.SQL += d.LimitOffset(NormalizeLimit(req.Limit)+1, offset)
+	return b, nil
+}
+
+// BuildSelectAll is BuildSelect without LIMIT/OFFSET: every row matching
+// the filters, in the requested order (or primary-key order). Used to
+// stream a whole table for export.
+func BuildSelectAll(d driver.Dialect, cols []driver.Column, req Request) (Built, error) {
+	return buildSelect(d, cols, req)
+}
+
+func buildSelect(d driver.Dialect, cols []driver.Column, req Request) (Built, error) {
 	if len(cols) == 0 {
 		return Built{}, fmt.Errorf("%w: %q", ErrUnknownTable, req.Table)
 	}
@@ -291,12 +311,13 @@ func BuildSelect(d driver.Dialect, cols []driver.Column, req Request) (Built, er
 	if len(order) > 0 {
 		q += " ORDER BY " + strings.Join(order, ", ")
 	}
-	offset := req.Offset
-	if offset < 0 {
-		offset = 0
-	}
-	q += d.LimitOffset(NormalizeLimit(req.Limit)+1, offset)
 	return Built{SQL: q, Args: b.args}, nil
+}
+
+// LookupColumns introspects req's table and fails with ErrUnknownTable
+// when it does not exist (see FetchTable).
+func LookupColumns(ctx context.Context, db *sql.DB, e Engine, req Request) ([]driver.Column, error) {
+	return lookupColumns(ctx, db, e, req)
 }
 
 // pkOrder returns the primary key columns in key order, ascending.

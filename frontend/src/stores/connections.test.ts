@@ -4,6 +4,7 @@ vi.mock('../../bindings/dbedit/internal/services', () => import('../test/mockBin
 
 import { ConnectionService, DRIVERS, makeConnection, makeSession, resetBindings } from '../test/mockBindings'
 import { initialConnectionsState, useConnections } from './connections'
+import { NO_SECRETS } from '../features/connections/types'
 
 const st = () => useConnections.getState()
 
@@ -43,19 +44,19 @@ describe('connections store', () => {
   it('saves new and updated connections', async () => {
     const c = makeConnection({ id: '', name: 'zed' })
     ConnectionService.Save.mockResolvedValueOnce({ ...c, id: 'z' })
-    const saved = await st().save(c, 'pw')
+    const saved = await st().save(c, { ...NO_SECRETS, password: 'pw' })
     expect(saved.id).toBe('z')
-    expect(ConnectionService.Save).toHaveBeenCalledWith(c, 'pw')
+    expect(ConnectionService.Save).toHaveBeenCalledWith(c, { ...NO_SECRETS, password: 'pw' })
 
     ConnectionService.Save.mockResolvedValueOnce({ ...c, id: 'z', name: 'Aaa' })
-    await st().save({ ...c, id: 'z', name: 'Aaa' }, null)
-    expect(ConnectionService.Save).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'z' }), null)
+    await st().save({ ...c, id: 'z', name: 'Aaa' }, NO_SECRETS)
+    expect(ConnectionService.Save).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'z' }), NO_SECRETS)
     expect(st().connections.map((x) => x.name)).toEqual(['Aaa'])
   })
 
   it('propagates save errors to the caller', async () => {
     ConnectionService.Save.mockRejectedValue(new Error('name is required'))
-    await expect(st().save(makeConnection(), null)).rejects.toThrow('name is required')
+    await expect(st().save(makeConnection(), NO_SECRETS)).rejects.toThrow('name is required')
   })
 
   it('removes connections and resyncs on error', async () => {
@@ -86,8 +87,8 @@ describe('connections store', () => {
 
   it('tests connections', async () => {
     ConnectionService.Test.mockResolvedValue('MySQL 8.0.36')
-    await expect(st().test(makeConnection(), null)).resolves.toBe('MySQL 8.0.36')
-    expect(ConnectionService.Test).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }), null)
+    await expect(st().test(makeConnection(), NO_SECRETS)).resolves.toBe('MySQL 8.0.36')
+    expect(ConnectionService.Test).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }), NO_SECRETS)
   })
 
   it('connects and disconnects', async () => {
@@ -119,5 +120,47 @@ describe('connections store', () => {
     await st().disconnect()
     expect(st().session).toBeNull()
     expect(st().error).toBe('session not found')
+  })
+})
+
+describe('SSH host keys on connect', () => {
+  const info = { kind: 'hostKeyUnknown', host: 'b', address: 'b:22', keyType: 'ssh-ed25519', fingerprintSHA256: 'SHA256:x', message: 'unknown host' }
+
+  beforeEach(() => {
+    resetBindings()
+    useConnections.setState({ ...initialConnectionsState })
+  })
+
+  it('prompts for an unknown key, accepts it and connects again', async () => {
+    ConnectionService.Connect.mockRejectedValueOnce({ message: 'unknown host', cause: info }).mockResolvedValueOnce(makeSession())
+    expect(await st().connect('c1')).toBe(false)
+    expect(st().hostKey).toEqual({ info, connectionId: 'c1', busy: false })
+    expect(st().error).toBeNull()
+    expect(await st().acceptHostKey()).toBe(true)
+    expect(ConnectionService.AcceptHostKey).toHaveBeenCalledWith('b', 'SHA256:x')
+    expect(st().session?.id).toBe('s1')
+    expect(st().hostKey).toBeNull()
+    expect(await st().acceptHostKey()).toBe(false)
+  })
+
+  it('reports changed keys as errors and handles accept failures', async () => {
+    ConnectionService.Connect.mockRejectedValueOnce({ message: 'WARNING: CHANGED', cause: { ...info, kind: 'hostKeyChanged' } })
+    await st().connect('c1')
+    expect(st().hostKey).toBeNull()
+    expect(st().error).toBe('WARNING: CHANGED')
+
+    ConnectionService.Connect.mockRejectedValueOnce({ message: 'unknown host', cause: info })
+    await st().connect('c1')
+    st().dismissHostKey()
+    expect(st().hostKey).toBeNull()
+
+    ConnectionService.Connect.mockRejectedValueOnce({ message: 'unknown host', cause: info })
+    await st().connect('c1')
+    ConnectionService.AcceptHostKey.mockRejectedValueOnce(new Error('no pending key'))
+    expect(await st().acceptHostKey()).toBe(false)
+    expect(st().error).toBe('no pending key')
+
+    await st().trustHostKey(info as never)
+    expect(ConnectionService.AcceptHostKey).toHaveBeenLastCalledWith('b', 'SHA256:x')
   })
 })
