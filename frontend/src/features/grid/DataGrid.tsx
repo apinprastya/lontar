@@ -153,7 +153,7 @@ export function gridTheme(): Partial<Theme> {
     textMedium: muted,
     textLight: muted,
     textHeader: text,
-    textHeaderSelected: '#ffffff',
+    textHeaderSelected: cssVar('--accent-text', '#ffffff'),
     bgCell: bg,
     bgCellMedium: cssVar('--bg-sidebar', '#1f2026'),
     bgHeader: cssVar('--bg-sidebar', '#1f2026'),
