@@ -15,6 +15,7 @@ interface FakeProps {
   onCellContextMenu?(cell: [number, number], e: { preventDefault(): void; bounds: { x: number; y: number }; localEventX: number; localEventY: number }): void
   onPaste: false | ((target: [number, number], values: string[][]) => boolean)
   onDelete(): boolean
+  gridSelection?: GridSelection
   drawCell?(args: { ctx: unknown; rect: { x: number; y: number; width: number; height: number }; row: number; col: number }, draw: () => void): void
 }
 let lastProps: FakeProps | null = null
@@ -30,7 +31,7 @@ vi.mock('@glideapps/glide-data-grid', async (importOriginal) => {
   }
 })
 
-import DataGrid, { cellLook, drawLock, isTypingKey, selectedCells, selectedRows, type GridEditing } from './DataGrid'
+import DataGrid, { cellLook, countInserted, drawLock, isTypingKey, newRowCell, selectedCells, selectedRows, type GridEditing } from './DataGrid'
 
 const columns: ResultColumn[] = [
   { name: 'id', type: 'integer', isPK: true, nullable: false },
@@ -282,5 +283,60 @@ describe('DataGrid editing', () => {
     expect(p().drawCell).toBeUndefined()
     act(() => p().onGridSelectionChange(sel([1, 0])))
     expect(press('Delete').cancel).not.toHaveBeenCalled()
+  })
+})
+
+describe('new rows', () => {
+  afterEach(cleanup)
+
+  it('counts staged inserts and finds the cell to land on', () => {
+    const st = states()
+    expect(countInserted(st)).toBe(1)
+    expect(newRowCell(st)).toEqual([0, 2])
+    // The last row is not an insert: nowhere to land.
+    expect(newRowCell(st.slice(0, 2))).toBeNull()
+    expect(newRowCell([])).toBeNull()
+    // Locked columns are skipped; all locked falls back to the first.
+    const locked = { ...st[2], locked: [true, false, false] }
+    expect(newRowCell([...st.slice(0, 2), locked])).toEqual([1, 2])
+    expect(newRowCell([{ ...locked, locked: [true, true, true] }])).toEqual([0, 0])
+  })
+
+  it('selects a newly staged row, but not on first render or undo', () => {
+    const onSelectRow = vi.fn()
+    const base = insertRow(deleteRows(emptyPending, columns, rows, [{ type: 'row', index: 1 }]), {}).pending
+    const view = (pending: typeof base) => {
+      const st = displayRows(columns, rows, pending)
+      const editing = { rowStates: st, failed: null, engine: 'postgres' } as unknown as GridEditing
+      return (
+        <DataGrid
+          columns={columns}
+          rows={st.map((r) => r.cells)}
+          offset={0}
+          sort={[]}
+          columnWidths={{}}
+          platform="linux"
+          onHeaderClick={vi.fn()}
+          onColumnResize={vi.fn()}
+          onSelectRow={onSelectRow}
+          onToggleDetail={vi.fn()}
+          editing={editing}
+        />
+      )
+    }
+    const { rerender } = render(view(base))
+    // Opening a tab that already has staged inserts does not jump.
+    expect(onSelectRow).not.toHaveBeenCalled()
+    expect(p().gridSelection?.current).toBeUndefined()
+
+    const more = insertRow(base).pending
+    rerender(view(more))
+    expect(onSelectRow).toHaveBeenLastCalledWith(3)
+    expect(p().gridSelection?.current?.cell).toEqual([0, 3])
+
+    // Fewer inserts (undo) leaves the selection alone.
+    onSelectRow.mockClear()
+    rerender(view(base))
+    expect(onSelectRow).not.toHaveBeenCalled()
   })
 })

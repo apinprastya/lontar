@@ -142,6 +142,41 @@ export interface Result {
 }
 
 /**
+ * Source says whether a SQL editor result can be edited like a table and,
+ * if so, which table and columns it maps to. Edits made through it are
+ * sent as an ordinary ChangeSet for Schema.Table and validated again by
+ * Preview/Apply.
+ */
+export interface Source {
+    "editable": boolean;
+
+    /**
+     * Reason explains a read-only result (shown to the user).
+     */
+    "reason": string;
+    "schema": string;
+    "table": string;
+
+    /**
+     * Columns has one entry per result column, in result order.
+     */
+    "columns": SourceColumn[] | null;
+}
+
+/**
+ * SourceColumn maps one column of a query result to the table column it
+ * reads. Column is "" for an expression (or a repeat of a column), which
+ * stays read-only.
+ */
+export interface SourceColumn {
+    "column": string;
+    "isPK": boolean;
+    "nullable": boolean;
+    "hasDefault": boolean;
+    "enumValues"?: string[] | null;
+}
+
+/**
  * Update changes columns of one existing row.
  */
 export interface Update {

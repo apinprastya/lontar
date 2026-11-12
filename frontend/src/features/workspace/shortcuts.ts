@@ -1,5 +1,6 @@
 import { isModPressed, type ModifierEvent } from '../../lib/mod'
 import { canEdit, type WorkspaceState } from '../../stores/workspace'
+import { resultEditView } from '../../stores/queryTabs'
 
 /** Whether keys go to a text field (undo/redo/insert then stay native). */
 export function isTextTarget(target: EventTarget | null | undefined): boolean {
@@ -18,7 +19,8 @@ export function isTextTarget(target: EventTarget | null | undefined): boolean {
  *   Mod+F filter bar (table tab) or search (SQL tab) ·
  *   Mod+Enter run statement/selection · Mod+Shift+Enter run all ·
  *   Esc stop a running query ·
- *   table tabs: Mod+S commit · Mod+Z / Mod+Shift+Z undo/redo staged edits ·
+ *   table tabs and editable query results: Mod+S commit · Mod+Z /
+ *   Mod+Shift+Z undo/redo staged edits ·
  *   Mod+N insert row · Mod+E data / structure (see keymap.ts for the full list)
  *
  * Keys handled by the focused SQL editor itself (CodeMirror marks them
@@ -37,6 +39,23 @@ export function handleShortcut(e: ModifierEvent, platform: string | undefined, s
     if (tab?.kind !== 'query') return false
     void s.runQuery(tab.id, e.shiftKey ? 'all' : 'current')
     return true
+  }
+  if (tab?.kind === 'query' && tab.edit && resultEditView(tab, s.safeMode)?.editable) {
+    // An editable result: the same keys as a table tab (the SQL editor
+    // keeps its own undo and typing).
+    if (key === 's' && !e.shiftKey) {
+      void s.requestCommit(tab.id)
+      return true
+    }
+    if (!inText && key === 'z') {
+      if (e.shiftKey) s.redoEdit(tab.id)
+      else s.undoEdit(tab.id)
+      return true
+    }
+    if (!inText && key === 'n' && !e.shiftKey) {
+      s.addRow(tab.id)
+      return true
+    }
   }
   if (tab?.kind === 'table') {
     if (key === 's' && !e.shiftKey) {

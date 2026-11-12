@@ -1,10 +1,12 @@
 import type { Kind } from '../features/connections/types'
 import type { EditorApi } from '../features/editor/api'
-import { cycleSort, sortRows } from '../features/grid/sort'
+import { cycleSort, sortOrder, sortRows } from '../features/grid/sort'
 import { useSettings } from './settings'
 import { DEFAULT_MAX_ROWS, type CompletionSchema, type ExecResult, type ResultSet, type TxInfo } from '../features/editor/types'
-import type { SortSpec } from '../features/workspace/types'
+import type { Cell, ResultColumn, SortSpec } from '../features/workspace/types'
+import type { PreviewStatement, ResultSource, SafeMode } from '../features/edits/types'
 import { errorMessage } from '../lib/errors'
+import { displayRows, emptyPending, type DisplayRow, type Pending } from './pending'
 
 /** Key of the Messages tab in the results panel. */
 export const MESSAGES = 'messages'
@@ -59,6 +61,72 @@ export interface QueryTabState {
   confirm: PendingRun | null
   /** The SQL when the tab last ran (unrun changes: sql differs). */
   ranSql: string | null
+  /** Editing of a result set, like a table (null: none loaded). */
+  edit: ResultEdit | null
+  /** The database changed since the results were fetched (no editing). */
+  resultsStale?: boolean
+}
+
+/**
+ * Editing state of one query result set. The result is editable when its
+ * statement is a SELECT from one table that includes the primary key (see
+ * Go edits.ResolveSource); staged changes work as in a table tab.
+ */
+export interface ResultEdit {
+  resultId: string
+  loading: boolean
+  /** Null while loading or when the lookup failed. */
+  source: ResultSource | null
+  /** The lookup failed (the result is then read-only). */
+  error: string | null
+  /** The result's columns with key, default and read-only flags. */
+  columns: ResultColumn[]
+  /** Result column name → table column name (aliases). */
+  rename: Record<string, string>
+  pending: Pending
+  committing: boolean
+  commitError: string | null
+  failed: { key?: string; insertId?: number } | null
+  preview: PreviewStatement[] | null
+  previewLoading: boolean
+}
+
+/** A fresh (loading) edit state for a result set. */
+export function newResultEdit(resultId: string, columns: ResultColumn[]): ResultEdit {
+  return {
+    resultId,
+    loading: true,
+    source: null,
+    error: null,
+    columns,
+    rename: {},
+    pending: emptyPending,
+    committing: false,
+    commitError: null,
+    failed: null,
+    preview: null,
+    previewLoading: false,
+  }
+}
+
+/**
+ * The result's columns for editing: flags from the source mapping. Columns
+ * that are not a (first) reference to a table column are read-only.
+ */
+export function sourceColumns(columns: ResultColumn[], src: ResultSource): { columns: ResultColumn[]; rename: Record<string, string> } {
+  const rename: Record<string, string> = {}
+  const out = columns.map((c, i) => {
+    const m = src.editable ? src.columns[i] : undefined
+    if (!m || !m.column || rename[c.name] !== undefined) return { ...c, isPK: false, readOnly: true }
+    rename[c.name] = m.column
+    return { ...c, isPK: m.isPK, nullable: m.nullable, hasDefault: m.hasDefault, enumValues: m.enumValues ?? null }
+  })
+  return { columns: out, rename }
+}
+
+/** The statement that produced a result set. */
+export function statementOf(result: ExecResult | null, resultId: string) {
+  return result?.statements.find((st) => st.resultSets.some((rs) => rs.id === resultId)) ?? null
 }
 
 /** A run that needs confirmation before it executes. */
@@ -87,6 +155,11 @@ export interface QueryState {
   cancelConfirm(id: string): void
   cancelQuery(id: string): void
   loadMore(id: string, resultId: string): Promise<void>
+  /**
+   * Re-runs the statement that produced a result set (after its edits were
+   * committed) and replaces just that statement's result.
+   */
+  refreshResult(id: string, resultId: string): Promise<void>
   setActiveResult(id: string, key: string): void
   sortResult(id: string, resultId: string, column: string, additive: boolean): void
   selectResultRow(id: string, row: number | null): void
@@ -161,6 +234,7 @@ export function newQueryTabState(title: string, sql = ''): QueryTabState {
     editorRequest: null,
     confirm: null,
     ranSql: null,
+    edit: null,
   }
 }
 
@@ -278,6 +352,8 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
         activeResult: initialResultTab(result),
         sorts: {},
         selectedRow: null,
+        edit: null,
+        resultsStale: false,
         tx: result.tx,
         editorRequest: errPos ? { seq: nextSeq(), type: 'error', ...errPos } : findQuery(id)?.editorRequest ?? null,
       })
@@ -398,6 +474,49 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
       }
     },
 
+    async refreshResult(id, resultId) {
+      const tab = findQuery(id)
+      const st = statementOf(tab?.result ?? null, resultId)
+      const old = tab?.result ? resultSets(tab.result).find((rs) => rs.id === resultId) : undefined
+      if (!tab?.editorId || !st || !old || tab.running) return
+      const requestId = `refresh-${Date.now().toString(36)}-${nextSeq()}`
+      patch(id, { running: true, requestId, error: null })
+      try {
+        const res = await api.execute(tab.editorId, requestId, st.sql, {
+          maxRows: Math.max(tab.maxRows, old.rows.length),
+          continueOnError: false,
+          baseOffset: st.start,
+          confirmed: false,
+        })
+        if (isDisposed() || findQuery(id)?.requestId !== requestId) return
+        const fresh = res.statements[0]
+        if (res.needsConfirm || !fresh) {
+          patch(id, { running: false, requestId: null })
+          return
+        }
+        patch(id, (t) => {
+          const next = { ...fresh, index: st.index, start: st.start, end: st.end }
+          const statements = (t.result?.statements ?? []).map((x) => (x.index === st.index ? next : x))
+          const set = fresh.resultSets[0]
+          const sorts = { ...t.sorts }
+          if (set && sorts[resultId]) sorts[set.id] = sorts[resultId]
+          return {
+            running: false,
+            requestId: null,
+            result: t.result && { ...t.result, statements },
+            activeResult: t.activeResult === resultId ? (set?.id ?? MESSAGES) : t.activeResult,
+            sorts,
+            selectedRow: null,
+            edit: null,
+            tx: res.tx,
+          }
+        })
+      } catch (err) {
+        if (isDisposed() || findQuery(id)?.requestId !== requestId) return
+        patch(id, { running: false, requestId: null, error: errorMessage(err) })
+      }
+    },
+
     setActiveResult(id, key) {
       patch(id, { activeResult: key, selectedRow: null })
     },
@@ -495,4 +614,34 @@ export function activeResultView(tab: Pick<QueryTabState, 'result' | 'activeResu
   const set = sets[index]
   const sort = tab.sorts[set.id] ?? []
   return { set, index, sort, rows: sortRows(set.rows, set.columns.map((c) => c.name), sort) }
+}
+
+/** The active result set with its staged edits, in display order. */
+export interface ResultEditView {
+  view: ResultView
+  /** The edit state of this result set, once its source lookup started. */
+  edit: ResultEdit | null
+  columns: ResultColumn[]
+  /** Fetched rows (sorted) with staged values, then staged inserts. */
+  rows: DisplayRow[]
+  cells: Cell[][]
+  /** The result can be edited now. */
+  editable: boolean
+}
+
+export function resultEditView(tab: Pick<QueryTabState, 'result' | 'activeResult' | 'sorts' | 'edit'>, safeMode: SafeMode): ResultEditView | null {
+  const sets = resultSets(tab.result)
+  const index = sets.findIndex((r) => r.id === tab.activeResult)
+  if (index < 0) return null
+  const set = sets[index]
+  const sort = tab.sorts[set.id] ?? []
+  const edit = tab.edit?.resultId === set.id ? tab.edit : null
+  const ready = edit && !edit.loading && edit.source ? edit : null
+  const columns = ready ? ready.columns : set.columns
+  const all = displayRows(columns, set.rows, ready?.pending ?? emptyPending)
+  const order = sortOrder(set.rows, set.columns.map((c) => c.name), sort)
+  const rows = order ? [...order.map((i) => all[i]), ...all.slice(set.rows.length)] : all
+  const cells = rows.map((r) => r.cells)
+  const view: ResultView = { set, index, sort, rows: order ? order.map((i) => set.rows[i]) : set.rows }
+  return { view, edit, columns, rows, cells, editable: Boolean(ready?.source?.editable) && safeMode !== 'readonly' }
 }

@@ -21,7 +21,19 @@ import { errorMessage } from '../lib/errors'
 import { copyText } from '../lib/clipboard'
 import { referenceFilters } from '../features/structure/fk'
 import type { ForeignKey, StructureSection, TableDetail } from '../features/structure/types'
-import { createQueryActions, loadDrafts, newQueryTabState, type QueryState, type QueryTabState } from './queryTabs'
+import {
+  MESSAGES,
+  createQueryActions,
+  loadDrafts,
+  newQueryTabState,
+  newResultEdit,
+  resultSets,
+  sourceColumns,
+  statementOf,
+  type QueryState,
+  type QueryTabState,
+  type ResultEdit,
+} from './queryTabs'
 import { useSettings } from './settings'
 import type { ExportSource } from '../features/export/ExportDialog'
 import { editApi as defaultEditApi, type EditApi } from '../features/edits/api'
@@ -230,6 +242,8 @@ export interface WorkspaceState extends QueryState {
   commit(id: string): Promise<boolean>
   /** Mod+S: commits, or opens the preview first in confirm safe mode. */
   requestCommit(id: string): Promise<void>
+  /** Looks up whether a query tab's active result set can be edited. */
+  loadResultSource(id: string): Promise<void>
 
   /** The export dialog to show (table, query result or selection). */
   exportRequest: ExportSource | null
@@ -430,7 +444,8 @@ export function createWorkspaceStore(
     const closeTableTabs = () => {
       const { tabs, activeTabId } = get()
       for (const t of tabs) if (t.kind === 'table') cancelRequests(t)
-      const rest = tabs.filter((t) => t.kind !== 'table')
+      // Query results came from the previous database: no editing them.
+      const rest = tabs.filter((t) => t.kind !== 'table').map((t) => (t.kind === 'query' && t.result ? { ...t, edit: null, resultsStale: true } : t))
       set({ tabs: rest, activeTabId: rest.some((t) => t.id === activeTabId) ? activeTabId : (rest[0]?.id ?? null) })
     }
 
@@ -440,23 +455,135 @@ export function createWorkspaceStore(
     const findTableTab = (schema: string, name: string) =>
       get().tabs.find((x): x is TabState => x.kind === 'table' && x.schema === schema && x.table === name)
 
-    /** Table tabs among ids with staged changes. */
-    const dirtyTabs = (ids: string[]) => ids.filter((id) => {
-      const t = findTab(id)
-      return t ? isDirty(t.pending) : false
-    })
-    const allTableIds = () => get().tabs.filter((t) => t.kind === 'table').map((t) => t.id)
-    /** Stages a pending change: pins the tab and clears a stale failure. */
-    const stage = (id: string, fn: (t: TabState) => Pending) => {
-      const tab = findTab(id)
-      if (!tab || !canEdit(tab, get().safeMode)) return
-      const pending = fn(tab)
-      if (pending === tab.pending) return
-      patchTab(id, { pending, pinned: true, failed: null })
+    const findQuery = (id: string) => get().tabs.find((t): t is QueryTabState => t.id === id && t.kind === 'query')
+    const patchQuery = (id: string, patch: (t: QueryTabState) => Partial<QueryTabState>) => {
+      set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && t.kind === 'query' ? { ...t, ...patch(t) } : t)) }))
+    }
+    /** Patches the edit state of a query tab (when it is still for resultId). */
+    const patchResultEdit = (id: string, resultId: string, patch: Partial<ResultEdit>) => {
+      patchQuery(id, (t) => (t.edit?.resultId === resultId ? { edit: { ...t.edit, ...patch } } : {}))
     }
 
+    /**
+     * What staging and committing need, for a table tab or for the editable
+     * result set of a query tab.
+     */
+    interface EditTarget {
+      columns: ResultColumn[]
+      rows: Cell[][]
+      pending: Pending
+      committing: boolean
+      schema: string
+      table: string
+      rename?: Record<string, string>
+      editable: boolean
+      /** An open transaction in the query tab (edits would not see it). */
+      blocked: string | null
+      patch(p: Partial<Pick<TabState, 'pending' | 'committing' | 'commitError' | 'failed' | 'preview' | 'previewLoading'>>, staged?: boolean): void
+      /** Reloads the rows after a successful commit (query results: awaited). */
+      reload(): Promise<void> | void
+    }
+    const target = (id: string): EditTarget | null => {
+      const tab = findTab(id)
+      if (tab) {
+        return {
+          columns: tab.columns,
+          rows: tab.rows,
+          pending: tab.pending,
+          committing: tab.committing,
+          schema: tab.schema,
+          table: tab.table,
+          editable: canEdit(tab, get().safeMode),
+          blocked: null,
+          patch: (p, staged) => patchTab(id, staged ? { ...p, pinned: true } : p),
+          reload: () => {
+            patchTab(id, { totalCount: null })
+            void get().loadTab(id)
+          },
+        }
+      }
+      const q = findQuery(id)
+      const e = q?.edit
+      const set = e && q.result ? resultSets(q.result).find((rs) => rs.id === e.resultId) : undefined
+      if (!q || !e || !set || !e.source) return null
+      const txOpen = q.tx?.state === 'active' || q.tx?.state === 'failed'
+      return {
+        columns: e.columns,
+        rows: set.rows,
+        pending: e.pending,
+        committing: e.committing,
+        schema: e.source.schema,
+        table: e.source.table,
+        rename: e.rename,
+        editable: e.source.editable && get().safeMode !== 'readonly',
+        blocked: txOpen
+          ? 'This query tab has an open transaction. Run COMMIT or ROLLBACK first: grid changes are saved on a separate connection.'
+          : null,
+        patch: (p) => patchResultEdit(id, e.resultId, p),
+        reload: () => get().refreshResult(id, e.resultId),
+      }
+    }
+
+    /** Tabs among ids with staged changes (table tabs and query results). */
+    const dirtyTabs = (ids: string[]) => ids.filter((id) => {
+      const t = target(id)
+      return t ? isDirty(t.pending) : false
+    })
+    const allTabIds = () => get().tabs.map((t) => t.id)
+    /** Stages a pending change: pins the tab and clears a stale failure. */
+    const stage = (id: string, fn: (t: EditTarget) => Pending) => {
+      const t = target(id)
+      if (!t || !t.editable) return
+      const pending = fn(t)
+      if (pending === t.pending) return
+      t.patch({ pending, failed: null }, true)
+    }
+
+    const queryActions = createQueryActions<WorkspaceState>(set, get, editor, () => disposed)
+
     return {
-      ...createQueryActions<WorkspaceState>(set, get, editor, () => disposed),
+      ...queryActions,
+
+      // Runs and result switches drop staged result edits: ask first.
+      async runQuery(id, mode) {
+        if (dirtyTabs([id]).length > 0) get().guarded([id], () => void queryActions.runQuery(id, mode))
+        else await queryActions.runQuery(id, mode)
+      },
+
+      setActiveResult(id, key) {
+        const e = findQuery(id)?.edit
+        if (key !== MESSAGES && e && key !== e.resultId && dirtyTabs([id]).length > 0) {
+          get().guarded([id], () => queryActions.setActiveResult(id, key))
+        } else queryActions.setActiveResult(id, key)
+      },
+
+      async loadResultSource(id) {
+        const q = findQuery(id)
+        if (!q?.result || q.activeResult === MESSAGES) return
+        const resultId = q.activeResult
+        if (q.edit?.resultId === resultId) return
+        const set = resultSets(q.result).find((rs) => rs.id === resultId)
+        const st = statementOf(q.result, resultId)
+        if (!set || !st || set.columns.length === 0) return
+        const edit = newResultEdit(resultId, set.columns)
+        if (q.resultsStale) {
+          patchQuery(id, () => ({ edit: { ...edit, loading: false, error: 'The database changed since this query ran. Run it again to edit the results.' } }))
+          return
+        }
+        if (st.resultSets.length !== 1) {
+          patchQuery(id, () => ({ edit: { ...edit, loading: false, error: 'Results of a statement that returns several result sets are read-only.' } }))
+          return
+        }
+        patchQuery(id, () => ({ edit }))
+        try {
+          const source = await edits.resultSource(get().sessionId, st.sql, set.columns.length)
+          if (disposed) return
+          patchResultEdit(id, resultId, { loading: false, source, ...sourceColumns(set.columns, source) })
+        } catch (err) {
+          if (!disposed) patchResultEdit(id, resultId, { loading: false, error: errorMessage(err) })
+        }
+      },
+
       safeMode: session.safeMode ?? 'off',
       guard: null,
 
@@ -474,7 +601,7 @@ export function createWorkspaceStore(
           return
         }
         if (choice === 'discard') {
-          for (const id of g.tabIds) patchTab(id, { pending: emptyPending, commitError: null, failed: null })
+          for (const id of g.tabIds) target(id)?.patch({ pending: emptyPending, commitError: null, failed: null })
           set({ guard: null })
           g.proceed()
           return
@@ -521,58 +648,64 @@ export function createWorkspaceStore(
       },
 
       discardChanges(id) {
-        if (findTab(id)) patchTab(id, { pending: emptyPending, commitError: null, failed: null, preview: null })
+        target(id)?.patch({ pending: emptyPending, commitError: null, failed: null, preview: null })
       },
 
       async openPreview(id) {
-        const tab = findTab(id)
-        if (!tab || !isDirty(tab.pending)) return
-        patchTab(id, { previewLoading: true, commitError: null })
+        const t = target(id)
+        if (!t || !isDirty(t.pending)) return
+        t.patch({ previewLoading: true, commitError: null })
         try {
-          const preview = await edits.preview(get().sessionId, buildChangeSet(tab.schema, tab.table, tab.pending).cs)
-          if (!disposed) patchTab(id, { preview, previewLoading: false })
+          const preview = await edits.preview(get().sessionId, buildChangeSet(t.schema, t.table, t.pending, t.rename).cs)
+          if (!disposed) target(id)?.patch({ preview, previewLoading: false })
         } catch (err) {
-          if (!disposed) patchTab(id, { previewLoading: false, preview: null, commitError: errorMessage(err) })
+          if (!disposed) target(id)?.patch({ previewLoading: false, preview: null, commitError: errorMessage(err) })
         }
       },
 
       closePreview(id) {
-        patchTab(id, { preview: null })
+        target(id)?.patch({ preview: null })
       },
 
       async commit(id) {
-        const tab = findTab(id)
-        if (!tab || tab.committing) return false
-        if (!isDirty(tab.pending)) return true
+        const t = target(id)
+        if (!t || t.committing) return false
+        if (!isDirty(t.pending)) return true
         if (get().safeMode === 'readonly') {
-          patchTab(id, { commitError: 'This connection is in read-only safe mode; nothing was saved.' })
+          t.patch({ commitError: 'This connection is in read-only safe mode; nothing was saved.' })
           return false
         }
-        const { cs, refs } = buildChangeSet(tab.schema, tab.table, tab.pending)
-        const pending = tab.pending
-        patchTab(id, { committing: true, commitError: null, failed: null })
+        if (t.blocked) {
+          t.patch({ commitError: t.blocked, preview: null })
+          return false
+        }
+        const { cs, refs } = buildChangeSet(t.schema, t.table, t.pending, t.rename)
+        const pending = t.pending
+        t.patch({ committing: true, commitError: null, failed: null })
         try {
           const res = await edits.apply(get().sessionId, cs)
           if (disposed) return false
           if (res.ok) {
             // Changes staged while the commit ran stay staged.
-            const cur = findTab(id)
+            const cur = target(id)
             const rest = cur && cur.pending !== pending ? cur.pending : emptyPending
-            patchTab(id, { committing: false, pending: rest === pending ? emptyPending : rest, preview: null, totalCount: null })
-            void get().loadTab(id)
+            const left = rest === pending ? emptyPending : rest
+            t.patch({ committing: false, pending: left, preview: null })
+            // Re-running a query would drop changes staged meanwhile.
+            if (findTab(id) || !isDirty(left)) await t.reload()
             return true
           }
           const f = res.failure
-          patchTab(id, { committing: false, preview: null, commitError: f?.message ?? 'The commit failed; nothing was saved.', failed: failedChange(refs, f) })
+          t.patch({ committing: false, preview: null, commitError: f?.message ?? 'The commit failed; nothing was saved.', failed: failedChange(refs, f) })
           return false
         } catch (err) {
-          if (!disposed) patchTab(id, { committing: false, preview: null, commitError: errorMessage(err) })
+          if (!disposed) t.patch({ committing: false, preview: null, commitError: errorMessage(err) })
           return false
         }
       },
 
       async requestCommit(id) {
-        const tab = findTab(id)
+        const tab = target(id)
         if (!tab || !isDirty(tab.pending) || tab.committing) return
         if (get().safeMode === 'confirm') await get().openPreview(id)
         else await get().commit(id)
@@ -622,9 +755,9 @@ export function createWorkspaceStore(
 
       async selectDatabase(database) {
         if (database === get().database) return
-        if (dirtyTabs(allTableIds()).length > 0) {
+        if (dirtyTabs(allTabIds()).length > 0) {
           // Switching closes the table tabs: ask first.
-          get().guarded(allTableIds(), () => void get().selectDatabase(database))
+          get().guarded(allTabIds(), () => void get().selectDatabase(database))
           return
         }
         set({ sidebarError: null, tablesLoading: true })

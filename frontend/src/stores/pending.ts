@@ -119,7 +119,7 @@ export function setCells(p: Pending, columns: ResultColumn[], rows: Cell[][], ch
   let changed = false
   for (const ch of changes) {
     const ci = columns.findIndex((c) => c.name === ch.column)
-    if (ci < 0) continue
+    if (ci < 0 || columns[ci].readOnly) continue
     if (ch.ref.type === 'insert') {
       const id = ch.ref.id
       inserts = inserts.map((r) => (r.id === id ? { ...r, values: { ...r.values, [ch.column]: ch.value } } : r))
@@ -205,21 +205,33 @@ export interface ChangeRefs {
   deletes: string[]
 }
 
-/** The structured change set sent to Go (deletes win over edits). */
-export function buildChangeSet(schema: string, table: string, p: PendingData): { cs: ChangeSet; refs: ChangeRefs } {
+/** Renames the keys of a record (names missing from rename are kept). */
+function renameKeys<T>(rec: Record<string, T>, rename?: Record<string, string>): Record<string, T> {
+  if (!rename) return rec
+  const out: Record<string, T> = {}
+  for (const [k, v] of Object.entries(rec)) out[rename[k] ?? k] = v
+  return out
+}
+
+/**
+ * The structured change set sent to Go (deletes win over edits). rename
+ * maps grid column names to table column names (query results, where a
+ * column may be aliased).
+ */
+export function buildChangeSet(schema: string, table: string, p: PendingData, rename?: Record<string, string>): { cs: ChangeSet; refs: ChangeRefs } {
   const refs: ChangeRefs = { updates: [], inserts: [], deletes: [] }
   const cs: ChangeSet = { schema, table, updates: [], inserts: [], deletes: [] }
   for (const [k, pk] of Object.entries(p.deletes)) {
-    cs.deletes.push({ pk })
+    cs.deletes.push({ pk: renameKeys(pk, rename) })
     refs.deletes.push(k)
   }
   for (const [k, e] of Object.entries(p.edits)) {
     if (p.deletes[k]) continue
-    cs.updates.push({ pk: e.pk, set: e.set, old: e.old })
+    cs.updates.push({ pk: renameKeys(e.pk, rename), set: renameKeys(e.set, rename), old: renameKeys(e.old, rename) })
     refs.updates.push(k)
   }
   for (const r of p.inserts) {
-    cs.inserts.push({ values: r.values })
+    cs.inserts.push({ values: renameKeys(r.values, rename) })
     refs.inserts.push(r.id)
   }
   return { cs, refs }
@@ -262,18 +274,19 @@ export function displayRows(columns: ResultColumn[], rows: Cell[][], p: PendingD
       state: key && p.deletes[key] ? 'deleted' : 'normal',
       modified: columns.map((c) => Boolean(e?.set[c.name])),
       defaults: columns.map((c) => e?.set[c.name]?.kind === 'default'),
-      locked: columns.map((_, i) => !key || Boolean(row[i]?.trunc)),
+      locked: columns.map((c, i) => !key || Boolean(row[i]?.trunc) || Boolean(c.readOnly)),
       key,
     }
   })
   for (const r of p.inserts) {
     out.push({
       ref: { type: 'insert', id: r.id },
-      cells: columns.map((c) => (r.values[c.name] ? editValueCell(r.values[c.name]) : { k: 'str', v: 'DEFAULT' })),
+      // Read-only (expression) columns of a query result stay blank.
+      cells: columns.map((c): Cell => (c.readOnly ? { k: 'str', v: '' } : r.values[c.name] ? editValueCell(r.values[c.name]) : { k: 'str', v: 'DEFAULT' })),
       state: 'inserted',
-      modified: columns.map((c) => Boolean(r.values[c.name])),
-      defaults: columns.map((c) => !r.values[c.name] || r.values[c.name].kind === 'default'),
-      locked: columns.map(() => false),
+      modified: columns.map((c) => !c.readOnly && Boolean(r.values[c.name])),
+      defaults: columns.map((c) => !c.readOnly && (!r.values[c.name] || r.values[c.name].kind === 'default')),
+      locked: columns.map((c) => Boolean(c.readOnly)),
       key: null,
     })
   }
@@ -293,7 +306,7 @@ export function stagedValue(p: PendingData, d: DisplayRow, column: string): Edit
 export function duplicateValues(columns: ResultColumn[], d: DisplayRow, p: PendingData): Record<string, EditValue> {
   const values: Record<string, EditValue> = {}
   columns.forEach((c, i) => {
-    if (c.isPK) return
+    if (c.isPK || c.readOnly) return
     const staged = stagedValue(p, d, c.name)
     if (staged) {
       values[c.name] = staged

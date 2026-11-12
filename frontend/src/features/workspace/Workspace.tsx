@@ -5,7 +5,7 @@ import ExportDialog from '../export/ExportDialog'
 import ImportWizard from '../import/ImportWizard'
 import CommandPalette, { type PaletteMode, type PaletteTable } from '../palette/CommandPalette'
 import { commandAvailable, runCommand } from '../palette/commands'
-import { activeResultView } from '../../stores/queryTabs'
+import { resultEditView } from '../../stores/queryTabs'
 import { editorApi, type EditorApi } from '../editor/api'
 import QueryTab from '../editor/QueryTab'
 import { Group, Panel, Separator } from 'react-resizable-panels'
@@ -20,11 +20,10 @@ import { workspaceApi, type WorkspaceApi } from './api'
 import { handleShortcut, isTextTarget } from './shortcuts'
 import { editApi, type EditApi } from '../edits/api'
 import { PreviewDialog, UnsavedDialog } from '../edits/dialogs'
-import { initialText } from '../edits/editors'
-import { safeModeLabel, type EditValue } from '../edits/types'
-import type { Kind } from '../connections/types'
-import { canEdit, type TabState } from '../../stores/workspace'
-import { displayRows, pendingCount, stagedValue } from '../../stores/pending'
+import { safeModeLabel } from '../edits/types'
+import { canEdit } from '../../stores/workspace'
+import { displayRows, pendingCount } from '../../stores/pending'
+import { detailEditing, type Editable } from '../grid/editing'
 import StatusBar from './StatusBar'
 import TabBar from './TabBar'
 import TableTab from './TableTab'
@@ -45,27 +44,6 @@ export function SafeModeBadge({ mode }: { mode: string | undefined }) {
       <ShieldIcon className="icon" /> {safeModeLabel(mode as 'confirm' | 'readonly')}
     </span>
   )
-}
-
-/** Row detail editing for the selected row of an editable table tab. */
-function detailEditing(tab: TabState, kind: Kind, store: WorkspaceStore) {
-  if (tab.selectedRow === null) return null
-  const rows = displayRows(tab.columns, tab.rows, tab.pending)
-  const d = rows[tab.selectedRow]
-  if (!d) return null
-  return {
-    engine: kind,
-    state: d,
-    editText: (col: number) => {
-      const column = tab.columns[col]
-      const orig = d.ref.type === 'row' ? tab.rows[d.ref.index]?.[col] : undefined
-      return column ? initialText(stagedValue(tab.pending, d, column.name), orig) : ''
-    },
-    onCommit: (col: number, value: EditValue) => {
-      const column = tab.columns[col]
-      if (column) store.getState().stageCells(tab.id, [{ ref: d.ref, column: column.name, value }])
-    },
-  }
 }
 
 /** Tables for quick open: the current schema's, then other schemas' (loaded when the palette opens). */
@@ -141,31 +119,41 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
     platform,
     store,
     openPalette: (m: PaletteMode) => setPalette(m),
-    disconnect: () => store.getState().guarded(store.getState().tabs.filter((t) => t.kind === 'table').map((t) => t.id), () => void disconnect()),
+    disconnect: () => store.getState().guarded(store.getState().tabs.map((t) => t.id), () => void disconnect()),
   }
 
   const q = tab?.kind === 'query' ? tab : null
-  const [qResult, qActive, qSorts] = [q?.result ?? null, q?.activeResult ?? '', q?.sorts ?? null]
+  const [qResult, qActive, qSorts, qEdit] = [q?.result ?? null, q?.activeResult ?? '', q?.sorts ?? null, q?.edit ?? null]
   const queryView = useMemo(
-    () => (qSorts ? activeResultView({ result: qResult, activeResult: qActive, sorts: qSorts }) : null),
-    [qResult, qActive, qSorts],
+    () => (qSorts ? resultEditView({ result: qResult, activeResult: qActive, sorts: qSorts, edit: qEdit }, safeMode) : null),
+    [qResult, qActive, qSorts, qEdit, safeMode],
   )
 
   if (!session) return null
   const color = connection ? connectionColor(connection) : ''
   const tableTab = tab?.kind === 'table' ? tab : null
-  const editable = tableTab ? canEdit(tableTab, safeMode) : false
+  // What the active tab edits: a table tab, or an editable query result.
+  const resultEdit = queryView?.editable ? queryView.edit : null
+  const editState = tableTab ?? resultEdit
+  const editable = tableTab ? canEdit(tableTab, safeMode) : Boolean(resultEdit)
+  const editableRows: Editable | null = tableTab
+    ? { id: tableTab.id, columns: tableTab.columns, rows: tableTab.rows, pending: tableTab.pending, failed: tableTab.failed }
+    : resultEdit && tab && queryView
+      ? { id: tab.id, columns: queryView.columns, rows: queryView.view.set.rows, pending: resultEdit.pending, failed: resultEdit.failed }
+      : null
   const guardCount = guard
     ? guard.tabIds.reduce((n, id) => {
         const t = tabs.find((x) => x.id === id)
-        return n + (t?.kind === 'table' ? pendingCount(t.pending) : 0)
+        if (t?.kind === 'table') return n + pendingCount(t.pending)
+        return n + (t?.kind === 'query' && t.edit ? pendingCount(t.edit.pending) : 0)
       }, 0)
     : 0
-  const tableIds = () => store.getState().tabs.filter((t) => t.kind === 'table').map((t) => t.id)
-  const detailColumns = tab?.kind === 'table' ? tab.columns : (queryView?.set.columns ?? [])
-  // Table tabs show staged values (and staged inserts) in the detail.
-  const detailRows = tab?.kind === 'table' ? displayRows(tab.columns, tab.rows, tab.pending).map((r) => r.cells) : (queryView?.rows ?? [])
-  const detailRow = tab && tab.selectedRow !== null ? (detailRows[tab.selectedRow] ?? null) : null
+  const tabIds = () => store.getState().tabs.map((t) => t.id)
+  const detailColumns = tab?.kind === 'table' ? tab.columns : (queryView?.columns ?? [])
+  // The detail shows staged values (and staged inserts).
+  const detailStates = tab?.kind === 'table' ? displayRows(tab.columns, tab.rows, tab.pending) : (queryView?.rows ?? [])
+  const detailState = tab && tab.selectedRow !== null ? detailStates[tab.selectedRow] : undefined
+  const detailRow = detailState?.cells ?? null
   const rowOffset = tab?.kind === 'table' ? tab.offset : 0
 
   return (
@@ -211,8 +199,8 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
               <button type="button" aria-pressed={showDetail} onClick={toggleDetail} title={`Row detail (${shortcutLabel(platform, 'I')} or Space)`}>
                 Row detail
               </button>
-              {tableTab && editable && (
-                <button type="button" onClick={() => store.getState().addRow(tableTab.id)} title={`Insert row (${shortcutLabel(platform, 'N')})`}>
+              {tab && editable && (tableTab?.view ?? 'data') === 'data' && (
+                <button type="button" onClick={() => store.getState().addRow(tab.id)} title={`Insert row (${shortcutLabel(platform, 'N')})`}>
                   Insert row
                 </button>
               )}
@@ -230,7 +218,7 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
                 Open…
               </button>
               <span className="spacer" />
-              <button type="button" onClick={() => store.getState().guarded(tableIds(), () => void disconnect())}>
+              <button type="button" onClick={() => store.getState().guarded(tabIds(), () => void disconnect())}>
                 Disconnect
               </button>
             </div>
@@ -255,7 +243,7 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
                 row={detailRow}
                 rowNumber={tab && tab.selectedRow !== null ? rowOffset + tab.selectedRow + 1 : null}
                 onClose={toggleDetail}
-                editing={tableTab && editable ? detailEditing(tableTab, kind, store) : null}
+                editing={editableRows && editable ? detailEditing(editableRows, detailState, kind, store.getState()) : null}
               />
             </Panel>
           </>
@@ -267,26 +255,26 @@ function WorkspaceView({ platform, store, editor, api }: { platform?: string; st
         onPrev={() => tab?.kind === 'table' && store.getState().prevPage(tab.id)}
         onNext={() => tab?.kind === 'table' && store.getState().nextPage(tab.id)}
         pending={
-          tableTab
+          tab && editState
             ? {
-                count: pendingCount(tableTab.pending),
-                committing: tableTab.committing,
-                previewLoading: tableTab.previewLoading,
+                count: pendingCount(editState.pending),
+                committing: editState.committing,
+                previewLoading: editState.previewLoading,
                 commitHint: shortcutLabel(platform, 'S'),
-                onPreview: () => void store.getState().openPreview(tableTab.id),
-                onCommit: () => void store.getState().requestCommit(tableTab.id),
-                onDiscard: () => store.getState().discardChanges(tableTab.id),
+                onPreview: () => void store.getState().openPreview(tab.id),
+                onCommit: () => void store.getState().requestCommit(tab.id),
+                onDiscard: () => store.getState().discardChanges(tab.id),
               }
             : null
         }
       />
-      {tableTab?.preview && (
+      {tab && editState?.preview && (
         <PreviewDialog
-          statements={tableTab.preview}
+          statements={editState.preview}
           safeMode={safeMode}
-          committing={tableTab.committing}
-          onCommit={() => void store.getState().commit(tableTab.id)}
-          onClose={() => store.getState().closePreview(tableTab.id)}
+          committing={editState.committing}
+          onCommit={() => void store.getState().commit(tab.id)}
+          onClose={() => store.getState().closePreview(tab.id)}
         />
       )}
       {guard && <UnsavedDialog count={guardCount} busy={guard.busy} onChoose={(c) => void store.getState().resolveGuard(c)} />}

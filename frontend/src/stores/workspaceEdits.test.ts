@@ -49,6 +49,7 @@ function fakeEdits() {
   return {
     preview: vi.fn(async () => [{ op: 'update' as const, index: 0, sql: "UPDATE t SET name = 'b' WHERE id = 1;" }]),
     apply: vi.fn(async (): Promise<ApplyResult> => ok),
+    resultSource: vi.fn(async () => ({ editable: false, reason: 'n/a', schema: '', table: '', columns: [] })),
   } satisfies EditApi
 }
 

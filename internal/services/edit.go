@@ -65,3 +65,24 @@ func (s *EditService) Apply(ctx context.Context, sessionID string, cs edits.Chan
 	}
 	return &ApplyResult{OK: true, Result: res}, nil
 }
+
+// ResultSource reports whether a SQL editor result can be edited like a
+// table: sql is the statement that produced it and columns the number of
+// result columns. Unqualified table names are looked up in the session's
+// default schema. A result that cannot be edited is not an error: the
+// Source says why.
+func (s *EditService) ResultSource(ctx context.Context, sessionID, sql string, columns int) (*edits.Source, error) {
+	sess, err := s.sessions.Get(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	d, err := s.drivers.Get(sess.Kind)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := d.CurrentSchema(ctx, sess.DB)
+	if err != nil {
+		return nil, err
+	}
+	return edits.ResolveSource(ctx, sess.DB, d, sess.Kind, sql, schema, columns)
+}

@@ -124,6 +124,26 @@ export function selectedRows(sel: GridSelection): number[] {
   return []
 }
 
+/** Number of staged inserts among the grid rows. */
+export function countInserted(rows: readonly DisplayRow[]): number {
+  let n = 0
+  for (const r of rows) if (r.state === 'inserted') n++
+  return n
+}
+
+/**
+ * The cell to land on after a row is staged: the last grid row (inserts are
+ * appended) at its first editable column. Null when the last row is not a
+ * staged insert.
+ */
+export function newRowCell(rows: readonly DisplayRow[]): Item | null {
+  const row = rows.length - 1
+  const d = rows[row]
+  if (!d || d.state !== 'inserted') return null
+  const col = d.locked.findIndex((l) => !l)
+  return [col === -1 ? 0 : col, row]
+}
+
 /** A printable key that starts editing with that character. */
 export function isTypingKey(e: ModifierEvent): boolean {
   return e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey
@@ -312,6 +332,24 @@ export default function DataGrid(props: DataGridProps) {
 
   const rowStates = editing?.rowStates
   const failed = editing?.failed ?? null
+
+  // A newly staged row (insert or duplicate) is appended after the fetched
+  // rows, often below the fold: bring it into view and select its first
+  // editable cell, so typing fills it in straight away.
+  const insertCount = rowStates ? countInserted(rowStates) : 0
+  const prevInserts = useRef(insertCount)
+  useEffect(() => {
+    const grew = insertCount > prevInserts.current
+    prevInserts.current = insertCount
+    if (!grew || !rowStates) return
+    const target = newRowCell(rowStates)
+    if (!target) return
+    const [col, row] = target
+    setSelection({ ...emptySelection, current: { cell: [col, row], range: { x: col, y: row, width: 1, height: 1 }, rangeStack: [] } })
+    onSelectRow(row)
+    gridRef.current?.scrollTo?.(col, row, 'both', 0, 0, { vAlign: 'center' })
+    gridRef.current?.focus?.()
+  }, [insertCount]) // eslint-disable-line react-hooks/exhaustive-deps
   const getCellContent = useCallback(
     ([col, row]: Item): GridCell => {
       let cell = toGridCell(rows[row]?.[col], muted)

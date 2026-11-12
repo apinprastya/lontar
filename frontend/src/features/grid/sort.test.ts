@@ -35,3 +35,14 @@ describe('client-side sort', () => {
     expect(sortRows(rows, ['id', 'name'], [{ column: 'name', desc: false }]).map((r) => r[0].v)).toEqual([3, undefined, 2, 1])
   })
 })
+
+describe('sortOrder', () => {
+  it('returns row indexes in sort order, or null without a sort', async () => {
+    const { sortOrder } = await import('./sort')
+    const rows: Cell[][] = [[{ k: 'num', v: 2 }], [{ k: 'null' }], [{ k: 'num', v: 1 }]]
+    expect(sortOrder(rows, ['n'], [{ column: 'n', desc: false }])).toEqual([1, 2, 0])
+    expect(sortOrder(rows, ['n'], [{ column: 'n', desc: true }])).toEqual([0, 2, 1])
+    expect(sortOrder(rows, ['n'], [])).toBeNull()
+    expect(sortOrder(rows, ['n'], [{ column: 'other', desc: false }])).toBeNull()
+  })
+})

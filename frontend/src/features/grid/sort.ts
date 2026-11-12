@@ -31,10 +31,10 @@ export function compareCells(a: Cell | undefined, b: Cell | undefined): number {
   return x < y ? -1 : x > y ? 1 : 0
 }
 
-/** Rows sorted client-side by sort (stable; the input is not changed). */
-export function sortRows(rows: Cell[][], columnNames: string[], sort: SortSpec[]): Cell[][] {
+/** Row indexes in client-side sort order (stable). Null: no sort. */
+export function sortOrder(rows: Cell[][], columnNames: string[], sort: SortSpec[]): number[] | null {
   const keys = sort.map((s) => ({ i: columnNames.indexOf(s.column), desc: s.desc })).filter((k) => k.i >= 0)
-  if (keys.length === 0) return rows
+  if (keys.length === 0) return null
   return rows
     .map((row, n) => ({ row, n }))
     .sort((a, b) => {
@@ -44,5 +44,11 @@ export function sortRows(rows: Cell[][], columnNames: string[], sort: SortSpec[]
       }
       return a.n - b.n
     })
-    .map((x) => x.row)
+    .map((x) => x.n)
+}
+
+/** Rows sorted client-side by sort (stable; the input is not changed). */
+export function sortRows(rows: Cell[][], columnNames: string[], sort: SortSpec[]): Cell[][] {
+  const order = sortOrder(rows, columnNames, sort)
+  return order ? order.map((i) => rows[i]) : rows
 }

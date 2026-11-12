@@ -29,6 +29,8 @@ export interface ResultColumn {
   hasDefault?: boolean
   /** Table pages only: allowed values of an enum column. */
   enumValues?: string[] | null
+  /** Query results: an expression or repeated column that cannot be edited. */
+  readOnly?: boolean
 }
 
 export interface Page {

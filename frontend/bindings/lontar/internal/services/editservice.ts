@@ -35,3 +35,14 @@ export function Apply(sessionID: string, cs: edits$0.ChangeSet): $CancellablePro
 export function Preview(sessionID: string, cs: edits$0.ChangeSet): $CancellablePromise<edits$0.PreviewStatement[] | null> {
     return $Call.ByID(350633919, sessionID, cs);
 }
+
+/**
+ * ResultSource reports whether a SQL editor result can be edited like a
+ * table: sql is the statement that produced it and columns the number of
+ * result columns. Unqualified table names are looked up in the session's
+ * default schema. A result that cannot be edited is not an error: the
+ * Source says why.
+ */
+export function ResultSource(sessionID: string, sql: string, columns: number): $CancellablePromise<edits$0.Source | null> {
+    return $Call.ByID(780117673, sessionID, sql, columns);
+}

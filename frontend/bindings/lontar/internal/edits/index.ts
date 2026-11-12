@@ -15,5 +15,7 @@ export type {
     Insert,
     PreviewStatement,
     Result,
+    Source,
+    SourceColumn,
     Update
 } from "./models.js";

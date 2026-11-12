@@ -186,6 +186,23 @@ nothing is saved. The failing row is highlighted, and your changes stay staged.
 button. Changing the page, sort or filter, refreshing, closing the tab,
 switching database or disconnecting asks you to commit or discard first.
 
+### Editing query results
+
+Results in the SQL editor can be edited the same way when they come from a
+plain `SELECT` on one table that includes its primary key, for example
+`SELECT * FROM users WHERE active` or `SELECT id, name AS who FROM users`.
+A badge next to the result tabs says **Editing users**, or **Read-only** with
+the reason on hover (joins, `GROUP BY`/`DISTINCT`, subqueries in `FROM`,
+`UNION`, views, a missing primary key column). Expression columns such as
+`upper(name)` stay read-only, and an alias edits the column it names.
+Unqualified table names are looked up in the connection's default schema.
+
+The same shortcuts, status bar actions and safe-mode rules apply. After a
+commit the statement runs again to show the saved rows. Commits use a separate
+connection, so they are refused while the query tab has an open transaction:
+run `COMMIT` or `ROLLBACK` first. Running the query again, switching to
+another result set or closing the tab asks you to commit or discard first.
+
 ## Table structure
 
 Every table tab has a **Data | Structure** switch at the bottom (**Mod+E**).

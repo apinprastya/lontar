@@ -56,7 +56,7 @@ import type { EditApi } from '../edits/api'
 import type { ApplyResult } from '../edits/types'
 import type { FetchRequest, Page, TableInfo } from './types'
 import Workspace, { SafeModeBadge } from './Workspace'
-import { pasteChanges } from './TableTab'
+import { pasteChanges } from '../grid/editing'
 import { displayRows, emptyPending } from '../../stores/pending'
 
 const tables: TableInfo[] = [
@@ -101,6 +101,7 @@ function fakeEdits() {
   return {
     preview: vi.fn(async () => [{ op: 'update' as const, index: 0, sql: "UPDATE \"public\".\"users\" SET \"email\" = 'b@x' WHERE \"id\" = 1;" }]),
     apply: vi.fn(async (): Promise<ApplyResult> => ({ ok: true, result: { deleted: 0, updated: 1, inserted: 0, insertedKeys: [] }, failure: null })),
+    resultSource: vi.fn(async () => ({ editable: false, reason: 'n/a', schema: '', table: '', columns: [] })),
   } satisfies EditApi
 }
 
@@ -236,7 +237,7 @@ describe('Workspace editing', () => {
     const d = displayRows(cols, rows, emptyPending)
     d[1] = { ...d[1], state: 'deleted' }
     d[0] = { ...d[0], locked: [true, false] }
-    expect(pasteChanges({ columns: cols }, d, 0, 0, [['9', 'x', 'extra'], ['8', 'y'], ['7', 'z']])).toEqual([
+    expect(pasteChanges(cols, d, 0, 0, [['9', 'x', 'extra'], ['8', 'y'], ['7', 'z']])).toEqual([
       { ref: { type: 'row', index: 0 }, column: 'email', value: { kind: 'value', text: 'x' } },
     ])
   })

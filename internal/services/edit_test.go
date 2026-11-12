@@ -162,3 +162,28 @@ func TestConnectionServiceSafeMode(t *testing.T) {
 		t.Fatalf("session safe mode = %q", sess.SafeMode)
 	}
 }
+
+func TestEditServiceResultSource(t *testing.T) {
+	ctx := context.Background()
+	m, sid := openSQLiteSession(t)
+	svc := NewEditService(m, all.Registry())
+
+	src, err := svc.ResultSource(ctx, sid, "SELECT id, upper(name) FROM t WHERE id > 1", 2)
+	if err != nil || !src.Editable || src.Schema != "main" || src.Table != "t" {
+		t.Fatalf("ResultSource = %+v, %v", src, err)
+	}
+	if src.Columns[0].Column != "id" || !src.Columns[0].IsPK || src.Columns[1].Column != "" {
+		t.Fatalf("columns = %+v", src.Columns)
+	}
+	src, err = svc.ResultSource(ctx, sid, "SELECT * FROM v", 1)
+	if err != nil || src.Editable || !strings.Contains(src.Reason, "view") {
+		t.Fatalf("view ResultSource = %+v, %v", src, err)
+	}
+
+	if _, err := svc.ResultSource(ctx, "nope", "SELECT 1", 1); !errors.Is(err, conn.ErrSessionNotFound) {
+		t.Fatalf("unknown session err = %v", err)
+	}
+	if _, err := NewEditService(m, failingDrivers{}).ResultSource(ctx, sid, "SELECT 1", 1); err == nil {
+		t.Fatal("expected a driver error")
+	}
+}

@@ -57,6 +57,26 @@ export interface ApplyResult {
   failure: ChangeFailure | null
 }
 
+/** How one query result column maps to a table column ("" : read-only). */
+export interface SourceColumn {
+  column: string
+  isPK: boolean
+  nullable: boolean
+  hasDefault: boolean
+  enumValues?: string[] | null
+}
+
+/** Whether a SQL editor result can be edited like a table (see Go edits.Source). */
+export interface ResultSource {
+  editable: boolean
+  /** Why the result is read-only. */
+  reason: string
+  schema: string
+  table: string
+  /** One per result column. */
+  columns: SourceColumn[]
+}
+
 export type SafeMode = 'off' | 'confirm' | 'readonly'
 
 export const SAFE_MODES: { value: SafeMode; label: string; hint: string }[] = [

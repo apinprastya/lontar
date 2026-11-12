@@ -43,7 +43,7 @@ const api: WorkspaceApi = {
   tableInfo: vi.fn(async () => makeDetail()),
   tableDDL: vi.fn(async () => ''),
 }
-const edits = { preview: vi.fn(async () => []), apply: vi.fn(async () => ({ ok: true, result: null, failure: null })) }
+const edits = { preview: vi.fn(async () => []), apply: vi.fn(async () => ({ ok: true, result: null, failure: null })), resultSource: vi.fn(async () => ({ editable: false, reason: 'n/a', schema: '', table: '', columns: [] })) }
 
 describe('TableTab editing wiring', () => {
   let store: WorkspaceStore

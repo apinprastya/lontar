@@ -169,3 +169,37 @@ describe('pending changes', () => {
     expect(duplicateValues(cols, d[1], p)).toEqual({ name: { kind: 'null' } })
   })
 })
+
+describe('query result columns', () => {
+  // `SELECT id AS key, name, upper(name) AS shout FROM t`
+  const qcols: ResultColumn[] = [
+    { name: 'key', type: 'integer', isPK: true, nullable: false },
+    { name: 'name', type: 'text', isPK: false, nullable: true },
+    { name: 'shout', type: 'text', isPK: false, nullable: true, readOnly: true },
+  ]
+  const qrows: Cell[][] = [[{ k: 'num', v: 1 }, { k: 'str', v: 'a' }, { k: 'str', v: 'A' }]]
+
+  it('locks read-only columns and leaves them out of changes', () => {
+    let p = setCells(emptyPending, qcols, qrows, [
+      { ref: row(0), column: 'shout', value: { kind: 'value', text: 'x' } },
+      { ref: row(0), column: 'name', value: { kind: 'value', text: 'b' } },
+    ])
+    p = insertRow(p, {}).pending
+    const d = displayRows(qcols, qrows, p)
+    expect(d[0].locked).toEqual([false, false, true])
+    expect(d[0].cells[2]).toEqual({ k: 'str', v: 'A' })
+    expect(d[1]).toMatchObject({ locked: [false, false, true], defaults: [true, true, false], modified: [false, false, false] })
+    expect(d[1].cells[2]).toEqual({ k: 'str', v: '' })
+    expect(duplicateValues(qcols, d[0], p)).toEqual({ name: { kind: 'value', text: 'b' } })
+  })
+
+  it('renames result columns to table columns in the change set', () => {
+    let p = setCells(emptyPending, qcols, qrows, [{ ref: row(0), column: 'name', value: { kind: 'value', text: 'b' } }])
+    p = insertRow(p, { key: { kind: 'value', text: '5' } }).pending
+    p = deleteRows(p, qcols, [...qrows, [{ k: 'num', v: 2 }, { k: 'null' }, { k: 'null' }]], [row(1)])
+    const { cs } = buildChangeSet('public', 't', p, { key: 'id', name: 'name' })
+    expect(cs.updates[0]).toEqual({ pk: { id: { k: 'num', v: 1 } }, set: { name: { kind: 'value', text: 'b' } }, old: { name: { k: 'str', v: 'a' } } })
+    expect(cs.inserts[0]).toEqual({ values: { id: { kind: 'value', text: '5' } } })
+    expect(cs.deletes[0]).toEqual({ pk: { id: { k: 'num', v: 2 } } })
+  })
+})

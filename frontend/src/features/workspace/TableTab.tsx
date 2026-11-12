@@ -1,30 +1,13 @@
 import { useMemo } from 'react'
 import { canEdit, readOnlyReason, useWorkspace, type TabState } from '../../stores/workspace'
-import { displayRows, stagedValue, type CellChange, type DisplayRow } from '../../stores/pending'
+import { displayRows } from '../../stores/pending'
 import FilterBar from '../filters/FilterBar'
 import DataGrid, { type GridEditing, type GridLinks } from '../grid/DataGrid'
 import StructureView from '../structure/StructureView'
 import { fkByColumn, referenceFilters } from '../structure/fk'
 import { shortcutLabel } from '../../lib/mod'
-import { initialText } from '../edits/editors'
-import type { EditValue } from '../edits/types'
+import { gridEditing } from '../grid/editing'
 import { LockIcon } from '../../components/icons'
-
-/** Cell changes for TSV pasted at (row, col), clipped to the grid. */
-export function pasteChanges(tab: Pick<TabState, 'columns'>, rows: DisplayRow[], row: number, col: number, values: readonly (readonly string[])[]): CellChange[] {
-  const out: CellChange[] = []
-  values.forEach((line, dr) => {
-    const d = rows[row + dr]
-    if (!d || d.state === 'deleted') return
-    line.forEach((text, dc) => {
-      const c = col + dc
-      const column = tab.columns[c]
-      if (!column || d.locked[c]) return
-      out.push({ ref: d.ref, column: column.name, value: { kind: 'value', text } })
-    })
-  })
-  return out
-}
 
 /** Data / Structure switch at the bottom of a table tab. */
 export function ViewToggle({ tab, platform }: { tab: TabState; platform?: string }) {
@@ -53,43 +36,10 @@ export default function TableTab({ tab, platform }: { tab: TabState; platform?: 
   const rows = useMemo(() => displayRows(tab.columns, tab.rows, tab.pending), [tab.columns, tab.rows, tab.pending])
   const cells = useMemo(() => rows.map((r) => r.cells), [rows])
 
-  const editing = useMemo<GridEditing | undefined>(() => {
-    if (!editable) return undefined
-    const set = (row: number, col: number, value: EditValue) => {
-      const d = rows[row]
-      const column = tab.columns[col]
-      if (d && column) s.stageCells(tab.id, [{ ref: d.ref, column: column.name, value }])
-    }
-    return {
-      engine: kind,
-      rowStates: rows,
-      failed: tab.failed,
-      editText: (row, col) => {
-        const d = rows[row]
-        const column = tab.columns[col]
-        if (!d || !column) return ''
-        const orig = d.ref.type === 'row' ? tab.rows[d.ref.index]?.[col] : undefined
-        return initialText(stagedValue(tab.pending, d, column.name), orig)
-      },
-      onCommitCell: set,
-      onSetCells: (items, value) =>
-        s.stageCells(
-          tab.id,
-          items.flatMap(([col, row]) => {
-            const d = rows[row]
-            const column = tab.columns[col]
-            return d && column && !d.locked[col] && d.state !== 'deleted' ? [{ ref: d.ref, column: column.name, value }] : []
-          }),
-        ),
-      onDeleteRows: (rs) => s.markDeleted(tab.id, rs.flatMap((r) => (rows[r] ? [rows[r].ref] : []))),
-      onDuplicateRow: (row) => rows[row] && s.duplicateRow(tab.id, rows[row].ref),
-      onInsertRow: () => s.addRow(tab.id),
-      onUndo: () => s.undoEdit(tab.id),
-      onRedo: () => s.redoEdit(tab.id),
-      onCommit: () => void s.requestCommit(tab.id),
-      onPaste: (row, col, values) => s.stageCells(tab.id, pasteChanges(tab, rows, row, col, values)),
-    }
-  }, [editable, rows, tab, kind, s])
+  const editing = useMemo<GridEditing | undefined>(
+    () => (editable ? gridEditing({ id: tab.id, columns: tab.columns, rows: tab.rows, pending: tab.pending, failed: tab.failed }, rows, kind, s) : undefined),
+    [editable, rows, tab, kind, s],
+  )
 
   const fks = tab.structure?.foreignKeys
   const links = useMemo<GridLinks | undefined>(() => {
