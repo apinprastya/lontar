@@ -481,7 +481,7 @@ func TestKnownAlgorithms(t *testing.T) {
 
 func TestExpandHome(t *testing.T) {
 	home := func() (string, error) { return "/home/x", nil }
-	for in, want := range map[string]string{"~": "/home/x", "~/k": filepath.Join("/home/x", "k"), "/abs": "/abs", "rel~": "rel~"} {
+	for in, want := range map[string]string{"~": filepath.FromSlash("/home/x"), "~/k": filepath.Join("/home/x", "k"), "/abs": "/abs", "rel~": "rel~"} {
 		if got, _ := ExpandHome(in, home); got != want {
 			t.Errorf("%q → %q, want %q", in, got, want)
 		}

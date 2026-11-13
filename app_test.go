@@ -13,6 +13,7 @@ import (
 
 	"lontar/internal/migrate"
 	"lontar/internal/sshtunnel"
+	"lontar/internal/update"
 )
 
 func TestAppOptions(t *testing.T) {
@@ -21,8 +22,11 @@ func TestAppOptions(t *testing.T) {
 	if opts.Name != "Lontar" {
 		t.Fatalf("Name = %q, want Lontar", opts.Name)
 	}
-	if len(opts.Services) != 11 {
-		t.Fatalf("expected 11 bound services, got %d", len(opts.Services))
+	if len(opts.Services) != 12 {
+		t.Fatalf("expected 12 bound services, got %d", len(opts.Services))
+	}
+	if opts.Services[11].Instance() != b.update {
+		t.Fatal("UpdateService not registered")
 	}
 	for i, inst := range []any{b.dialogs, b.export, b.importer, b.settings} {
 		if opts.Services[7+i].Instance() != inst {
@@ -103,6 +107,29 @@ func TestWailsAdaptersWithoutApp(t *testing.T) {
 		t.Fatal("SaveFile without an app")
 	}
 	WailsEmitter{}.Emit("x", 1) // no app: dropped, no panic
+	quitApp()                    // no app: nothing to quit
+	if err := openURL("https://example.com"); err == nil {
+		t.Fatal("openURL without an app")
+	}
+}
+
+func TestStartDetached(t *testing.T) {
+	if err := startDetached("go", []string{"version"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := startDetached(filepath.Join(t.TempDir(), "missing"), nil); err == nil {
+		t.Fatal("missing program started")
+	}
+}
+
+func TestInstallation(t *testing.T) {
+	// A test binary is never an installed Lontar.
+	if in := installation(); in.Kind == update.KindAppImage && os.Getenv("APPIMAGE") == "" {
+		t.Fatalf("installation() = %+v", in)
+	}
+	if newUpdateService(nil) == nil {
+		t.Fatal("no update service")
+	}
 }
 
 func TestConfigDir(t *testing.T) {

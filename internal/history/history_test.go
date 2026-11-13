@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -30,8 +31,13 @@ func TestAddListDeleteClear(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{FileName, FileName + "-wal"} {
-		if fi, err := os.Stat(filepath.Join(dir, name)); err != nil || fi.Mode().Perm() != 0o600 {
-			t.Fatalf("%s: %v %v", name, fi, err)
+		fi, err := os.Stat(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		// Windows has no Unix permission bits.
+		if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
+			t.Fatalf("%s: mode %v", name, fi.Mode().Perm())
 		}
 	}
 
@@ -160,7 +166,7 @@ func TestErrors(t *testing.T) {
 	if err := os.MkdirAll(ro, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	if os.Getuid() != 0 {
+	if runtime.GOOS != "windows" && os.Getuid() != 0 {
 		if _, err := New(ro).List(ctx, "", "", 0, 0); err == nil {
 			t.Fatal("read-only dir: want error")
 		}

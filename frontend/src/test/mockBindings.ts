@@ -93,6 +93,14 @@ export const SettingsService = {
   Defaults: vi.fn<() => Promise<unknown>>(),
 }
 
+export const UpdateService = {
+  Check: vi.fn<() => Promise<unknown>>(),
+  Install: vi.fn<() => Promise<void>>(),
+  Cancel: vi.fn<() => Promise<boolean>>(),
+  Restart: vi.fn<() => Promise<void>>(),
+  OpenReleasePage: vi.fn<() => Promise<void>>(),
+}
+
 export const DRIVERS: DriverInfo[] = [
   { kind: 'postgres', displayName: 'PostgreSQL', defaultPort: 5432, fileBased: false },
   { kind: 'mysql', displayName: 'MySQL', defaultPort: 3306, fileBased: false },
@@ -143,6 +151,7 @@ export function resetBindings() {
     ...Object.values(ExportService),
     ...Object.values(ImportService),
     ...Object.values(SettingsService),
+    ...Object.values(UpdateService),
   ])
     fn.mockReset()
   AppService.Version.mockResolvedValue('0.0.1')

@@ -12,6 +12,7 @@ import * as HistoryService from "./historyservice.js";
 import * as ImportService from "./importservice.js";
 import * as SchemaService from "./schemaservice.js";
 import * as SettingsService from "./settingsservice.js";
+import * as UpdateService from "./updateservice.js";
 export {
     AppService,
     BrowseService,
@@ -23,7 +24,8 @@ export {
     HistoryService,
     ImportService,
     SchemaService,
-    SettingsService
+    SettingsService,
+    UpdateService
 };
 
 export type {
@@ -38,5 +40,6 @@ export type {
     Location,
     SessionInfo,
     SettingsState,
-    Statement
+    Statement,
+    UpdateInfo
 } from "./models.js";

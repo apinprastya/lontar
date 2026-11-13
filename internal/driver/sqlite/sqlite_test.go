@@ -110,7 +110,7 @@ func TestBuildDSNErrors(t *testing.T) {
 func TestOpenCreateReadOnly(t *testing.T) {
 	ctx := context.Background()
 	d := New()
-	path := filepath.Join(t.TempDir(), "sub dir?", "test.db")
+	path := filepath.Join(t.TempDir(), "sub dir#%", "test.db")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}

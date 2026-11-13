@@ -25,9 +25,10 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `internal/sqlsplit/` | Client-side script splitting (quotes, comments, `$$`, `DELIMITER`, triggers) |
 | `internal/export/`, `internal/importer/` | CSV/JSON/SQL export, CSV import |
 | `internal/store/`, `internal/settings/`, `internal/history/`, `internal/migrate/` | Saved connections + secrets, settings, query history, data migration from the old `dbedit` name |
+| `internal/update/` | On-demand self-update from GitHub Releases: ed25519-signed `SHA256SUMS`, per-install replacement (AppImage, exe, .app) |
 | `internal/values/` | Cell value model shared by grid, edits and export |
 | `internal/testutil/`, `internal/sshtest/`, `internal/tlstest/` | Test helpers (containers, in-process SSH server, certificates) |
-| `tools/` | Build helpers (`stamp`, `iconrender`) — a **separate Go module** |
+| `tools/` | Build helpers (`stamp`, `iconrender`, `calver`, `updatesign`) — a **separate Go module** |
 | `build/` | Packaging per platform (nfpm, NSIS, plists, icons) |
 | `frontend/bindings/` | **Generated** Wails bindings — never edit by hand |
 | `frontend/src/features/<area>/` | UI by feature (connections, workspace, grid, editor, edits, structure, palette, …) with their tests |

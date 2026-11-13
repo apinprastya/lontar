@@ -424,6 +424,40 @@ versioned. You can set:
 - **CSV export defaults.**
 - **Ask before closing a query tab with unrun changes.**
 
+The **Check for updates…** button in the dialog is described in "Updates".
+
+## Updates
+
+Lontar never checks for updates on its own. To check, use **Check for
+updates…** in Settings or in the command palette. It asks GitHub Releases for
+the latest **stable** release (pre-releases are never offered) and shows its
+version and release notes.
+
+If a newer version exists, **Download and install** downloads it in the
+background and shows the progress (**Cancel download** stops it). Lontar
+installs nothing unless both of these checks pass:
+
+- the release's `SHA256SUMS.sig` is a valid ed25519 signature of
+  `SHA256SUMS`, made with the release key whose public half is built into
+  Lontar;
+- the downloaded file matches its line in `SHA256SUMS`.
+
+Once installed, **Restart now** starts the new version and quits this one.
+Open connections are closed, and staged changes that were not committed and
+unsaved query text are lost. **Later** keeps the current version running
+until you quit it.
+
+| Installed from | What is replaced |
+|---|---|
+| AppImage (x86_64) | The `.AppImage` file itself |
+| Windows installer or portable zip (x64) | `lontar.exe`. The old exe is kept as `lontar.exe.old` and deleted at the next start. The version shown in "Apps & features" keeps the originally installed number. |
+| macOS `.dmg` | The `Lontar.app` bundle, taken from the new `.dmg` |
+| `.deb` / `.rpm`, development builds, other CPUs | Nothing. Lontar says why and offers the **Release page**; update with your package manager. |
+
+Lontar needs write access to the installed file or bundle. A per-machine
+install in Program Files, or an `.app` owned by another user, reports a
+permission error and offers the release page instead.
+
 ## Saved connections and passwords
 
 Connections are stored as JSON (schema-versioned, written atomically, file
@@ -549,9 +583,9 @@ lontar/internal/services.Version=…`, shown in the status bar), the macOS
 `.deb`/`.rpm` metadata. It comes from:
 
 1. `LONTAR_VERSION` if set (a leading `v` is dropped), e.g.
-   `LONTAR_VERSION=v1.2.3 wails3 task package:linux`; otherwise
-2. `git describe --tags --always --dirty`: tag `v1.2.3` → `1.2.3`,
-   `v1.2.3-4-gabc1234` → `1.2.3-4-gabc1234`, an untagged commit →
+   `LONTAR_VERSION=v26.11.1 wails3 task package:linux`; otherwise
+2. `git describe --tags --always --dirty`: tag `v26.11.1` → `26.11.1`,
+   `v26.11.1-4-gabc1234` → `26.11.1-4-gabc1234`, an untagged commit →
    `0.0.0-dev+<hash>[-dirty]`; otherwise
 3. `0.0.0-dev` (no git), which is also the default of a plain `go build`.
 
@@ -602,18 +636,33 @@ icons`. Commit the results; builds do not re-render.
 
 ## Releasing
 
+Releases use calendar versioning: **`vYY.MM.MICRO`**, with the two-digit
+year, the month without a leading zero, and a counter that restarts at 1 every
+month (`v26.11.1`, `v26.11.2`, `v26.12.1`). A pre-release adds a suffix,
+`v26.11.3-rc.1`; it does not use up its number, so `v26.11.3` follows it.
+`tools/calver` checks the format; tags in any other format fail the release.
+
 1. Make sure CI is green on `main`.
-2. Tag and push: `git tag v1.2.3 && git push origin v1.2.3`.
-3. `.github/workflows/release.yml` runs the short tests on Linux, Windows and
-   macOS, builds every package stamped with `1.2.3`, signs what it has
-   secrets for, and creates a **draft** GitHub Release with the files and
-   `SHA256SUMS` (versions with a `-` are marked pre-release).
+2. Tag and push the next version:
+   ```sh
+   git fetch --tags
+   wails3 task release:next          # e.g. 26.11.2
+   git tag v26.11.2 && git push origin v26.11.2
+   ```
+3. `.github/workflows/release.yml` checks the version, runs the short tests
+   on Linux, Windows and macOS, builds every package stamped with `26.11.2`,
+   signs what it has secrets for, and creates a **draft** GitHub Release with
+   the files and `SHA256SUMS` (versions with a `-` are marked pre-release).
 4. Review the draft and publish it.
 
 The workflow can also be started by hand (**Actions → Release → Run
-workflow**) with an optional version; the draft then targets that commit
-with tag `v<version>`. `wails3 task release:checksums DIR=dist` writes the
-same `SHA256SUMS` locally.
+workflow**). If you leave the version empty, it uses the next number for the
+current month (UTC), based on the existing tags and releases. You can also
+enter a version such as `26.11.2-rc.1`. The draft targets the dispatched
+commit, with tag `v<version>`. The run fails if that tag or a release (even a
+draft) for it already exists, so publish or delete a draft before starting
+another run. `wails3 task release:checksums DIR=dist` writes the same
+`SHA256SUMS` locally.
 
 Signing is optional; each step is skipped when its secrets are missing:
 
@@ -623,18 +672,78 @@ Signing is optional; each step is skipped when its secrets are missing:
 | `WINDOWS_CERT_PASSWORD` | Its password |
 | `MACOS_CERT_P12` | Base64 of the "Developer ID Application" certificate + key (`.p12`) |
 | `MACOS_CERT_PASSWORD` | Its password |
-| `APPLE_ID` | Apple ID used for notarization |
+| `APPLE_API_KEY` | Notarization, preferred: contents of an App Store Connect API key (`AuthKey_<KeyID>.p8`) |
+| `APPLE_API_KEY_ID` | Its Key ID |
+| `APPLE_API_ISSUER` | The Issuer ID (team keys; leave unset for an individual key) |
+| `APPLE_ID` | Notarization, alternative: the Apple ID's e-mail |
 | `APPLE_TEAM_ID` | The Apple Developer team ID |
 | `APPLE_APP_PASSWORD` | An app-specific password for that Apple ID |
+| `UPDATE_SIGNING_KEY` | ed25519 private key that signs `SHA256SUMS` into `SHA256SUMS.sig` for in-app updates (see below) |
+
+**In-app update key.** Generate the key pair once:
+
+```sh
+go -C tools run ./updatesign keygen
+```
+
+Paste the public key into `PublicKey` in `internal/update/update.go` and
+commit it. Store the private key as the `UPDATE_SIGNING_KEY` secret, and keep
+an offline backup: if it is lost, installed versions can no longer update
+themselves. The release job signs `SHA256SUMS` and checks the signature
+against the committed public key. Without the secret the release is still
+published, but a warning says that it cannot be installed from inside Lontar.
+A build with an empty `PublicKey` can check for updates but never installs
+one. To check a release by hand, run
+`go -C tools run ./updatesign verify <public key> SHA256SUMS SHA256SUMS.sig`.
 
 Windows signs `lontar.exe` before it goes into the installer, then the
 installer (`build/windows/sign.ps1`, signtool, SHA-256 + RFC 3161 timestamp).
 macOS signs the app with the hardened runtime and
 `build/darwin/entitlements.plist` (only `com.apple.security.network.client`,
 Wails' production preset), then signs, notarizes (`notarytool`) and staples
-the dmg (`build/darwin/sign-notarize.sh`). With the certificate but no Apple
-ID secrets the dmg is signed but not notarized. The `.app` targets macOS 12
-(`LSMinimumSystemVersion`, matching `-mmacosx-version-min=12.0`).
+the dmg (`build/darwin/sign-notarize.sh`). Notarization uses the API key when
+`APPLE_API_KEY` and `APPLE_API_KEY_ID` are set, otherwise the three `APPLE_*`
+Apple ID secrets; with neither, the dmg is signed but not notarized. Before
+uploading, the script checks the secrets' format and tries the credentials,
+so a wrong secret is reported by name. It retries when Apple's service
+answers HTTP 5xx. The `.app` targets macOS 12 (`LSMinimumSystemVersion`,
+matching `-mmacosx-version-min=12.0`).
+
+Setting up the macOS secrets (Apple Developer account):
+
+1. Create a **Developer ID Application** certificate. Note that this is not
+   "Apple Development" or "Mac App Distribution".
+   - On a Mac: Xcode → Settings → Accounts → Manage Certificates → **+**.
+   - Without a Mac: create the key and request with
+     `openssl req -new -newkey rsa:2048 -nodes -keyout developerID.key -out developerID.csr -subj "/CN=Your Name"`,
+     then upload the `.csr` on developer.apple.com → Certificates → **+** →
+     Developer ID Application (G2 Sub-CA).
+2. Make the `.p12` with the certificate *and its private key*, and store
+   `base64 -w0 DeveloperID.p12` as `MACOS_CERT_P12` and its password as
+   `MACOS_CERT_PASSWORD`.
+   - On a Mac: export from Keychain Access → My Certificates.
+   - Without a Mac: convert the downloaded `.cer` and Apple's
+     [Developer ID G2 CA](https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer)
+     to PEM (`openssl x509 -inform DER -in … -out ….pem`), then run
+     `openssl pkcs12 -export -inkey developerID.key -in developerID.pem -certfile DeveloperIDG2CA.pem -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 -out DeveloperID.p12`.
+     The legacy encryption flags are needed because macOS's `security import`
+     does not reliably read OpenSSL 3's default `.p12` format.
+3. Notarization credentials. Use either of these:
+   - **App Store Connect API key (recommended):** go to appstoreconnect.apple.com
+     → Users and Access → Integrations → App Store Connect API, and create a
+     *Team Key* with the **Developer** role. Download the `.p8`; Apple only
+     offers the download once. Then set:
+     - `APPLE_API_KEY`: the file's contents, e.g.
+       `gh secret set APPLE_API_KEY < AuthKey_XXXXXXXXXX.p8`
+     - `APPLE_API_KEY_ID`: the key's Key ID
+     - `APPLE_API_ISSUER`: the Issuer ID shown above the key list
+   - **Apple ID:** create an app-specific password on account.apple.com →
+     Sign-In and Security → App-Specific Passwords and store it as
+     `APPLE_APP_PASSWORD`. `APPLE_ID` is the account's e-mail, and
+     `APPLE_TEAM_ID` is the 10-character Team ID shown on
+     developer.apple.com → Membership.
+4. Add the secrets under **Settings → Secrets and variables → Actions** of
+   the GitHub repository, or with `gh secret set NAME`.
 
 **License:** [Apache License 2.0](LICENSE) (SPDX `Apache-2.0`). See also
 [NOTICE](NOTICE). The Linux packages carry the SPDX id and install both files
