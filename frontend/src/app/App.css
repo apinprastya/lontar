@@ -2657,3 +2657,8 @@ textarea.cell-editor-input {
   grid-template-columns: 1fr 1fr auto;
   gap: 6px;
 }
+
+/* Editor popups live on <body>: keep them above panes and dialogs. */
+.cm-tooltip {
+  z-index: 1000;
+}

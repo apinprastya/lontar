@@ -14,7 +14,7 @@ import {
   type Theme,
 } from '@glideapps/glide-data-grid'
 import '@glideapps/glide-data-grid/dist/index.css'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { flushSync } from 'react-dom'
 import { copyText } from '../../lib/clipboard'
 import { isModPressed, matchesShortcut, shortcutLabel, type ModifierEvent } from '../../lib/mod'
@@ -306,6 +306,7 @@ export default function DataGrid(props: DataGridProps) {
   const [menu, setMenu] = useState<MenuState | null>(null)
   const gridRef = useRef<DataEditorRef>(null)
   const boxRef = useRef<HTMLDivElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
   // Recomputed when the theme changes (the CSS variables are already
   // switched by then; see bindAppearance).
   const resolvedTheme = useResolvedTheme()
@@ -515,6 +516,24 @@ export default function DataGrid(props: DataGridProps) {
     return rs.includes(m.row) ? rs : [m.row]
   }
 
+  // Keep the cell editor inside the grid: near the bottom edge it moves up
+  // (the panes around the grid clip anything that sticks out), also when it
+  // grows (multi-line editors can be resized).
+  useLayoutEffect(() => {
+    const el = overlayRef.current
+    const box = boxRef.current
+    if (!el || !box || !edit) return
+    const place = () => {
+      const top = Math.max(0, Math.min(edit.y, box.clientHeight - el.offsetHeight - 4))
+      el.style.top = `${top}px`
+    }
+    place()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(place)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [edit])
+
   const editColumn = edit ? columns[edit.col] : undefined
   const editorStyle: CSSProperties | undefined = edit ? { left: Math.max(0, edit.x), top: Math.max(0, edit.y), width: edit.width } : undefined
   const mod = (k: string, shift = false) => shortcutLabel(platform, k, { shift })
@@ -579,7 +598,7 @@ export default function DataGrid(props: DataGridProps) {
         headerHeight={30}
       />
       {edit && editing && editColumn && (
-        <div className="cell-editor-overlay" style={editorStyle} data-testid="cell-editor">
+        <div className="cell-editor-overlay" ref={overlayRef} style={editorStyle} data-testid="cell-editor">
           <CellEditor
             key={`${edit.row}:${edit.col}`}
             handle={editorHandle}
