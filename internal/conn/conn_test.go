@@ -328,7 +328,9 @@ func TestUseDatabaseFakeServer(t *testing.T) {
 		reg := driver.NewRegistry(fakeServerOpen{fakeServer: fs, path: path, lite: lite})
 		c := store.Connection{ID: "p", Name: "pg", Kind: driver.Postgres, Host: "h", Database: "one"}
 		src := newFakeSource(c)
-		return NewManager(src, reg)
+		m := NewManager(src, reg)
+		t.Cleanup(func() { _ = m.DisconnectAll() }) // Windows cannot remove an open file
+		return m
 	}
 
 	m := open(fakeServer{Driver: lite, dbs: []string{"one", "two"}})
