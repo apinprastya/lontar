@@ -319,6 +319,15 @@ A mode other than Default **wins over** any `sslmode`/`tls` driver option. A
 client certificate needs both the certificate and the key file (PEM). Use
 **Browse…** or type the paths (`~` is expanded).
 
+## Driver options
+
+The **Advanced** tab (PostgreSQL, MySQL, MariaDB) takes extra driver options
+as name/value rows, for example `allowCleartextPasswords` = `true` for MySQL
+users that need cleartext authentication ("this user requires clear text
+authentication"), or `application_name` for PostgreSQL. Options that have
+their own field (host, port, user, password, database, ...) are rejected. Use
+cleartext authentication only with TLS or an SSH tunnel.
+
 ## Export
 
 **Export…** in the toolbar (also in the command palette) exports the active

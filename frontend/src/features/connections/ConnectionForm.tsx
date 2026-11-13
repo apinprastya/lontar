@@ -61,11 +61,18 @@ interface Draft {
   sslCA: string
   sslCert: string
   sslKey: string
+  options: OptionRow[]
+}
+
+/** One driver option row in the Advanced tab. */
+export interface OptionRow {
+  key: string
+  value: string
 }
 
 type Errors = Partial<Record<keyof Draft, string>>
 
-type FormTab = 'general' | 'ssh' | 'ssl'
+type FormTab = 'general' | 'ssh' | 'ssl' | 'advanced'
 
 /** A secret field: what was typed and whether it was touched. */
 interface SecretState {
@@ -109,7 +116,32 @@ function toDraft(c: Connection | undefined, drivers: DriverInfo[]): Draft {
     sslCA: c?.ssl?.caFile ?? '',
     sslCert: c?.ssl?.certFile ?? '',
     sslKey: c?.ssl?.keyFile ?? '',
+    options: Object.entries(c?.options ?? {}).flatMap(([key, value]) => (value === undefined ? [] : [{ key, value }])),
   }
+}
+
+/** Option keys that have their own field (the backend rejects them as options). */
+const RESERVED_OPTIONS: Record<Kind, string[]> = {
+  postgres: ['host', 'hostaddr', 'port', 'user', 'password', 'passfile', 'dbname', 'database'],
+  mysql: ['user', 'passwd', 'password', 'net', 'addr', 'dbname'],
+  mariadb: ['user', 'passwd', 'password', 'net', 'addr', 'dbname'],
+  sqlite: [],
+}
+
+/** Error for the option rows, or undefined when they are valid. */
+export function validateOptions(kind: Kind, rows: OptionRow[]): string | undefined {
+  const seen = new Set<string>()
+  for (const { key, value } of rows) {
+    const k = key.trim()
+    if (!k) {
+      if (value.trim()) return 'Every option needs a name'
+      continue
+    }
+    if (RESERVED_OPTIONS[kind].includes(k.toLowerCase())) return `"${k}" has its own field and cannot be an option`
+    if (seen.has(k)) return `Option "${k}" is listed twice`
+    seen.add(k)
+  }
+  return undefined
 }
 
 const validPort = (p: string) => /^\d+$/.test(p.trim()) && Number(p) >= 1 && Number(p) <= 65535
@@ -131,6 +163,8 @@ export function validateDraft(d: Draft): Errors {
       if (d.sshAuth === 'key' && !d.sshKeyPath.trim()) errors.sshKeyPath = 'Private key file is required'
     }
     if (Boolean(d.sslCert.trim()) !== Boolean(d.sslKey.trim())) errors.sslKey = 'Give both the client certificate and its key'
+    const optionsError = validateOptions(d.kind, d.options)
+    if (optionsError) errors.options = optionsError
   }
   return errors
 }
@@ -139,6 +173,7 @@ export function validateDraft(d: Draft): Errors {
 function tabOf(field: keyof Draft): FormTab {
   if (field.startsWith('ssh')) return 'ssh'
   if (field.startsWith('ssl')) return 'ssl'
+  if (field === 'options') return 'advanced'
   return 'general'
 }
 
@@ -148,7 +183,7 @@ export const GO_ZERO_TIME = '0001-01-01T00:00:00Z'
 function toConnection(d: Draft, initial: Connection | undefined): Connection {
   const file = isFileBased(d.kind)
   return {
-    // Keep fields the form does not edit (options, ssh, ssl, timestamps).
+    // Keep fields the form does not edit (ssh, ssl, timestamps).
     // New connections use Go's zero time: the backend decodes these into
     // time.Time, which rejects "" (the Store sets the real values on save).
     ...(initial ?? { id: '', hasPassword: false, createdAt: GO_ZERO_TIME, updatedAt: GO_ZERO_TIME }),
@@ -174,8 +209,15 @@ function toConnection(d: Draft, initial: Connection | undefined): Connection {
           authMethod: d.sshAuth,
           keyPath: d.sshKeyPath.trim(),
         },
+    options: file ? initial?.options : toOptions(d.options),
     ssl: file ? null : { mode: d.sslMode, caFile: d.sslCA.trim(), certFile: d.sslCert.trim(), keyFile: d.sslKey.trim() },
   }
+}
+
+/** Option rows as the stored map; undefined when there are none. */
+function toOptions(rows: OptionRow[]): Record<string, string> | undefined {
+  const entries = rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value] as const)
+  return entries.length ? Object.fromEntries(entries) : undefined
 }
 
 /**
@@ -430,6 +472,7 @@ export default function ConnectionForm({
                 ['general', 'General'],
                 ['ssh', 'SSH'],
                 ['ssl', 'SSL'],
+                ['advanced', 'Advanced'],
               ] as [FormTab, string][]
             ).map(([t, label]) => (
               <button
@@ -442,6 +485,7 @@ export default function ConnectionForm({
               >
                 {label}
                 {t === 'ssh' && draft.sshEnabled && <span className="tab-dot" aria-label="enabled" />}
+                {t === 'advanced' && draft.options.length > 0 && <span className="tab-dot" aria-label="in use" />}
                 {t === 'ssl' && draft.sslMode && draft.sslMode !== 'disable' && <span className="tab-dot" aria-label="enabled" />}
               </button>
             ))}
@@ -525,6 +569,47 @@ export default function ConnectionForm({
             {pathField('sslCA', 'CA certificate', 'Choose the CA certificate', CERT_FILTERS, '/path/to/ca.pem')}
             {pathField('sslCert', 'Client certificate', 'Choose the client certificate', CERT_FILTERS, 'optional')}
             {pathField('sslKey', 'Client key', 'Choose the client key', CERT_FILTERS, 'optional')}
+          </div>
+        )}
+        {tab === 'advanced' && !file && (
+          <div className="form-grid" role="tabpanel" aria-label="Advanced">
+            <span />
+            <span className="hint">
+              Driver options passed to the database driver, for example <code>allowCleartextPasswords</code> = <code>true</code> (MySQL) or{' '}
+              <code>application_name</code> (PostgreSQL). Options that need an unencrypted password should only be used with TLS or an SSH tunnel.
+            </span>
+            {draft.options.map((row, i) => (
+              <div key={i} className="option-row">
+                <input
+                  aria-label={`Option ${i + 1} name`}
+                  className="mono"
+                  placeholder="name"
+                  autoComplete="off"
+                  value={row.key}
+                  onChange={(e) => update('options', draft.options.map((r, j) => (j === i ? { ...r, key: e.target.value } : r)))}
+                />
+                <input
+                  aria-label={`Option ${i + 1} value`}
+                  className="mono"
+                  placeholder="value"
+                  autoComplete="off"
+                  value={row.value}
+                  onChange={(e) => update('options', draft.options.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
+                />
+                <button type="button" aria-label={`Remove option ${i + 1}`} onClick={() => update('options', draft.options.filter((_, j) => j !== i))}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <span />
+            <div className="field">
+              <div>
+                <button type="button" onClick={() => update('options', [...draft.options, { key: '', value: '' }])}>
+                  Add option
+                </button>
+              </div>
+              {err('options')}
+            </div>
           </div>
         )}
         {pickError && (
