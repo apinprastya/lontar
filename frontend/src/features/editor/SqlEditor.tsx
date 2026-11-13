@@ -4,7 +4,7 @@ import { keywordCompletionSource } from '@codemirror/lang-sql'
 import { LanguageSupport, bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/language'
 import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorSelection, EditorState } from '@codemirror/state'
-import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
+import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, tooltips } from '@codemirror/view'
 import { useEffect, useRef } from 'react'
 import type { Kind } from '../connections/types'
 import type { EditorRequest, Range } from '../../stores/queryTabs'
@@ -100,6 +100,8 @@ export default function SqlEditor(props: SqlEditorProps) {
         indentOnInput(),
         bracketMatching(),
         closeBrackets(),
+        // On <body>, so the results pane below cannot clip or cover the popup.
+        tooltips({ parent: document.body }),
         autocompletion({ activateOnTyping: true }),
         highlightActiveLine(),
         highlightSelectionMatches(),

@@ -2650,3 +2650,15 @@ textarea.cell-editor-input {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
+
+.option-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+}
+
+/* Editor popups live on <body>: keep them above panes and dialogs. */
+.cm-tooltip {
+  z-index: 1000;
+}

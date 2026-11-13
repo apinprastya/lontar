@@ -119,7 +119,7 @@ describe('ConnectionForm', () => {
 
   it('validateDraft covers SQLite and port edge cases', () => {
     const base = { name: 'n', kind: 'postgres' as const, host: 'h', port: '1', user: '', database: '', filePath: '', readOnly: false, createIfMissing: false, tag: 'none' as const, color: '', safeMode: 'off' as const,
-      sshEnabled: false, sshHost: '', sshPort: '22', sshUser: '', sshAuth: 'password' as const, sshKeyPath: '', sslMode: '' as const, sslCA: '', sslCert: '', sslKey: '' }
+      sshEnabled: false, sshHost: '', sshPort: '22', sshUser: '', sshAuth: 'password' as const, sshKeyPath: '', sslMode: '' as const, sslCA: '', sslCert: '', sslKey: '', options: [] }
     expect(validateDraft(base)).toEqual({})
     expect(validateDraft({ ...base, port: '65535' })).toEqual({})
     expect(validateDraft({ ...base, port: '0' }).port).toBeDefined()
@@ -268,5 +268,54 @@ describe('ConnectionForm', () => {
     expect(safeModeForTag('prod', 'off')).toBe('confirm')
     expect(safeModeForTag('prod', 'readonly')).toBe('readonly')
     expect(safeModeForTag('dev', 'off')).toBe('off')
+  })
+})
+
+describe('ConnectionForm advanced options', () => {
+  afterEach(cleanup)
+
+  it('adds, saves and removes driver options', async () => {
+    const { props, user } = setup()
+    await user.type(field('Name'), 'MySQL')
+    await user.click(screen.getByRole('tab', { name: /^Advanced/ }))
+    await user.click(screen.getByRole('button', { name: 'Add option' }))
+    await user.type(screen.getByLabelText('Option 1 name'), 'allowCleartextPasswords')
+    await user.type(screen.getByLabelText('Option 1 value'), 'true')
+    await user.click(screen.getByRole('button', { name: 'Add option' }))
+    await user.click(screen.getByRole('button', { name: 'Remove option 2' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ options: { allowCleartextPasswords: 'true' } }),
+      expect.anything(),
+    )
+  })
+
+  it('loads existing options and drops them when removed', async () => {
+    const { props, user } = setup({ initial: makeConnection({ options: { charset: 'utf8mb4', skip: undefined } }) })
+    await user.click(screen.getByRole('tab', { name: /^Advanced/ }))
+    expect(screen.getByLabelText('Option 1 name')).toHaveValue('charset')
+    expect(screen.queryByLabelText('Option 2 name')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Remove option 1' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ options: undefined }), expect.anything())
+  })
+
+  it('shows an error on the Advanced tab for invalid options', async () => {
+    const { props, user } = setup({ initial: makeConnection({ options: { host: 'x' } }) })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('"host" has its own field')
+    expect(props.onSave).not.toHaveBeenCalled()
+  })
+})
+
+describe('validateOptions', () => {
+  it('checks names, reserved keys and duplicates', async () => {
+    const { validateOptions } = await import('./ConnectionForm')
+    expect(validateOptions('mysql', [])).toBeUndefined()
+    expect(validateOptions('mysql', [{ key: '', value: '' }])).toBeUndefined()
+    expect(validateOptions('mysql', [{ key: '', value: 'v' }])).toMatch(/needs a name/)
+    expect(validateOptions('mysql', [{ key: 'Passwd', value: '1' }])).toMatch(/own field/)
+    expect(validateOptions('postgres', [{ key: 'passwd', value: '1' }])).toBeUndefined()
+    expect(validateOptions('mysql', [{ key: 'a', value: '1' }, { key: 'a', value: '2' }])).toMatch(/twice/)
   })
 })
