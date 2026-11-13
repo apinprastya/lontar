@@ -58,6 +58,15 @@ export interface GridLinks {
 /** Width of the clickable "→" at the right edge of a foreign key cell. */
 export const LINK_HIT_WIDTH = 18
 
+/**
+ * Extra scroll room past the last row and column. The canvas sits under the
+ * scrollbars (overlay scrollbars on Linux/macOS cover it entirely), so without
+ * it the last row and column stay hidden behind them and can't be clicked.
+ * Matches the 10px scrollbars in App.css plus a little breathing room.
+ */
+export const SCROLLBAR_GUTTER = 14
+const gridPadding = { paddingBottom: SCROLLBAR_GUTTER, paddingRight: SCROLLBAR_GUTTER }
+
 /** Callbacks and state of an editable grid. Rows/cols are grid indexes. */
 export interface GridEditing {
   engine: Kind
@@ -596,6 +605,7 @@ export default function DataGrid(props: DataGridProps) {
         height="100%"
         rowHeight={26}
         headerHeight={30}
+        experimental={gridPadding}
       />
       {edit && editing && editColumn && (
         <div className="cell-editor-overlay" ref={overlayRef} style={editorStyle} data-testid="cell-editor">

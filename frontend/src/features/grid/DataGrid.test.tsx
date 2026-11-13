@@ -18,6 +18,7 @@ interface FakeProps {
   onGridSelectionChange(sel: GridSelection): void
   drawHeader(args: unknown, draw: () => void): void
   rowMarkers: { startIndex: number }
+  experimental?: { paddingBottom?: number; paddingRight?: number }
   onKeyDown(e: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean; cancel(): void; preventDefault(): void; stopPropagation(): void }): void
 }
 let lastProps: FakeProps | null = null
@@ -57,7 +58,7 @@ vi.mock('@glideapps/glide-data-grid', async (importOriginal) => {
 })
 
 import { CompactSelection } from '@glideapps/glide-data-grid'
-import DataGrid, { columnIcon, drawTypeLabel, gridTheme, selectedRowOf, toSelectionSpec } from './DataGrid'
+import DataGrid, { SCROLLBAR_GUTTER, columnIcon, drawTypeLabel, gridTheme, selectedRowOf, toSelectionSpec } from './DataGrid'
 
 const columns: ResultColumn[] = [
   { name: 'id', type: 'integer', isPK: true, nullable: false },
@@ -127,6 +128,12 @@ describe('DataGrid wrapper', () => {
     expect(p.onHeaderClick).toHaveBeenLastCalledWith('name', true)
     lastProps?.onHeaderClicked(99, { shiftKey: false })
     expect(p.onHeaderClick).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves scroll room so the last row and column clear the scrollbars', () => {
+    setup()
+    expect(SCROLLBAR_GUTTER).toBeGreaterThanOrEqual(10)
+    expect(lastProps?.experimental).toEqual({ paddingBottom: SCROLLBAR_GUTTER, paddingRight: SCROLLBAR_GUTTER })
   })
 
   it('reports column resizes', () => {
