@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -291,7 +292,8 @@ func TestDownloadAndApplyAppImage(t *testing.T) {
 	if string(got) != string(payload) {
 		t.Fatalf("target = %q", got)
 	}
-	if fi, _ := os.Stat(target); fi.Mode().Perm()&0o100 == 0 {
+	// Windows has no POSIX exec bit; Stat never reports it there.
+	if fi, _ := os.Stat(target); runtime.GOOS != "windows" && fi.Mode().Perm()&0o100 == 0 {
 		t.Fatal("not executable")
 	}
 }
@@ -538,7 +540,7 @@ func TestApplyMacOS(t *testing.T) {
 	})
 	t.Run("copy fails", func(t *testing.T) {
 		m := &fakeMac{app: "Lontar.app", dittoOut: "Permission denied"}
-		run :=func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		run := func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			if name == "ditto" {
 				return []byte(m.dittoOut), errors.New("failed")
 			}
