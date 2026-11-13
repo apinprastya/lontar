@@ -15,7 +15,10 @@ name: Release
 # Optional secrets (each signing step is skipped when its secrets are absent):
 #   WINDOWS_CERT_PFX, WINDOWS_CERT_PASSWORD                      Authenticode
 #   MACOS_CERT_P12, MACOS_CERT_PASSWORD                          Developer ID
+#   APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER            notarization
+#     (App Store Connect API key; preferred), or
 #   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD                  notarization
+#     (Apple ID + app-specific password)
 #
 # Third-party code: none. GitHub's own actions are pinned to commit SHAs.
 
@@ -291,6 +294,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: build/darwin/sign-notarize.sh dmg bin/lontar.dmg
 
       - name: Remove signing keychain

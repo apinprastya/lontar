@@ -638,7 +638,10 @@ Signing is optional; each step is skipped when its secrets are missing:
 | `WINDOWS_CERT_PASSWORD` | Its password |
 | `MACOS_CERT_P12` | Base64 of the "Developer ID Application" certificate + key (`.p12`) |
 | `MACOS_CERT_PASSWORD` | Its password |
-| `APPLE_ID` | Apple ID used for notarization |
+| `APPLE_API_KEY` | Notarization, preferred: contents of an App Store Connect API key (`AuthKey_<KeyID>.p8`) |
+| `APPLE_API_KEY_ID` | Its Key ID |
+| `APPLE_API_ISSUER` | The Issuer ID (team keys; leave unset for an individual key) |
+| `APPLE_ID` | Notarization, alternative: the Apple ID's e-mail |
 | `APPLE_TEAM_ID` | The Apple Developer team ID |
 | `APPLE_APP_PASSWORD` | An app-specific password for that Apple ID |
 
@@ -647,26 +650,49 @@ installer (`build/windows/sign.ps1`, signtool, SHA-256 + RFC 3161 timestamp).
 macOS signs the app with the hardened runtime and
 `build/darwin/entitlements.plist` (only `com.apple.security.network.client`,
 Wails' production preset), then signs, notarizes (`notarytool`) and staples
-the dmg (`build/darwin/sign-notarize.sh`). With the certificate but no Apple
-ID secrets the dmg is signed but not notarized.
+the dmg (`build/darwin/sign-notarize.sh`). Notarization uses the API key when
+`APPLE_API_KEY` and `APPLE_API_KEY_ID` are set, otherwise the three `APPLE_*`
+Apple ID secrets; with neither, the dmg is signed but not notarized. Before
+uploading, the script checks the secrets' format and tries the credentials,
+so a wrong secret is reported by name. It retries when Apple's service
+answers HTTP 5xx. The `.app` targets macOS 12 (`LSMinimumSystemVersion`,
+matching `-mmacosx-version-min=12.0`).
 
 Setting up the macOS secrets (Apple Developer account):
 
-1. In Xcode → Settings → Accounts → Manage Certificates (or on
-   developer.apple.com → Certificates) create a **Developer ID Application**
-   certificate. Note that this is not "Apple Development" or "Mac App
-   Distribution".
-2. In Keychain Access, export that certificate *with its private key* as a
-   `.p12` file, using a password. Store
-   `base64 -i DeveloperID.p12 | pbcopy` as `MACOS_CERT_P12` and the password
-   as `MACOS_CERT_PASSWORD`.
-3. On account.apple.com → Sign-In and Security → App-Specific Passwords,
-   create a password for `APPLE_APP_PASSWORD`. `APPLE_ID` is the account's
-   e-mail, and `APPLE_TEAM_ID` is the 10-character Team ID shown on
-   developer.apple.com → Membership.
-4. Add all five under **Settings → Secrets and variables → Actions** of the
-   GitHub repository. The `.app` targets macOS 12
-(`LSMinimumSystemVersion`, matching `-mmacosx-version-min=12.0`).
+1. Create a **Developer ID Application** certificate. Note that this is not
+   "Apple Development" or "Mac App Distribution".
+   - On a Mac: Xcode → Settings → Accounts → Manage Certificates → **+**.
+   - Without a Mac: create the key and request with
+     `openssl req -new -newkey rsa:2048 -nodes -keyout developerID.key -out developerID.csr -subj "/CN=Your Name"`,
+     then upload the `.csr` on developer.apple.com → Certificates → **+** →
+     Developer ID Application (G2 Sub-CA).
+2. Make the `.p12` with the certificate *and its private key*, and store
+   `base64 -w0 DeveloperID.p12` as `MACOS_CERT_P12` and its password as
+   `MACOS_CERT_PASSWORD`.
+   - On a Mac: export from Keychain Access → My Certificates.
+   - Without a Mac: convert the downloaded `.cer` and Apple's
+     [Developer ID G2 CA](https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer)
+     to PEM (`openssl x509 -inform DER -in … -out ….pem`), then run
+     `openssl pkcs12 -export -inkey developerID.key -in developerID.pem -certfile DeveloperIDG2CA.pem -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 -out DeveloperID.p12`.
+     The legacy encryption flags are needed because macOS's `security import`
+     does not reliably read OpenSSL 3's default `.p12` format.
+3. Notarization credentials. Use either of these:
+   - **App Store Connect API key (recommended):** go to appstoreconnect.apple.com
+     → Users and Access → Integrations → App Store Connect API, and create a
+     *Team Key* with the **Developer** role. Download the `.p8`; Apple only
+     offers the download once. Then set:
+     - `APPLE_API_KEY`: the file's contents, e.g.
+       `gh secret set APPLE_API_KEY < AuthKey_XXXXXXXXXX.p8`
+     - `APPLE_API_KEY_ID`: the key's Key ID
+     - `APPLE_API_ISSUER`: the Issuer ID shown above the key list
+   - **Apple ID:** create an app-specific password on account.apple.com →
+     Sign-In and Security → App-Specific Passwords and store it as
+     `APPLE_APP_PASSWORD`. `APPLE_ID` is the account's e-mail, and
+     `APPLE_TEAM_ID` is the 10-character Team ID shown on
+     developer.apple.com → Membership.
+4. Add the secrets under **Settings → Secrets and variables → Actions** of
+   the GitHub repository, or with `gh secret set NAME`.
 
 **License:** [Apache License 2.0](LICENSE) (SPDX `Apache-2.0`). See also
 [NOTICE](NOTICE). The Linux packages carry the SPDX id and install both files
