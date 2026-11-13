@@ -83,8 +83,28 @@ dmg)
 	fi
 	codesign --force --timestamp --sign "$id" "$dmg"
 	if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
-		xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
-			--password "$APPLE_APP_PASSWORD" --wait --timeout 30m
+		auth=(--apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD")
+		out="$(mktemp)"
+		# Apple's notary service sometimes answers with HTTP 5xx; retry those.
+		# A submission that Apple rejected (status Invalid) is not retried:
+		# its log says what to fix.
+		for attempt in 1 2 3 4; do
+			xcrun notarytool submit "$dmg" "${auth[@]}" --wait --timeout 30m 2>&1 | tee "$out" || true
+			grep -q 'status: Accepted' "$out" && break
+			sub="$(awk '$1 == "id:" { print $2; exit }' "$out")"
+			if grep -q 'status: \(Invalid\|Rejected\)' "$out"; then
+				[ -n "$sub" ] && xcrun notarytool log "$sub" "${auth[@]}" || true
+				echo "sign-notarize: Apple rejected the submission (see the log above)" >&2
+				exit 1
+			fi
+			if [ "$attempt" = 4 ]; then
+				echo "sign-notarize: notarization failed after $attempt attempts" >&2
+				exit 1
+			fi
+			echo "sign-notarize: notarization attempt $attempt failed; retrying in $((attempt * 60))s" >&2
+			sleep $((attempt * 60))
+		done
+		rm -f "$out"
 		xcrun stapler staple "$dmg"
 		xcrun stapler validate "$dmg"
 		spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
