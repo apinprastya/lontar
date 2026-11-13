@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/mockBindings'))
 
-import { SettingsService, resetBindings } from '../../test/mockBindings'
+import { SettingsService, UpdateService, resetBindings } from '../../test/mockBindings'
+import { useUpdate } from '../../stores/update'
 import { useSettings } from '../../stores/settings'
 import SettingsDialog from './SettingsDialog'
 import { DEFAULT_SETTINGS } from './types'
@@ -67,5 +68,16 @@ describe('SettingsDialog', () => {
     useSettings.setState({ open: true })
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(useSettings.getState().open).toBe(false)
+  })
+
+  it('closes and checks for updates', async () => {
+    UpdateService.Check.mockReturnValue(new Promise(() => {}))
+    const user = userEvent.setup()
+    render(<SettingsDialog platform="linux" />)
+    await user.click(screen.getByRole('button', { name: 'Check for updates…' }))
+    expect(useSettings.getState().open).toBe(false)
+    expect(useUpdate.getState()).toMatchObject({ open: true, phase: 'checking' })
+    expect(UpdateService.Check).toHaveBeenCalled()
+    useUpdate.setState({ open: false, phase: 'idle' })
   })
 })

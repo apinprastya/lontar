@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"lontar/internal/conn"
 	"lontar/internal/driver/all"
@@ -17,6 +18,7 @@ import (
 	"lontar/internal/settings"
 	"lontar/internal/sshtunnel"
 	"lontar/internal/store"
+	"lontar/internal/update"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -50,6 +52,7 @@ type backend struct {
 	export      *services.ExportService
 	importer    *services.ImportService
 	settings    *services.SettingsService
+	update      *services.UpdateService
 }
 
 // KnownHostsFile is Lontar's own known_hosts in the config directory (the
@@ -126,7 +129,33 @@ func newBackend(configDir string) backend {
 		export:      services.NewExportService(sessions, drivers, events),
 		importer:    services.NewImportService(sessions, drivers, events),
 		settings:    services.NewSettingsService(settings.New(configDir)),
+		update:      newUpdateService(events),
 	}
+}
+
+// installation describes how the running binary was installed (see
+// update.Detect), with the executable's symlinks resolved.
+func installation() update.Installation {
+	exe, err := os.Executable()
+	if err == nil {
+		if real, rerr := filepath.EvalSymlinks(exe); rerr == nil {
+			exe = real
+		}
+	}
+	return update.Detect(update.Env{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Executable: exe, Getenv: os.Getenv})
+}
+
+// newUpdateService wires the on-demand updater (GitHub Releases, verified
+// with the compiled-in update.PublicKey), removes what a previous update
+// left behind, and lets it restart and open the browser through Wails.
+func newUpdateService(events services.Emitter) *services.UpdateService {
+	inst := installation()
+	inst.Cleanup()
+	svc := services.NewUpdateService(&update.Updater{PublicKey: update.PublicKey, Install: inst}, events)
+	svc.Start = startDetached
+	svc.Quit = quitApp
+	svc.Open = openURL
+	return svc
 }
 
 // appOptions builds the Wails application options. It is kept separate from
@@ -150,6 +179,7 @@ func appOptions(assets fs.FS, b backend) application.Options {
 			application.NewService(b.export),
 			application.NewService(b.importer),
 			application.NewService(b.settings),
+			application.NewService(b.update),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

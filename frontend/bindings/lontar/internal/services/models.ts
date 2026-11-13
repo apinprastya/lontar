@@ -179,3 +179,23 @@ export interface Statement {
      */
     "delimEnd": number;
 }
+
+/**
+ * UpdateInfo is the result of a check for updates.
+ */
+export interface UpdateInfo {
+    "current": string;
+    "latest": string;
+    "available": boolean;
+    "name": string;
+    "notes": string;
+    "url": string;
+    "publishedAt": string;
+
+    /**
+     * CanInstall says whether Install can replace this installation; Reason
+     * explains why not (the UI then offers the release page).
+     */
+    "canInstall": boolean;
+    "reason": string;
+}

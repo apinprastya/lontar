@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { shortcutLabel } from '../../lib/mod'
 import { useSettings } from '../../stores/settings'
+import { useUpdate } from '../../stores/update'
 import { DEFAULT_SETTINGS, LIMITS, type Settings, type ThemeSetting } from './types'
 
 export interface SettingsDialogProps {
@@ -144,6 +145,15 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
         <div className="dialog-actions">
           <button type="button" onClick={() => setDraft({ ...DEFAULT_SETTINGS })}>
             Restore defaults
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              close()
+              void useUpdate.getState().check()
+            }}
+          >
+            Check for updates…
           </button>
           <span className="spacer" />
           <span className="hint">{shortcutLabel(platform, ',')}</span>

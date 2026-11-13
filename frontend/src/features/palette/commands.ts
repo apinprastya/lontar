@@ -1,5 +1,6 @@
 import { activeResultView, resultEditView } from '../../stores/queryTabs'
 import { resolveTheme, useSettings } from '../../stores/settings'
+import { useUpdate } from '../../stores/update'
 import { canEdit, tabRequest, type WorkspaceState, type WorkspaceStore } from '../../stores/workspace'
 import type { ExportSource } from '../export/ExportDialog'
 import { SHORTCUTS, shortcutEvent } from '../workspace/keymap'
@@ -57,6 +58,7 @@ const ACTIONS: Record<string, (ctx: CommandContext) => void> = {
     void st.save({ ...st.settings, theme: next })
   },
   disconnect: (ctx) => ctx.disconnect(),
+  checkUpdates: () => void useUpdate.getState().check(),
 }
 
 /** IDs with their own action (the rest run exactly like their shortcut). */

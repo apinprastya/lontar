@@ -1,10 +1,12 @@
 import { useEffect } from 'react'
 import Welcome from '../features/connections/Welcome'
 import SettingsDialog from '../features/settings/SettingsDialog'
+import UpdateDialog from '../features/update/UpdateDialog'
 import Workspace from '../features/workspace/Workspace'
 import { matchesShortcut, modLabel } from '../lib/mod'
 import { useConnections } from '../stores/connections'
 import { bindAppearance, useSettings, watchSystemTheme } from '../stores/settings'
+import { useUpdate } from '../stores/update'
 import { useAppInfo } from './useAppInfo'
 
 const platformLabels: Record<string, string> = {
@@ -57,6 +59,7 @@ export default function App() {
   const platform = info.status === 'ready' ? info.platform : undefined
   const session = useConnections((s) => s.session)
   const settingsOpen = useSettings((s) => s.open)
+  const updateOpen = useUpdate((s) => s.open)
   useAppearance(platform, Boolean(session))
 
   if (session) {
@@ -65,6 +68,7 @@ export default function App() {
       <div className="app-shell app-shell-workspace" data-platform={platform}>
         <Workspace platform={platform} />
         {settingsOpen && <SettingsDialog platform={platform} />}
+        {updateOpen && <UpdateDialog />}
       </div>
     )
   }
@@ -96,6 +100,7 @@ export default function App() {
         </button>
       </footer>
       {settingsOpen && <SettingsDialog platform={platform} />}
+      {updateOpen && <UpdateDialog />}
     </div>
   )
 }

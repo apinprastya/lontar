@@ -44,6 +44,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'importCsv', key: '', mod: false, scope: 'global', description: 'Import CSV into this table…', command: true },
   { id: 'toggleTheme', key: '', mod: false, scope: 'global', description: 'Switch between light and dark theme', command: true },
   { id: 'disconnect', key: '', mod: false, scope: 'global', description: 'Disconnect', command: true },
+  { id: 'checkUpdates', key: '', mod: false, scope: 'global', description: 'Check for updates…', command: true },
   { id: 'copy', key: 'c', mod: true, scope: 'grid', description: 'Copy cells as TSV' },
   { id: 'toggleDetail', key: ' ', mod: false, scope: 'grid', description: 'Row detail' },
   { id: 'edit', key: 'enter', mod: false, scope: 'grid', description: 'Edit cell (or double-click, or type)' },

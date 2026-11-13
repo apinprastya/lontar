@@ -5,7 +5,8 @@ vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/m
 import { DEFAULT_SETTINGS } from '../settings/types'
 import { useSettings } from '../../stores/settings'
 import { createWorkspaceStore, type WorkspaceStore } from '../../stores/workspace'
-import { SettingsService, resetBindings } from '../../test/mockBindings'
+import { SettingsService, UpdateService, resetBindings } from '../../test/mockBindings'
+import { useUpdate } from '../../stores/update'
 import { fakeEditorApi } from '../../test/fakeEditorApi'
 import { makeDetail } from '../../test/structure'
 import type { WorkspaceApi } from '../workspace/api'
@@ -91,6 +92,10 @@ describe('palette commands', () => {
     expect(useSettings.getState().open).toBe(true)
     runCommand('disconnect', ctx)
     expect(ctx.disconnect).toHaveBeenCalled()
+    UpdateService.Check.mockReturnValue(new Promise(() => {}))
+    runCommand('checkUpdates', ctx)
+    expect(useUpdate.getState()).toMatchObject({ open: true, phase: 'checking' })
+    useUpdate.setState({ open: false, phase: 'idle' })
 
     // Nothing to export or import without a table tab.
     runCommand('exportData', ctx)

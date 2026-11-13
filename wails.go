@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"os/exec"
 
 	"lontar/internal/services"
 
@@ -48,4 +49,30 @@ func (WailsEmitter) Emit(name string, data any) {
 	if app := application.Get(); app != nil {
 		app.Event.Emit(name, data)
 	}
+}
+
+// startDetached starts a program that outlives this process (the updated
+// Lontar).
+func startDetached(name string, args []string) error {
+	cmd := exec.Command(name, args...)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
+}
+
+// quitApp quits the running Wails application (services shut down first).
+func quitApp() {
+	if app := application.Get(); app != nil {
+		app.Quit()
+	}
+}
+
+// openURL opens url in the default browser.
+func openURL(url string) error {
+	app := application.Get()
+	if app == nil {
+		return errNoApp
+	}
+	return app.Browser.OpenURL(url)
 }

@@ -2662,3 +2662,39 @@ textarea.cell-editor-input {
 .cm-tooltip {
   z-index: 1000;
 }
+
+/* ---- Update dialog -------------------------------------------------------- */
+
+.update-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.update-status {
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.update-notes {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.update-progress progress {
+  width: 100%;
+  accent-color: var(--accent);
+}

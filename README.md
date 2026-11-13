@@ -424,6 +424,40 @@ versioned. You can set:
 - **CSV export defaults.**
 - **Ask before closing a query tab with unrun changes.**
 
+The **Check for updates…** button in the dialog is described in "Updates".
+
+## Updates
+
+Lontar never checks for updates on its own. To check, use **Check for
+updates…** in Settings or in the command palette. It asks GitHub Releases for
+the latest **stable** release (pre-releases are never offered) and shows its
+version and release notes.
+
+If a newer version exists, **Download and install** downloads it in the
+background and shows the progress (**Cancel download** stops it). Lontar
+installs nothing unless both of these checks pass:
+
+- the release's `SHA256SUMS.sig` is a valid ed25519 signature of
+  `SHA256SUMS`, made with the release key whose public half is built into
+  Lontar;
+- the downloaded file matches its line in `SHA256SUMS`.
+
+Once installed, **Restart now** starts the new version and quits this one.
+Open connections are closed, and staged changes that were not committed and
+unsaved query text are lost. **Later** keeps the current version running
+until you quit it.
+
+| Installed from | What is replaced |
+|---|---|
+| AppImage (x86_64) | The `.AppImage` file itself |
+| Windows installer or portable zip (x64) | `lontar.exe`. The old exe is kept as `lontar.exe.old` and deleted at the next start. The version shown in "Apps & features" keeps the originally installed number. |
+| macOS `.dmg` | The `Lontar.app` bundle, taken from the new `.dmg` |
+| `.deb` / `.rpm`, development builds, other CPUs | Nothing. Lontar says why and offers the **Release page**; update with your package manager. |
+
+Lontar needs write access to the installed file or bundle. A per-machine
+install in Program Files, or an `.app` owned by another user, reports a
+permission error and offers the release page instead.
+
 ## Saved connections and passwords
 
 Connections are stored as JSON (schema-versioned, written atomically, file
@@ -644,6 +678,23 @@ Signing is optional; each step is skipped when its secrets are missing:
 | `APPLE_ID` | Notarization, alternative: the Apple ID's e-mail |
 | `APPLE_TEAM_ID` | The Apple Developer team ID |
 | `APPLE_APP_PASSWORD` | An app-specific password for that Apple ID |
+| `UPDATE_SIGNING_KEY` | ed25519 private key that signs `SHA256SUMS` into `SHA256SUMS.sig` for in-app updates (see below) |
+
+**In-app update key.** Generate the key pair once:
+
+```sh
+go -C tools run ./updatesign keygen
+```
+
+Paste the public key into `PublicKey` in `internal/update/update.go` and
+commit it. Store the private key as the `UPDATE_SIGNING_KEY` secret, and keep
+an offline backup: if it is lost, installed versions can no longer update
+themselves. The release job signs `SHA256SUMS` and checks the signature
+against the committed public key. Without the secret the release is still
+published, but a warning says that it cannot be installed from inside Lontar.
+A build with an empty `PublicKey` can check for updates but never installs
+one. To check a release by hand, run
+`go -C tools run ./updatesign verify <public key> SHA256SUMS SHA256SUMS.sig`.
 
 Windows signs `lontar.exe` before it goes into the installer, then the
 installer (`build/windows/sign.ps1`, signtool, SHA-256 + RFC 3161 timestamp).
