@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceApi } from '../features/workspace/api'
 import { execResult, fakeEditorApi, resultSet, stmt } from '../test/fakeEditorApi'
+import { getUIState } from '../lib/uiState'
 import {
+  HISTORY_OPEN_KEY,
   MESSAGES,
   activeResultView,
   draftKey,
@@ -271,8 +273,14 @@ describe('query tabs in the workspace store', () => {
     expect(q().editorRequest).toMatchObject({ type: 'insert', text: 'SELECT 43' })
     st().toggleHistory()
     expect(st().historyOpen).toBe(true)
+    expect(getUIState(HISTORY_OPEN_KEY)).toBe('true')
+    // The next workspace opens with the history panel as it was left.
+    const next = createWorkspaceStore({ id: 's9', kind: 'postgres' }, fakeApi(), fakeEditorApi())
+    expect(next.getState().historyOpen).toBe(true)
+    next.getState().dispose()
     st().toggleHistory(false)
     expect(st().historyOpen).toBe(false)
+    expect(getUIState(HISTORY_OPEN_KEY)).toBe('false')
   })
 
   it('loads completion data per schema, lazily', async () => {

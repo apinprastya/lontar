@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import ToolButton from '../../components/ToolButton'
 import { HistoryIcon, PlayAllIcon, PlayIcon, StopIcon } from '../../components/icons'
 import { Group, Panel, Separator } from 'react-resizable-panels'
+import { usePanelLayout } from '../../lib/panelLayout'
 import { shortcutLabel } from '../../lib/mod'
 import type { QueryTabState } from '../../stores/queryTabs'
 import { useWorkspace } from '../../stores/workspace'
@@ -27,6 +28,8 @@ export interface QueryTabProps {
 export default function QueryTab({ tab, platform, api = editorApi }: QueryTabProps) {
   const s = useWorkspace((st) => st)
   const { kind, completion, historyOpen, connectionId, schema } = s
+  const splitLayout = usePanelLayout('query.split')
+  const historyLayout = usePanelLayout('query.history')
 
   useEffect(() => {
     void s.loadCompletion()
@@ -41,7 +44,7 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
   const runAll = shortcutLabel(platform, 'Enter', { shift: true })
 
   const editorAndResults = (
-    <Group orientation="vertical" className="query-split">
+    <Group orientation="vertical" className="query-split" {...splitLayout}>
       <Panel id="editor" defaultSize="45" minSize={80}>
         <SqlEditor
           value={tab.sql}
@@ -104,7 +107,7 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
       </div>
       <div className="query-body">
         {historyOpen ? (
-          <Group orientation="horizontal">
+          <Group orientation="horizontal" {...historyLayout}>
             <Panel id="query-main" minSize={300}>
               {editorAndResults}
             </Panel>

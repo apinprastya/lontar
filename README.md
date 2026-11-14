@@ -426,6 +426,28 @@ versioned. You can set:
 
 The **Check for updates…** button in the dialog is described in "Updates".
 
+### Window and layout
+
+Lontar remembers how you left it, in `state.json` next to `settings.json`:
+
+- **The window:** its size, position and whether it was maximised. A window
+  closed while maximised opens maximised and un-maximises to its previous
+  size. A minimised or fullscreen window comes back as a normal window. If
+  the saved position is off every screen (a monitor was unplugged), the
+  window opens centred. On Wayland the compositor places the window, so only
+  the size and maximised state are restored.
+- **Panel sizes:** the sidebar, the row detail panel, the SQL editor/results
+  split and the query history panel. Only sizes you drag are saved, not
+  sizes that change because the window was resized.
+- **Panel toggles:** whether the row detail and query history panels are open.
+- **Table column widths**, per saved connection and table. Column widths in
+  SQL editor results are not kept.
+
+The window is saved when it is maximised or restored, and when Lontar quits.
+Panel sizes and column widths are saved shortly after you change them.
+Deleting `state.json` resets the layout; a corrupt file is ignored and
+replaced.
+
 ## Updates
 
 Lontar never checks for updates on its own. To check, use **Check for

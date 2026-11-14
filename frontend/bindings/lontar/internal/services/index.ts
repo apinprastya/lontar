@@ -12,6 +12,7 @@ import * as HistoryService from "./historyservice.js";
 import * as ImportService from "./importservice.js";
 import * as SchemaService from "./schemaservice.js";
 import * as SettingsService from "./settingsservice.js";
+import * as UIStateService from "./uistateservice.js";
 import * as UpdateService from "./updateservice.js";
 export {
     AppService,
@@ -25,6 +26,7 @@ export {
     ImportService,
     SchemaService,
     SettingsService,
+    UIStateService,
     UpdateService
 };
 

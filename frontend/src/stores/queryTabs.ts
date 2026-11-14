@@ -6,6 +6,7 @@ import { DEFAULT_MAX_ROWS, type CompletionSchema, type ExecResult, type ResultSe
 import type { Cell, ResultColumn, SortSpec } from '../features/workspace/types'
 import type { PreviewStatement, ResultSource, SafeMode } from '../features/edits/types'
 import { errorMessage } from '../lib/errors'
+import { setUIJSON } from '../lib/uiState'
 import { displayRows, emptyPending, type DisplayRow, type Pending } from './pending'
 
 /** Key of the Messages tab in the results panel. */
@@ -256,6 +257,9 @@ export function firstErrorPosition(result: ExecResult): { pos: number; from: num
   }
   return null
 }
+
+/** UI state key of the query history panel toggle (see lib/uiState). */
+export const HISTORY_OPEN_KEY = 'query.historyOpen'
 
 // ---- Drafts (localStorage, per connection) ------------------------------
 
@@ -559,7 +563,9 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
     },
 
     toggleHistory(open) {
-      set((s) => ({ historyOpen: open ?? !s.historyOpen }) as Partial<S>)
+      const historyOpen = open ?? !get().historyOpen
+      set({ historyOpen } as Partial<S>)
+      setUIJSON(HISTORY_OPEN_KEY, historyOpen)
     },
 
     async loadCompletion(refresh = false) {

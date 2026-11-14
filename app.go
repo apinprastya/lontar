@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"lontar/internal/appstate"
 	"lontar/internal/conn"
 	"lontar/internal/driver/all"
 	"lontar/internal/history"
@@ -53,6 +54,10 @@ type backend struct {
 	importer    *services.ImportService
 	settings    *services.SettingsService
 	update      *services.UpdateService
+	uiState     *services.UIStateService
+
+	// state is state.json: the window bounds (used by main) and UI values.
+	state *appstate.Store
 }
 
 // KnownHostsFile is Lontar's own known_hosts in the config directory (the
@@ -106,7 +111,7 @@ func logf(opts migrate.Options, format string, args ...any) {
 // encrypted-file fallback on Linux), the session manager with its SSH
 // tunnels (host keys checked against ~/.ssh/known_hosts and Lontar's own
 // known_hosts), the driver registry, the query history (history.db) and the
-// settings (settings.json), keeping everything under configDir. All
+// settings (settings.json) and the app state (state.json), keeping everything under configDir. All
 // services share one session manager.
 func newBackend(configDir string) backend {
 	st := store.New(configDir, store.NewSecretStore(configDir))
@@ -118,6 +123,7 @@ func newBackend(configDir string) backend {
 	connections := services.NewConnectionService(st, sessions, drivers)
 	connections.HostKeys = hostKeys
 	events := WailsEmitter{}
+	state := appstate.New(configDir)
 	return backend{
 		connections: connections,
 		schema:      services.NewSchemaService(sessions, drivers),
@@ -130,6 +136,8 @@ func newBackend(configDir string) backend {
 		importer:    services.NewImportService(sessions, drivers, events),
 		settings:    services.NewSettingsService(settings.New(configDir)),
 		update:      newUpdateService(events),
+		uiState:     services.NewUIStateService(state),
+		state:       state,
 	}
 }
 
@@ -180,6 +188,7 @@ func appOptions(assets fs.FS, b backend) application.Options {
 			application.NewService(b.importer),
 			application.NewService(b.settings),
 			application.NewService(b.update),
+			application.NewService(b.uiState),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -190,23 +199,5 @@ func appOptions(assets fs.FS, b backend) application.Options {
 		Linux: application.LinuxOptions{
 			ProgramName: programName,
 		},
-	}
-}
-
-// mainWindowOptions describes the main application window.
-func mainWindowOptions() application.WebviewWindowOptions {
-	return application.WebviewWindowOptions{
-		Title:     appName,
-		Width:     1200,
-		Height:    760,
-		MinWidth:  800,
-		MinHeight: 500,
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 38,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
-		},
-		BackgroundColour: application.NewRGB(24, 25, 30),
-		URL:              "/",
 	}
 }
