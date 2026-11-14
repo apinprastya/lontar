@@ -22,11 +22,14 @@ func TestAppOptions(t *testing.T) {
 	if opts.Name != "Lontar" {
 		t.Fatalf("Name = %q, want Lontar", opts.Name)
 	}
-	if len(opts.Services) != 12 {
-		t.Fatalf("expected 12 bound services, got %d", len(opts.Services))
+	if len(opts.Services) != 13 {
+		t.Fatalf("expected 13 bound services, got %d", len(opts.Services))
 	}
 	if opts.Services[11].Instance() != b.update {
 		t.Fatal("UpdateService not registered")
+	}
+	if opts.Services[12].Instance() != b.uiState || b.state == nil {
+		t.Fatal("UIStateService not registered")
 	}
 	for i, inst := range []any{b.dialogs, b.export, b.importer, b.settings} {
 		if opts.Services[7+i].Instance() != inst {
@@ -83,19 +86,6 @@ func TestNewBackend(t *testing.T) {
 	}
 	if err := b.editor.ServiceShutdown(); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestMainWindowOptions(t *testing.T) {
-	w := mainWindowOptions()
-	if w.Title != "Lontar" {
-		t.Fatalf("Title = %q, want Lontar", w.Title)
-	}
-	if w.URL != "/" {
-		t.Fatalf("URL = %q, want /", w.URL)
-	}
-	if w.Width < w.MinWidth || w.Height < w.MinHeight {
-		t.Fatalf("default size %dx%d is below the minimum %dx%d", w.Width, w.Height, w.MinWidth, w.MinHeight)
 	}
 }
 

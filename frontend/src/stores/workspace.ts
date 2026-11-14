@@ -19,9 +19,11 @@ import { editorApi as defaultEditorApi, type EditorApi } from '../features/edito
 import { cycleSort } from '../features/grid/sort'
 import { errorMessage } from '../lib/errors'
 import { copyText } from '../lib/clipboard'
+import { getUIJSON, isBoolean, isWidthMap, setUIJSON } from '../lib/uiState'
 import { referenceFilters } from '../features/structure/fk'
 import type { ForeignKey, StructureSection, TableDetail } from '../features/structure/types'
 import {
+  HISTORY_OPEN_KEY,
   MESSAGES,
   createQueryActions,
   loadDrafts,
@@ -290,6 +292,19 @@ let filterRowSeq = 0
 export function newFilterRow(column: string, op: FilterOp = '='): FilterRow {
   filterRowSeq += 1
   return { id: filterRowSeq, column, op, value: '', value2: '' }
+}
+
+/** UI state keys (see lib/uiState). */
+export const SHOW_DETAIL_KEY = 'workspace.showDetail'
+
+/** The UI state key of a table's column widths, per saved connection. */
+export function columnWidthsKey(connectionId: string, schema: string, table: string): string {
+  return `columns.${JSON.stringify([connectionId, schema, table])}`
+}
+
+/** The saved column widths of a table ({} without a saved connection). */
+export function loadColumnWidths(connectionId: string, schema: string, table: string): Record<string, number> {
+  return connectionId ? getUIJSON(columnWidthsKey(connectionId, schema, table), {}, isWidthMap) : {}
 }
 
 function newTab(t: TableInfo, pinned: boolean): TabState {
@@ -711,7 +726,7 @@ export function createWorkspaceStore(
         else await get().commit(id)
       },
 
-      historyOpen: false,
+      historyOpen: getUIJSON(HISTORY_OPEN_KEY, false, isBoolean),
       completion: null,
       completionLoading: false,
       sessionId: session.id,
@@ -728,7 +743,7 @@ export function createWorkspaceStore(
       search: '',
       tabs: restored,
       activeTabId: restored[0]?.id ?? null,
-      showDetail: false,
+      showDetail: getUIJSON(SHOW_DETAIL_KEY, false, isBoolean),
 
       async init() {
         const { sessionId, showSystem } = get()
@@ -795,7 +810,7 @@ export function createWorkspaceStore(
           if (pin && !existing.pinned) patchTab(existing.id, { pinned: true })
           return
         }
-        const tab = newTab(t, pin)
+        const tab = { ...newTab(t, pin), columnWidths: loadColumnWidths(connectionId, t.schema, t.name) }
         const preview = pin ? undefined : tabs.find((x): x is TabState => x.kind === 'table' && !x.pinned)
         if (preview) {
           cancelRequests(preview)
@@ -897,7 +912,11 @@ export function createWorkspaceStore(
           })
           return true
         }
-        const created = { ...newTab(tableInfoOf(fk.refSchema, fk.refTable), true), ...show }
+        const created = {
+          ...newTab(tableInfoOf(fk.refSchema, fk.refTable), true),
+          columnWidths: loadColumnWidths(connectionId, fk.refSchema, fk.refTable),
+          ...show,
+        }
         set({ tabs: [...get().tabs, created], activeTabId: created.id })
         void get().loadTab(created.id)
         void get().loadStructure(created.id)
@@ -1101,11 +1120,15 @@ export function createWorkspaceStore(
       },
 
       toggleDetail() {
-        set({ showDetail: !get().showDetail })
+        const showDetail = !get().showDetail
+        set({ showDetail })
+        setUIJSON(SHOW_DETAIL_KEY, showDetail)
       },
 
       setColumnWidth(id, column, width) {
         patchTab(id, (t) => ({ columnWidths: { ...t.columnWidths, [column]: width } }))
+        const tab = findTab(id)
+        if (tab) setUIJSON(columnWidthsKey(connectionId, tab.schema, tab.table), tab.columnWidths)
       },
 
       dispose() {

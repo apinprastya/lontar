@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceApi } from '../features/workspace/api'
 import type { FetchRequest, Page, TableInfo } from '../features/workspace/types'
-import { createWorkspaceStore, cycleSort, effectiveFilters, filterKey, newFilterRow, newRequestId, tabRequest, type TabState, type WorkspaceStore } from './workspace'
+import { getUIState, setUIState } from '../lib/uiState'
+import { SHOW_DETAIL_KEY, columnWidthsKey, createWorkspaceStore, cycleSort, loadColumnWidths, effectiveFilters, filterKey, newFilterRow, newRequestId, tabRequest, type TabState, type WorkspaceStore } from './workspace'
 import { makeDetail } from '../test/structure'
 
 const T = (name: string, type: TableInfo['type'] = 'table', estimatedRows: number | null = 1000): TableInfo => ({
@@ -429,6 +430,37 @@ describe('workspace store', () => {
     expect(st().showDetail).toBe(true)
     st().setColumnWidth(id, 'name', 222)
     expect(tab().columnWidths).toEqual({ name: 222 })
+  })
+
+  it('remembers the detail panel and column widths per connection and table', async () => {
+    const s1 = createWorkspaceStore({ id: 's1', kind: 'postgres', connectionId: 'c1' }, api)
+    s1.getState().openTable(T('users'))
+    await flush()
+    const t1 = s1.getState().tabs[0] as TabState
+    s1.getState().setColumnWidth(t1.id, 'name', 222)
+    s1.getState().toggleDetail()
+    expect(getUIState(columnWidthsKey('c1', 'public', 'users'))).toBe('{"name":222}')
+    expect(getUIState(SHOW_DETAIL_KEY)).toBe('true')
+
+    // A new session of the same connection gets them back.
+    const s2 = createWorkspaceStore({ id: 's2', kind: 'postgres', connectionId: 'c1' }, api)
+    expect(s2.getState().showDetail).toBe(true)
+    s2.getState().openTable(T('users'))
+    expect((s2.getState().tabs[0] as TabState).columnWidths).toEqual({ name: 222 })
+    s2.getState().openTable(T('orders'), true)
+    expect((s2.getState().tabs[1] as TabState).columnWidths).toEqual({})
+
+    // Another connection's table of the same name, and a session without a
+    // saved connection, start with default widths.
+    const s3 = createWorkspaceStore({ id: 's3', kind: 'postgres', connectionId: 'c2' }, api)
+    s3.getState().openTable(T('users'))
+    expect((s3.getState().tabs[0] as TabState).columnWidths).toEqual({})
+    expect(loadColumnWidths('', 'public', 'users')).toEqual({})
+
+    // Corrupt stored widths are ignored.
+    setUIState(columnWidthsKey('c1', 'public', 'orders'), '{"a":"wide"}')
+    expect(loadColumnWidths('c1', 'public', 'orders')).toEqual({})
+    for (const s of [s1, s2, s3]) s.getState().dispose()
   })
 
   it('cancels outstanding requests on dispose and ignores late results', async () => {

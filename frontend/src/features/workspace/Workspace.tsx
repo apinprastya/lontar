@@ -11,6 +11,7 @@ import { resultEditView } from '../../stores/queryTabs'
 import { editorApi, type EditorApi } from '../editor/api'
 import QueryTab from '../editor/QueryTab'
 import { Group, Panel, Separator } from 'react-resizable-panels'
+import { usePanelLayout } from '../../lib/panelLayout'
 import { useConnections } from '../../stores/connections'
 import { WorkspaceContext, createWorkspaceStore, useActiveTab, useWorkspace, type WorkspaceStore } from '../../stores/workspace'
 import { connectionColor } from '../connections/types'
@@ -51,6 +52,10 @@ export interface WorkspaceProps {
 }
 
 /** Safe mode badge next to the connection name. */
+/** Panel ids of the workspace Group, with and without the row detail (each keeps its layout). */
+const WITH_DETAIL = ['sidebar', 'main', 'detail']
+const WITHOUT_DETAIL = ['sidebar', 'main']
+
 export function SafeModeBadge({ mode }: { mode: string | undefined }) {
   if (!mode || mode === 'off') return null
   return (
@@ -129,6 +134,7 @@ function WorkspaceView({
   const tab = useActiveTab()
   const showDetail = useWorkspace((s) => s.showDetail)
   const toggleDetail = useWorkspace((s) => s.toggleDetail)
+  const layout = usePanelLayout('workspace', showDetail ? WITH_DETAIL : WITHOUT_DETAIL)
   const refresh = useWorkspace((s) => s.refresh)
   const kind = useWorkspace((s) => s.kind)
   const safeMode = useWorkspace((s) => s.safeMode)
@@ -247,7 +253,7 @@ function WorkspaceView({
 
   return (
     <section className="ws" aria-label="Workspace" style={color ? { borderTopColor: color } : undefined}>
-      <Group orientation="horizontal" className="ws-panels">
+      <Group orientation="horizontal" className="ws-panels" {...layout}>
         <Panel id="sidebar" defaultSize={240} minSize={160} maxSize={480}>
           <Sidebar
             onSwitchConnection={openSwitcher}

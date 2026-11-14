@@ -1,9 +1,14 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
+import { resetUIState } from '../lib/uiState'
 
-// Unmount rendered trees between tests (vitest runs without globals).
-afterEach(() => cleanup())
+// Unmount rendered trees between tests (vitest runs without globals), and
+// forget the persisted UI state (a module-wide cache).
+afterEach(() => {
+  cleanup()
+  resetUIState()
+})
 
 // jsdom has no ResizeObserver (used by react-resizable-panels).
 if (!('ResizeObserver' in globalThis)) {
