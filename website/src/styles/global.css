@@ -1,0 +1,230 @@
+/* Lontar website. Colours come from the app icon: the blue tile and the amber
+   "edited cell". Light and dark sets follow the visitor's system setting. */
+
+:root {
+  --paper: #f4f6fb;
+  --surface: #ffffff;
+  --ink: #142140;
+  --muted: #4f5b77;
+  --line: #d8dfec;
+  --blue: #2a56b8;
+  --blue-strong: #1f4597;
+  --blue-soft: #e3ebfb;
+  --on-blue: #ffffff;
+  --amber: #f7b538;
+  --amber-soft: #fdf0d2;
+  --on-amber: #3b2700;
+  --strike: #8a93a8;
+  --focus: #f7b538;
+
+  --font: 'Schibsted Grotesk Variable', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --measure: 68ch;
+  --wide: 1120px;
+  --gutter: clamp(16px, 4vw, 40px);
+  --radius-s: 4px;
+  --radius-m: 10px;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0d1424;
+    --surface: #141d33;
+    --ink: #e6ebf6;
+    --muted: #9ba7c2;
+    --line: #27334f;
+    --blue: #7ea6ff;
+    --blue-strong: #a3c0ff;
+    --blue-soft: #1a2849;
+    --on-blue: #0b1630;
+    --amber: #f7b538;
+    --amber-soft: #3a2c0c;
+    --on-amber: #2a1c00;
+    --strike: #6f7a94;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  font-feature-settings: 'ss01', 'tnum' 0;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: var(--blue);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  color: var(--blue-strong);
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-s);
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--mono);
+  font-size: 0.875em;
+}
+
+code {
+  background: var(--blue-soft);
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-s);
+  overflow-wrap: anywhere;
+}
+
+pre {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5em;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(2.4rem, 5.5vw, 4.1rem);
+  font-weight: 760;
+  letter-spacing: -0.035em;
+}
+
+h2 {
+  font-size: clamp(1.75rem, 3.2vw, 2.4rem);
+  font-weight: 720;
+}
+
+h3 {
+  font-size: 1.2rem;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0 0 1em;
+  max-width: var(--measure);
+}
+
+.wrap {
+  max-width: var(--wide);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+.lede {
+  font-size: clamp(1.1rem, 1.8vw, 1.3rem);
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.6rem 1.15rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 620;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.button:hover {
+  color: var(--ink);
+  border-color: var(--blue);
+  text-decoration: none;
+}
+
+.button-primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--on-blue);
+}
+
+.button-primary:hover {
+  background: var(--blue-strong);
+  border-color: var(--blue-strong);
+  color: var(--on-blue);
+}
+
+.button-large {
+  font-size: 1.15rem;
+  padding: 0.85rem 1.5rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 10;
+  background: var(--surface);
+  padding: 0.5rem 0.75rem;
+}
+
+.skip-link:focus {
+  top: 8px;
+}

@@ -1,0 +1,265 @@
+---
+import Base from '../layouts/Base.astro';
+import { LATEST_RELEASE_URL, RELEASES_URL } from '../lib/releases';
+
+// Shown before the GitHub API answers, without JavaScript, and if the API
+// is unavailable. Every link here works on its own.
+const fallback = [
+  { os: 'Linux', label: 'AppImage, .deb or .rpm', note: 'x86_64; Debian 13+, Ubuntu 24.04+, Fedora 39+' },
+  { os: 'Windows', label: 'Installer or portable .zip', note: 'Windows 10/11, x64' },
+  { os: 'macOS', label: 'Disk image (.dmg)', note: 'macOS 12+, Apple silicon and Intel' },
+];
+---
+
+<Base
+  title="Download Lontar"
+  description="Download Lontar for Linux, Windows or macOS. Free and open source, no account needed."
+>
+  <div class="wrap page">
+    <header class="intro">
+      <h1>Download Lontar</h1>
+      <p class="lede">Free for everyone, with every feature. No account, no licence key.</p>
+    </header>
+
+    <section class="recommended" aria-live="polite">
+      <div id="recommended">
+        <a class="button button-primary button-large" href={LATEST_RELEASE_URL} data-os-cta>Download Lontar</a>
+        <p class="rec-meta">
+          <span class="when-loading">Looking up the latest version…</span>
+          <span class="when-unavailable">Couldn’t reach GitHub just now. The button opens the latest release, where every file is listed.</span>
+          <noscript>The button opens the latest release on GitHub, where every file is listed.</noscript>
+        </p>
+      </div>
+    </section>
+
+    <section aria-labelledby="all-title">
+      <h2 id="all-title">All downloads</h2>
+      <div class="table-scroll">
+        <table class="downloads">
+          <thead>
+            <tr>
+              <th scope="col">System</th>
+              <th scope="col">File</th>
+              <th scope="col">Runs on</th>
+              <th scope="col" class="size">Size</th>
+            </tr>
+          </thead>
+          <tbody id="downloads-body">
+            {
+              fallback.map((f) => (
+                <tr>
+                  <th scope="row">{f.os}</th>
+                  <td>
+                    <a href={LATEST_RELEASE_URL}>{f.label}</a>
+                  </td>
+                  <td>{f.note}</td>
+                  <td class="size" />
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="links">
+        <a href={LATEST_RELEASE_URL} data-release-notes>Release notes</a>
+        <a href={RELEASES_URL}>All releases</a>
+      </p>
+    </section>
+
+    <section aria-labelledby="install-title">
+      <h2 id="install-title">Installing</h2>
+
+      <details data-os-section="linux">
+        <summary>Linux</summary>
+        <p><strong>AppImage</strong> runs on any x86_64 distribution and bundles everything it needs:</p>
+        <pre><code>chmod +x lontar-*.AppImage
+./lontar-*.AppImage</code></pre>
+        <p><strong>Debian / Ubuntu</strong> (installs GTK4 and WebKitGTK 6.0 if missing):</p>
+        <pre><code>sudo apt install ./lontar-*.deb</code></pre>
+        <p><strong>Fedora</strong>:</p>
+        <pre><code>sudo dnf install ./lontar-*.rpm</code></pre>
+        <p>
+          The packages are not GPG-signed; check them against <code>SHA256SUMS</code> as shown below. Packages are
+          updated with your package manager, the AppImage updates itself.
+        </p>
+      </details>
+
+      <details data-os-section="windows">
+        <summary>Windows</summary>
+        <p>
+          The installer installs Lontar for your user only, so it needs no administrator rights. It adds Start menu and
+          desktop shortcuts and an uninstaller. If the Microsoft Edge WebView2 runtime is missing (Windows 11 and
+          current Windows 10 already have it), the installer downloads it.
+        </p>
+        <p>The portable .zip contains just <code>lontar.exe</code> and needs WebView2 to be installed.</p>
+        <p>
+          If SmartScreen says “Windows protected your PC”, the build is not code-signed. Choose
+          <strong>More info</strong>, then <strong>Run anyway</strong>.
+        </p>
+      </details>
+
+      <details data-os-section="macos">
+        <summary>macOS</summary>
+        <p>Open the .dmg and drag Lontar to Applications. One download works on Apple silicon and Intel Macs.</p>
+        <p>
+          If macOS says the developer cannot be verified, the build is not notarized. Control-click Lontar in
+          Applications and choose <strong>Open</strong>. On macOS 15 and later, try to open it once, then go to
+          <strong>System Settings</strong>, <strong>Privacy &amp; Security</strong> and choose
+          <strong>Open Anyway</strong>. Or remove the quarantine flag:
+        </p>
+        <pre><code>xattr -dr com.apple.quarantine /Applications/lontar.app</code></pre>
+      </details>
+    </section>
+
+    <section aria-labelledby="verify-title">
+      <h2 id="verify-title">Verifying your download</h2>
+      <p>
+        Every release lists the checksum of each file in{' '}
+        <a href={LATEST_RELEASE_URL} data-checksum="SHA256SUMS">SHA256SUMS</a>, signed in{' '}
+        <a href={LATEST_RELEASE_URL} data-checksum="SHA256SUMS.sig">SHA256SUMS.sig</a>. Put it next to your download
+        and run:
+      </p>
+      <pre><code># Linux
+sha256sum -c SHA256SUMS --ignore-missing
+
+# macOS
+shasum -a 256 -c SHA256SUMS --ignore-missing
+
+# Windows (PowerShell): compare with the line in SHA256SUMS
+Get-FileHash .\lontar-*-setup.exe</code></pre>
+      <p>Lontar’s built-in updater does this check for you, and also verifies the signature.</p>
+    </section>
+
+    <section aria-labelledby="source-title">
+      <h2 id="source-title">Building from source</h2>
+      <p>
+        Lontar is open source under the Apache-2.0 license. The build instructions are in the
+        <a href={RELEASES_URL.replace(/\/releases$/, '#readme')}>README on GitHub</a>.
+      </p>
+    </section>
+  </div>
+</Base>
+
+<style>
+  .page {
+    padding-top: clamp(2.5rem, 7vw, 5rem);
+  }
+  .intro {
+    margin-bottom: 2rem;
+  }
+  section + section {
+    margin-top: clamp(3rem, 7vw, 4.5rem);
+  }
+  .recommended {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--amber);
+    border-radius: var(--radius-m);
+    padding: clamp(1.25rem, 4vw, 2rem);
+  }
+  .recommended :global(.rec-title) {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+  .recommended :global(.rec-meta) {
+    color: var(--muted);
+    margin: 0.85rem 0 0;
+  }
+  .recommended :global(.rec-file) {
+    margin: 0.35rem 0 0;
+    font-size: 0.9rem;
+  }
+  .when-loading,
+  .when-unavailable {
+    display: none;
+  }
+  :global(html[data-release='loading']) .when-loading,
+  :global(html[data-release='unavailable']) .when-unavailable {
+    display: inline;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--surface);
+  }
+  .downloads {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.97rem;
+  }
+  .downloads th,
+  .downloads :global(td),
+  .downloads :global(th) {
+    text-align: left;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .downloads thead th {
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .downloads :global(tbody tr:last-child > *) {
+    border-bottom: 0;
+  }
+  .downloads :global(tr.is-yours) {
+    background: var(--amber-soft);
+  }
+  .downloads :global(.file) {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+  .downloads :global(.size) {
+    text-align: right;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin-top: 1rem;
+  }
+
+  details {
+    border-top: 1px solid var(--line);
+    padding: 0.25rem 0;
+  }
+  details:last-of-type {
+    border-bottom: 1px solid var(--line);
+  }
+  summary {
+    cursor: pointer;
+    font-size: 1.15rem;
+    font-weight: 680;
+    padding: 0.85rem 0;
+  }
+  details.is-yours summary::after {
+    content: 'Your system';
+    margin-left: 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-s);
+    background: var(--amber);
+    color: var(--on-amber);
+    vertical-align: middle;
+  }
+  details[open] {
+    padding-bottom: 1rem;
+  }
+
+  @media (max-width: 560px) {
+    .downloads thead th:nth-child(3),
+    .downloads :global(td:nth-child(3)) {
+      display: none;
+    }
+  }
+</style>

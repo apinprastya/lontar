@@ -1,0 +1,60 @@
+---
+import { RELEASES_URL } from '../lib/releases';
+
+const repoUrl = RELEASES_URL.replace(/\/releases$/, '');
+---
+
+<footer class="site-footer">
+  <div class="wrap cols">
+    <p class="story">
+      <strong>Why “Lontar”?</strong> Lontar are the palm-leaf manuscripts once used in Bali and Java to
+      record knowledge, one carefully written row at a time.
+    </p>
+    <ul>
+      <li><a href="/download">Download</a></li>
+      <li><a href={repoUrl}>Source code</a></li>
+      <li><a href={`${repoUrl}/issues`}>Report a problem</a></li>
+      <li><a href={`${repoUrl}/blob/main/LICENSE`}>Apache-2.0 license</a></li>
+    </ul>
+  </div>
+  <div class="wrap fine">
+    <p>
+      Lontar is free and open-source software. PostgreSQL, MySQL, MariaDB and SQLite are trademarks of their
+      respective owners.
+    </p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: clamp(4rem, 10vw, 7rem);
+    border-top: 1px solid var(--line);
+    padding: 2.5rem 0 2rem;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 2rem;
+  }
+  .story strong {
+    color: var(--ink);
+  }
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+  }
+  .fine p {
+    font-size: 0.85rem;
+    margin: 1.5rem 0 0;
+  }
+  @media (max-width: 640px) {
+    .cols {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

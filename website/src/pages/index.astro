@@ -1,0 +1,250 @@
+---
+import Base from '../layouts/Base.astro';
+import AppMock from '../components/AppMock.astro';
+import EngineBadges from '../components/EngineBadges.astro';
+import { RELEASES_URL } from '../lib/releases';
+
+const repoUrl = RELEASES_URL.replace(/\/releases$/, '');
+
+const groups = [
+  {
+    title: 'Browse and query',
+    intro: 'Open a table with one click, or write SQL in as many query tabs as you like.',
+    items: [
+      'Tables load in pages, with sorting, multi-column sort and a filter bar',
+      'SQL editor with schema-aware completion; run a statement, a selection or the whole script',
+      'Each query tab keeps its own connection, so BEGIN, SET and temp tables carry over',
+      'Follow a foreign key to the referenced row with one click',
+      'Structure view: columns, indexes, foreign keys, checks, triggers and DDL',
+    ],
+  },
+  {
+    title: 'Edit without surprises',
+    intro: 'Changes are staged, not written. You see every one of them before anything is saved.',
+    items: [
+      'Changed cells, new rows and deletions are marked in the grid until you commit',
+      'Preview SQL shows exactly what the commit will do',
+      'One commit is one transaction: if any row fails, nothing is saved',
+      'Results of a plain single-table SELECT can be edited the same way',
+      'Undo and redo staged changes; type-aware editors for dates, JSON, enums and bytes',
+    ],
+  },
+  {
+    title: 'Connect safely',
+    intro: 'Production databases deserve a second look, and Lontar gives it to them.',
+    items: [
+      'Safe mode per connection: off, confirm every write, or read-only in the database itself',
+      'SSH tunnels through a bastion, with host keys checked against known_hosts',
+      'SSL/TLS with CA and host name verification, and client certificates',
+      'Passwords live in the system keychain, or in an encrypted file when there is none',
+      'Several connections open at once; switch between them from the keyboard',
+    ],
+  },
+  {
+    title: 'Move data in and out',
+    intro: 'Get a table or a query result into a file, or a file into a table.',
+    items: [
+      'Export to CSV, JSON or SQL INSERT statements',
+      'Import CSV files into an existing table',
+      'Copy selected cells as tab-separated text, paste ranges back in',
+      'Command palette and keyboard shortcuts for everything',
+      'Light and dark themes',
+    ],
+  },
+];
+---
+
+<Base
+  title="Lontar: a free database client for PostgreSQL, MySQL, MariaDB and SQLite"
+  description="Lontar is a free, open-source desktop database client. Browse tables, write SQL, and edit rows in a grid with every change staged and previewed before it is saved."
+>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <h1>See every change before it reaches your database.</h1>
+        <p class="lede">
+          Lontar is a free desktop client for PostgreSQL, MySQL, MariaDB and SQLite. Browse tables, write SQL, and
+          edit rows in a grid. Your edits wait until you commit them, and the commit is one transaction.
+        </p>
+        <div class="ctas">
+          <a class="button button-primary button-large" href="/download" data-os-cta>Download Lontar</a>
+          <a class="button button-large" href={repoUrl}>View source</a>
+        </div>
+        <p class="sub">Free for everyone. Linux, Windows and macOS.</p>
+        <EngineBadges />
+      </div>
+      <div class="hero-visual">
+        <AppMock />
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="features" aria-labelledby="features-title">
+    <div class="wrap">
+      <h2 id="features-title">Everything you reach for every day</h2>
+      <p class="lede">
+        A small, fast app built with Go and a native web view. No Electron, no account, no setup wizard.
+      </p>
+      <div class="groups">
+        {
+          groups.map((g) => (
+            <section class="group">
+              <h3>{g.title}</h3>
+              <p>{g.intro}</p>
+              <ul>
+                {g.items.map((i) => (
+                  <li>{i}</li>
+                ))}
+              </ul>
+            </section>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="free" aria-labelledby="free-title">
+    <div class="wrap free-grid">
+      <div>
+        <h2 id="free-title">Free. All of it.</h2>
+        <p class="lede">There is no paid edition and nothing locked behind one. Every feature on this page is in the download.</p>
+      </div>
+      <dl>
+        <div>
+          <dt>No account</dt>
+          <dd>Download it and connect. Nothing to sign up for.</dd>
+        </div>
+        <div>
+          <dt>No telemetry</dt>
+          <dd>Lontar talks to your databases, and to GitHub only when you check for updates.</dd>
+        </div>
+        <div>
+          <dt>Open source</dt>
+          <dd>Apache-2.0. Read the code, build it yourself, or <a href={repoUrl}>contribute on GitHub</a>.</dd>
+        </div>
+        <div>
+          <dt>Signed updates</dt>
+          <dd>Updates are checked against a signed checksum list before they are installed.</dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="closing">
+    <div class="wrap closing-inner">
+      <h2>Ready when your database is.</h2>
+      <a class="button button-primary button-large" href="/download" data-os-cta>Download Lontar</a>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero {
+    padding: clamp(3rem, 8vw, 6rem) 0 clamp(3rem, 6vw, 5rem);
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: clamp(2rem, 5vw, 4.5rem);
+    align-items: center;
+  }
+  .hero-copy h1 {
+    max-width: 14ch;
+  }
+  .ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 2rem 0 0.75rem;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 1.75rem;
+  }
+  @media (max-width: 900px) {
+    .hero-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .features {
+    padding: clamp(3rem, 8vw, 6rem) 0;
+    border-top: 1px solid var(--line);
+  }
+  .groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3rem clamp(2rem, 5vw, 4.5rem);
+    margin-top: 3rem;
+  }
+  .group {
+    border-top: 3px solid var(--blue);
+    padding-top: 1.25rem;
+  }
+  .group > p {
+    color: var(--muted);
+  }
+  .group ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.45rem;
+  }
+  .group li::marker {
+    color: var(--amber);
+  }
+  @media (max-width: 760px) {
+    .groups {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .free {
+    background: var(--blue-soft);
+    padding: clamp(3rem, 8vw, 5.5rem) 0;
+  }
+  .free-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: clamp(2rem, 5vw, 4.5rem);
+  }
+  dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.75rem 2rem;
+  }
+  dt {
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+  dd {
+    margin: 0;
+    color: var(--muted);
+  }
+  @media (max-width: 900px) {
+    .free-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 520px) {
+    dl {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .closing {
+    padding-top: clamp(3rem, 8vw, 5.5rem);
+  }
+  .closing-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+  .closing h2 {
+    margin: 0;
+  }
+</style>

@@ -1,0 +1,41 @@
+---
+import { siMariadb, siMysql, siPostgresql, siSqlite } from 'simple-icons';
+
+const engines = [
+  { name: 'PostgreSQL', icon: siPostgresql },
+  { name: 'MySQL', icon: siMysql },
+  { name: 'MariaDB', icon: siMariadb },
+  { name: 'SQLite', icon: siSqlite },
+];
+---
+
+<ul class="engines" aria-label="Supported databases">
+  {
+    engines.map((e) => (
+      <li>
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path d={e.icon.path} fill="currentColor" />
+        </svg>
+        {e.name}
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .engines {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin: 0;
+    padding: 0;
+    color: var(--muted);
+    font-weight: 560;
+  }
+  li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+</style>
