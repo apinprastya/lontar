@@ -795,10 +795,15 @@ rate-limited, every button links to the latest release page instead. File
 names are matched against the patterns in "Installing", so keep
 `website/src/lib/releases.ts` in step if those names change.
 
-To host it on Cloudflare Pages, Netlify or Vercel, use root directory
-`website`, build command `npm run build` and output directory `dist`, and
-set `SITE_URL` (for example `https://lontar.example`) so canonical and
-social-preview URLs are absolute. No server code is involved.
+It is deployed as a Cloudflare Worker that serves only static files
+(`website/wrangler.jsonc`: assets from `dist/`, unknown paths get the 404
+page). In the Worker's build settings, use path `website`, build command
+`npm run build`, deploy command `npx wrangler deploy`, and the build
+variables `NODE_VERSION=24` and `SITE_URL` (the site's public URL, so
+canonical and social-preview URLs are absolute). By hand:
+`cd website && npm run build && npx wrangler deploy`. Netlify or Vercel work
+too: root directory `website`, build command `npm run build`, output `dist`.
+No server code is involved.
 
 ## License
 

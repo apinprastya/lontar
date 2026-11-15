@@ -1,0 +1,13 @@
+// Cloudflare Workers config for the Lontar website: no Worker code, just the
+// static files Astro builds into dist/. Unknown paths get dist/404.html.
+// Deploy: `npm run build && npx wrangler deploy` (see README "Website").
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lontar",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  }
+}
