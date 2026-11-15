@@ -29,10 +29,17 @@ import (
 const appName = "Lontar"
 
 // programName is the lowercase identifier: the binary name and the Linux
-// program name (WM_CLASS / Wayland app_id), which must match StartupWMClass
-// and the name of build/linux/lontar.desktop. WebKitGTK also keeps the
-// webview's data (localStorage) under $XDG_DATA_HOME/<programName>.
+// program name (X11 WM_CLASS), which must match StartupWMClass in
+// build/linux/dev.lontar.app.desktop. WebKitGTK also keeps the webview's
+// data (localStorage) under $XDG_DATA_HOME/<programName>.
 const programName = "lontar"
+
+// applicationID is the GTK application id. GTK4 sends it as the Wayland
+// app_id, which GNOME/KDE match against the desktop file's name to find the
+// dock icon, so it must equal the basename of build/linux/dev.lontar.app.desktop.
+// Without it Wails uses "org.wails.lontar" and the dock shows a generic icon.
+// It is also the bundle id in build/config.yml.
+const applicationID = "dev.lontar.app"
 
 // appIcon is the application icon, rendered from build/appicon.svg. Wails
 // uses it for the macOS/Linux message dialogs; the window/taskbar icons come
@@ -197,7 +204,8 @@ func appOptions(assets fs.FS, b backend) application.Options {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 		Linux: application.LinuxOptions{
-			ProgramName: programName,
+			ProgramName:   programName,
+			ApplicationID: applicationID,
 		},
 	}
 }
