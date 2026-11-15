@@ -73,11 +73,18 @@ func TestLinuxDesktopEntryMatchesWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("desktop file must be named after the application id: %v", err)
 	}
-	if !strings.Contains(string(data), "\nStartupWMClass="+programName+"\n") {
-		t.Errorf("StartupWMClass must be %q", programName)
+	// Parse line by line: Git on Windows checks the file out with CRLF.
+	entry := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok {
+			entry[k] = v
+		}
 	}
-	if !strings.Contains(string(data), "\nIcon="+programName+"\n") {
-		t.Errorf("Icon must be %q (the hicolor icon name)", programName)
+	if got := entry["StartupWMClass"]; got != programName {
+		t.Errorf("StartupWMClass = %q, want %q", got, programName)
+	}
+	if got := entry["Icon"]; got != programName {
+		t.Errorf("Icon = %q, want %q (the hicolor icon name)", got, programName)
 	}
 }
 
