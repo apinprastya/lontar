@@ -122,7 +122,7 @@ tasks:
       APP_NAME: '{{.APP_NAME}}'
       APP_BINARY: '../../../bin/{{.APP_NAME}}'
       ICON: '{{.APP_NAME}}.png'
-      DESKTOP_FILE: '../{{.APP_NAME}}.desktop'
+      DESKTOP_FILE: '../dev.lontar.app.desktop'
       OUTPUT_DIR: '../../../bin'
 
   create:deb:
@@ -170,7 +170,8 @@ tasks:
       LONTAR_PKG_VERSION: '{{.VERSION}}'
       GOARCH: '{{.ARCH | default ARCH}}'
 
-  # The .desktop file (build/linux/lontar.desktop) is maintained by hand: it
+  # The .desktop file (build/linux/dev.lontar.app.desktop, named after the GTK
+  # application id so Wayland docks match it) is maintained by hand: it
   # sets Comment, Keywords, StartupWMClass and the Development;Database;
   # categories, which `wails3 generate .desktop` cannot all express.
 

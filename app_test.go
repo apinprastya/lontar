@@ -55,10 +55,36 @@ func TestAppOptions(t *testing.T) {
 		t.Fatal("app should quit when the last window closes on macOS")
 	}
 	if opts.Linux.ProgramName != "lontar" {
-		t.Fatalf("Linux.ProgramName = %q, want lontar (StartupWMClass in build/linux/lontar.desktop)", opts.Linux.ProgramName)
+		t.Fatalf("Linux.ProgramName = %q, want lontar (StartupWMClass in build/linux/dev.lontar.app.desktop)", opts.Linux.ProgramName)
+	}
+	if opts.Linux.ApplicationID != "dev.lontar.app" {
+		t.Fatalf("Linux.ApplicationID = %q, want dev.lontar.app (Wayland app_id = desktop file name)", opts.Linux.ApplicationID)
 	}
 	if !bytes.HasPrefix(opts.Icon, []byte("\x89PNG\r\n\x1a\n")) {
 		t.Fatal("Icon must be the embedded build/appicon.png")
+	}
+}
+
+// The desktop entry must be found from both the Wayland app_id (its file
+// name) and the X11 WM_CLASS (its StartupWMClass), or docks show a generic
+// icon instead of Lontar's.
+func TestLinuxDesktopEntryMatchesWindow(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("build", "linux", applicationID+".desktop"))
+	if err != nil {
+		t.Fatalf("desktop file must be named after the application id: %v", err)
+	}
+	// Parse line by line: Git on Windows checks the file out with CRLF.
+	entry := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok {
+			entry[k] = v
+		}
+	}
+	if got := entry["StartupWMClass"]; got != programName {
+		t.Errorf("StartupWMClass = %q, want %q", got, programName)
+	}
+	if got := entry["Icon"]; got != programName {
+		t.Errorf("Icon = %q, want %q (the hicolor icon name)", got, programName)
 	}
 }
 

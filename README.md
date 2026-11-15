@@ -639,7 +639,9 @@ dependencies, icons, `Apache-2.0` license and the LICENSE/NOTICE files) and the 
 `LSMinimumSystemVersion` 12.0, the boolean `NSHighResolutionCapable`, and
 `CFBundleDisplayName` "Lontar"); restore `build/darwin/entitlements.plist`,
 which it deletes; delete the `build/ios` and `build/linux/desktop` files it
-recreates (unused). `build/linux/lontar.desktop` is maintained by hand.
+recreates (unused). `build/linux/dev.lontar.app.desktop` is maintained by hand;
+its name must stay equal to the GTK application id (`applicationID` in
+`app.go`), which is the Wayland app_id docks use to find the icon.
 
 ### Regenerating the icon
 
