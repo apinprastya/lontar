@@ -1,0 +1,64 @@
+---
+import { RELEASES_URL } from '../lib/releases';
+
+const repoUrl = RELEASES_URL.replace(/\/releases$/, '');
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+---
+
+<header class="site-header">
+  <div class="wrap bar">
+    <a class="brand" href="/" aria-label="Lontar home">
+      <img src="/favicon.svg" alt="" width="32" height="32" />
+      <span>Lontar</span>
+    </a>
+    <nav aria-label="Main">
+      <a href="/#features">Features</a>
+      <a href="/download" aria-current={path === '/download' ? 'page' : undefined}>Download</a>
+      <a href={repoUrl}>GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    border-bottom: 1px solid var(--line);
+  }
+  .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 64px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--ink);
+    font-weight: 760;
+    font-size: 1.2rem;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+  .brand img {
+    width: 32px;
+    height: 32px;
+  }
+  nav {
+    display: flex;
+    gap: clamp(0.75rem, 3vw, 1.75rem);
+  }
+  nav a {
+    color: var(--muted);
+    text-decoration: none;
+    font-weight: 560;
+    padding: 0.5rem 0;
+  }
+  nav a:hover,
+  nav a[aria-current='page'] {
+    color: var(--ink);
+  }
+  nav a[aria-current='page'] {
+    box-shadow: inset 0 -2px 0 var(--amber);
+  }
+</style>

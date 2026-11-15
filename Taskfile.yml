@@ -211,6 +211,38 @@ tasks:
     cmds:
       - npx vitest run --coverage
 
+  # ---------------------------------------------------------------------------
+  # Marketing website (website/, Astro; separate npm project)
+  # ---------------------------------------------------------------------------
+
+  website:deps:
+    summary: Installs the website's npm dependencies
+    dir: website
+    sources: [package.json, package-lock.json]
+    cmds:
+      - npm install
+
+  website:dev:
+    summary: Runs the website with hot reload (http://localhost:4321)
+    deps: [website:deps]
+    dir: website
+    cmds:
+      - npx astro dev
+
+  website:build:
+    summary: Type-checks and builds the static website into website/dist
+    deps: [website:deps]
+    dir: website
+    cmds:
+      - npm run build
+
+  website:test:
+    summary: Runs the website's Vitest tests with coverage thresholds (80%)
+    deps: [website:deps]
+    dir: website
+    cmds:
+      - npx vitest run --coverage
+
   cover:
     summary: Prints Go coverage (excluding main.go) and fails if the total is below {{.COVER_MIN}}%
     vars:

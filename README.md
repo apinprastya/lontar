@@ -776,6 +776,30 @@ to connections come from [Simple Icons](https://simpleicons.org) (`simple-icons`
 CC0-1.0). The logos are trademarks of their respective owners and are used only
 to identify the database engine of a connection.
 
+## Website
+
+`website/` holds the marketing site: a home page and a download page. It is
+a static [Astro](https://astro.build) site and a separate npm project.
+
+```sh
+wails3 task website:dev     # http://localhost:4321 with hot reload
+wails3 task website:test    # Vitest, fails below 80% coverage
+wails3 task website:build   # astro check + static build into website/dist
+```
+
+The download page asks the GitHub API for the latest **stable** release (the
+same endpoint the updater uses), detects the visitor's OS and links straight
+to the matching file. The result is cached for the browser session. Before
+the API answers, without JavaScript, or when GitHub is unreachable or
+rate-limited, every button links to the latest release page instead. File
+names are matched against the patterns in "Installing", so keep
+`website/src/lib/releases.ts` in step if those names change.
+
+To host it on Cloudflare Pages, Netlify or Vercel, use root directory
+`website`, build command `npm run build` and output directory `dist`, and
+set `SITE_URL` (for example `https://lontar.example`) so canonical and
+social-preview URLs are absolute. No server code is involved.
+
 ## License
 
 Copyright 2026 Lontar contributors.

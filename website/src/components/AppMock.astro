@@ -1,0 +1,229 @@
+---
+// A static, accessible rendering of Lontar's grid with staged edits and the
+// SQL preview. Swap for real screenshots when they exist.
+const rows = [
+  { id: 1041, name: 'Ketut Ardana', email: 'ketut@ardana.id', plan: 'team' },
+  { id: 1042, name: 'Wayan Sari', was: 'Wayan Sar', email: 'wayan@sari.co', plan: 'pro', edited: 'name' },
+  { id: 1043, name: 'Made Putra', email: 'made.putra@mail.id', plan: 'free', state: 'deleted' },
+  { id: 1044, name: 'Nyoman Dewi', email: 'nyoman@dewi.net', plan: 'pro' },
+  { id: 1045, name: 'Ayu Lestari', email: 'ayu@lestari.id', plan: 'team', state: 'added' },
+];
+---
+
+<figure class="mock" aria-label="Lontar editing a customers table: one changed cell, one row marked for deletion, one new row, and the SQL preview">
+  <div class="window">
+    <div class="titlebar" aria-hidden="true">
+      <span class="dots"><i></i><i></i><i></i></span>
+      <span class="tab is-active">customers</span>
+      <span class="tab">orders</span>
+      <span class="tab">Query 1</span>
+    </div>
+    <div class="grid-scroll">
+      <table class="grid">
+        <thead>
+          <tr><th>id</th><th>name</th><th>email</th><th>plan</th></tr>
+        </thead>
+        <tbody>
+          {
+            rows.map((r) => (
+              <tr class={r.state ? `is-${r.state}` : undefined}>
+                <td class="num">{r.id}</td>
+                <td class={r.edited === 'name' ? 'is-edited' : undefined}>
+                  {r.was && <s>{r.was}</s>}
+                  {r.name}
+                </td>
+                <td>{r.email}</td>
+                <td>{r.plan}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="status">
+      <span>3 pending changes</span>
+      <span class="actions" aria-hidden="true">
+        <span>Discard</span>
+        <span class="is-on">Preview SQL</span>
+        <span class="commit">Commit</span>
+      </span>
+    </div>
+  </div>
+
+  <pre class="preview" aria-label="SQL preview"><code><span class="k">BEGIN</span>;
+<span class="k">DELETE FROM</span> customers <span class="k">WHERE</span> id = 1043;
+<span class="k">UPDATE</span> customers <span class="k">SET</span> name = <span class="s">'Wayan Sari'</span>
+  <span class="k">WHERE</span> id = 1042;
+<span class="k">INSERT INTO</span> customers (id, name, email, plan)
+  <span class="k">VALUES</span> (1045, <span class="s">'Ayu Lestari'</span>, …);
+<span class="k">COMMIT</span>;</code></pre>
+</figure>
+
+<style>
+  .mock {
+    --add: #1f8a5b;
+    --add-soft: #dcf3e7;
+    --del: #c4314b;
+    --del-soft: #fbe2e6;
+    position: relative;
+    margin: 0;
+    padding-bottom: 9.75rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    .mock {
+      --add: #5fd39c;
+      --add-soft: #143628;
+      --del: #ff7d91;
+      --del-soft: #3d1820;
+    }
+  }
+  .window {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    overflow: hidden;
+    box-shadow: 0 24px 48px -28px rgb(20 33 64 / 0.45);
+  }
+  .titlebar {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    padding: 0 0.6rem;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .dots {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-right: 0.6rem;
+  }
+  .dots i {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--line);
+  }
+  .tab {
+    padding: 0.55rem 0.8rem;
+  }
+  .tab.is-active {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: inset 0 2px 0 var(--blue);
+  }
+  .grid-scroll {
+    overflow-x: auto;
+  }
+  .grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .grid th,
+  .grid td {
+    text-align: left;
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
+  .grid th:last-child,
+  .grid td:last-child {
+    border-right: 0;
+  }
+  .grid th {
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--paper);
+  }
+  .num {
+    color: var(--muted);
+  }
+  .is-edited {
+    background: var(--amber);
+    color: var(--on-amber);
+    font-weight: 600;
+  }
+  .is-edited s {
+    opacity: 0.55;
+    font-weight: 400;
+    margin-right: 0.5em;
+  }
+  .is-deleted td {
+    background: var(--del-soft);
+    color: var(--del);
+    text-decoration: line-through;
+  }
+  .is-added td {
+    background: var(--add-soft);
+    color: var(--add);
+  }
+  .status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    background: var(--paper);
+  }
+  .actions {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .actions span {
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    background: var(--surface);
+  }
+  .actions .is-on {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+  .actions .commit {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: var(--on-blue);
+  }
+  .preview {
+    position: absolute;
+    right: -1.25rem;
+    bottom: 0;
+    width: min(92%, 25rem);
+    margin: 0;
+    font-size: 0.74rem;
+    box-shadow: 0 20px 40px -24px rgb(20 33 64 / 0.5);
+    border-left: 3px solid var(--amber);
+  }
+  .k {
+    color: var(--blue);
+    font-weight: 600;
+  }
+  .s {
+    color: var(--add, #1f8a5b);
+  }
+  @media (max-width: 1180px) {
+    .preview {
+      right: 0;
+    }
+  }
+  @media (max-width: 560px) {
+    .mock {
+      padding-bottom: 0;
+    }
+    .preview {
+      position: static;
+      width: auto;
+      margin-top: 0.75rem;
+    }
+    .actions span:first-child {
+      display: none;
+    }
+  }
+</style>

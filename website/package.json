@@ -1,0 +1,26 @@
+{
+  "name": "lontar-website",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@fontsource-variable/schibsted-grotesk": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "astro": "^7.4.12",
+    "simple-icons": "^16.37.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@vitest/coverage-v8": "^5.1.0",
+    "jsdom": "^31.0.1",
+    "typescript": "^6.0.0",
+    "vitest": "^5.1.0"
+  }
+}
