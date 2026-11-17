@@ -46,6 +46,39 @@ export interface SSHConfig {
   user?: string
   authMethod?: SSHAuthMethod
   keyPath?: string
+  /**
+   * Jump hosts in dialling order: jumps[0] is reached from this machine and
+   * the last one reaches `host`. At most MAX_JUMPS.
+   */
+  jumps?: SSHHop[] | null
+}
+
+/** Most jump hosts a connection may go through (store.MaxSSHJumps). */
+export const MAX_JUMPS = 3
+
+/** One jump host. Its secrets stay with its id when hops are reordered. */
+export interface SSHHop {
+  /** Assigned by the backend; '' for a hop that was never saved. */
+  id?: string
+  host?: string
+  port?: number
+  user?: string
+  authMethod?: SSHAuthMethod
+  keyPath?: string
+  /** Saved secrets (flags only, set by the backend). */
+  hasPassword?: boolean
+  hasPassphrase?: boolean
+}
+
+/** SSH badge tooltip: the chain of hops when the connection has jump hosts. */
+export function sshBadgeTitle(ssh: SSHConfig | null | undefined): string {
+  return ssh?.jumps?.length ? `Connected through SSH: ${sshChain(ssh)}` : 'Connected through an SSH tunnel'
+}
+
+/** "you → bastion1 → bastion2 → db-gateway" for an SSH tunnel. */
+export function sshChain(ssh: SSHConfig | null | undefined): string {
+  if (!ssh) return ''
+  return ['you', ...(ssh.jumps ?? []).map((h) => h.host ?? ''), ssh.host ?? ''].join(' → ')
 }
 
 export type SSLMode = '' | 'disable' | 'preferred' | 'require' | 'verify-ca' | 'verify-full'
@@ -63,6 +96,14 @@ export interface Secrets {
   password: string | null
   sshPassword: string | null
   sshPassphrase: string | null
+  /** Jump host secrets in the order of ssh.jumps (sent only with jump hosts). */
+  jumps?: HopSecrets[]
+}
+
+/** Secrets of one jump host (null keeps, '' clears). */
+export interface HopSecrets {
+  password: string | null
+  passphrase: string | null
 }
 
 export const NO_SECRETS: Secrets = { password: null, sshPassword: null, sshPassphrase: null }

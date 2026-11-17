@@ -37,6 +37,11 @@ export default function HostKeyDialog({ info, busy, onAccept, onCancel }: HostKe
         }}
       >
         <h2 id={`${uid}-title`}>{changed ? 'SSH host key has changed!' : 'Unknown SSH host'}</h2>
+        {info.hopLabel && (
+          <p className="hostkey-hop" data-testid="hostkey-hop">
+            On <strong>{info.hopLabel}</strong> of the SSH chain.
+          </p>
+        )}
         {changed ? (
           <p className="error">
             The server <strong>{info.host}</strong> presented a different key than the one recorded for it. Someone could be

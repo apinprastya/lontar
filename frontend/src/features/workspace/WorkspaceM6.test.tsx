@@ -138,6 +138,10 @@ describe('Workspace M6: palette, export, import, settings', () => {
     render(<Workspace api={api} platform="linux" editor={fakeEditorApi()} />)
     await screen.findByRole('button', { name: /^users/ })
     expect(screen.getByTestId('ssh-badge')).toHaveTextContent('SSH')
+    expect(screen.getByTestId('ssh-badge')).toHaveAttribute('title', 'Connected through an SSH tunnel')
+    // With jump hosts the tooltip shows the chain.
+    useConnections.setState({ connections: [makeConnection({ id: 'c1', ssh: { enabled: true, host: 'gw', jumps: [{ host: 'b1' }] } })] })
+    await waitFor(() => expect(screen.getByTestId('ssh-badge')).toHaveAttribute('title', 'Connected through SSH: you → b1 → gw'))
     const ev = key('p')
     expect(ev.defaultPrevented).toBe(true)
     const palette = await screen.findByRole('dialog', { hidden: true }).catch(() => document.querySelector('.palette') as HTMLElement)

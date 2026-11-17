@@ -30,6 +30,12 @@ type HostKeyUnknownError struct {
 	KeyType           string `json:"keyType"`
 	FingerprintSHA256 string `json:"fingerprintSHA256"`
 	Message           string `json:"message"`
+	// Hop and HopLabel name the server in a chain with jump hosts: Hop is
+	// the 1-based jump host number (0 for the final SSH server) and
+	// HopLabel e.g. "jump host 2 (bastion)". HopLabel is empty without
+	// jump hosts.
+	Hop      int    `json:"hop"`
+	HopLabel string `json:"hopLabel,omitempty"`
 }
 
 func (e *HostKeyUnknownError) Error() string { return e.Message }
@@ -48,6 +54,9 @@ type HostKeyChangedError struct {
 	// Known lists the recorded entries as "file:line".
 	Known   []string `json:"known"`
 	Message string   `json:"message"`
+	// Hop and HopLabel: see HostKeyUnknownError.
+	Hop      int    `json:"hop"`
+	HopLabel string `json:"hopLabel,omitempty"`
 }
 
 func (e *HostKeyChangedError) Error() string { return e.Message }

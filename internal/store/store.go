@@ -209,12 +209,42 @@ const (
 // secretPurposes lists every secret a connection may have.
 var secretPurposes = []string{"", SecretSSHPassword, SecretSSHPassphrase}
 
+// Jump host secret kinds for JumpSecretPurpose.
+const (
+	jumpPassword   = "password"
+	jumpPassphrase = "passphrase"
+)
+
+// JumpSecretPurpose returns the SecretKey purpose of a jump host secret
+// ("password" or "passphrase") of the hop with the given ID:
+// "ssh.jump.<hop id>.<what>". Keying by the hop's ID rather than its
+// position keeps the secrets with the hop when the hops are reordered.
+func JumpSecretPurpose(hopID, what string) string {
+	return "ssh.jump." + hopID + "." + what
+}
+
 // Secrets are the secrets passed to SaveSecrets. For each one, nil keeps
 // the stored value, "" removes it and anything else replaces it.
 type Secrets struct {
 	Password      *string `json:"password"`
 	SSHPassword   *string `json:"sshPassword"`
 	SSHPassphrase *string `json:"sshPassphrase"`
+	// Jumps holds the jump host secrets in the order of the saved
+	// connection's SSH.Jumps (by position, so that a hop the UI just added
+	// can have secrets). Missing entries keep the stored values.
+	Jumps []HopSecrets `json:"jumps"`
+}
+
+// HopSecrets are the secrets of one jump host (nil keeps, "" removes).
+type HopSecrets struct {
+	Password   *string `json:"password"`
+	Passphrase *string `json:"passphrase"`
+}
+
+// HopSecret is a stored jump host secret pair ("" when not stored).
+type HopSecret struct {
+	Password   string
+	Passphrase string
 }
 
 func (s Secrets) value(purpose string) *string {
@@ -258,8 +288,13 @@ func (s *Store) SaveSecrets(c Connection, sec Secrets) (Connection, error) {
 		return Connection{}, err
 	}
 
+	if len(sec.Jumps) > len(jumpsOf(&c)) {
+		return Connection{}, invalid("ssh.jumps", "secrets were given for more jump hosts than the connection has")
+	}
+
 	idx := -1
 	now := s.now()
+	var oldJumps []SSHHop
 	if c.ID == "" {
 		c.ID = s.newID()
 		c.CreatedAt = now
@@ -272,8 +307,10 @@ func (s *Store) SaveSecrets(c Connection, sec Secrets) (Connection, error) {
 		old := f.Connections[idx]
 		c.CreatedAt = old.CreatedAt
 		c.HasPassword, c.HasSSHPassword, c.HasSSHPassphrase = old.HasPassword, old.HasSSHPassword, old.HasSSHPassphrase
+		oldJumps = jumpsOf(&old)
 	}
 	c.UpdatedAt = now
+	freshHops := s.assignHopIDs(&c, oldJumps)
 
 	// Write the secrets first: if that fails, nothing changed on disk.
 	var setNew []string
@@ -306,6 +343,38 @@ func (s *Store) SaveSecrets(c Connection, sec Secrets) (Connection, error) {
 			setNew = append(setNew, key)
 		}
 	}
+	for i, hs := range sec.Jumps {
+		h := &c.SSH.Jumps[i]
+		values := []*string{hs.Password, hs.Passphrase}
+		for j, slot := range hopSecretSlots(i+1, h) {
+			v := values[j]
+			if v == nil {
+				continue
+			}
+			key := SecretKey(c.ID, slot.purpose)
+			if *v == "" {
+				if err := s.secrets.Delete(key); err != nil {
+					undo()
+					return Connection{}, fmt.Errorf("remove saved %s: %w", slot.name, err)
+				}
+				*slot.flag = false
+				continue
+			}
+			if err := s.secrets.Set(key, *v); err != nil {
+				undo()
+				return Connection{}, fmt.Errorf("save %s: %w", slot.name, err)
+			}
+			*slot.flag = true
+			if idx < 0 || freshHops[h.ID] {
+				setNew = append(setNew, key)
+			}
+		}
+	}
+	// Removed hops take their secrets with them.
+	if err := s.deleteHopSecrets(c.ID, removedHops(&c, oldJumps)); err != nil {
+		undo()
+		return Connection{}, fmt.Errorf("remove saved jump host secrets: %w", err)
+	}
 
 	if idx < 0 {
 		f.Connections = append(f.Connections, c)
@@ -317,6 +386,83 @@ func (s *Store) SaveSecrets(c Connection, sec Secrets) (Connection, error) {
 		return Connection{}, err
 	}
 	return c.clone(), nil
+}
+
+// jumpsOf returns c's jump hosts (nil without SSH).
+func jumpsOf(c *Connection) []SSHHop {
+	if c.SSH == nil {
+		return nil
+	}
+	return c.SSH.Jumps
+}
+
+// hopSecretSlots lists the secrets of hop: purpose, flag, display name.
+func hopSecretSlots(n int, h *SSHHop) []struct {
+	purpose string
+	flag    *bool
+	name    string
+} {
+	return []struct {
+		purpose string
+		flag    *bool
+		name    string
+	}{
+		{JumpSecretPurpose(h.ID, jumpPassword), &h.HasPassword, fmt.Sprintf("jump host %d SSH password", n)},
+		{JumpSecretPurpose(h.ID, jumpPassphrase), &h.HasPassphrase, fmt.Sprintf("jump host %d SSH key passphrase", n)},
+	}
+}
+
+// assignHopIDs gives every hop of c an ID and its saved-secret flags: a hop
+// keeps the ID (and flags) of the old hop with that ID; any other hop (new,
+// unknown or duplicate ID) gets a fresh ID and no flags. It returns the IDs
+// that are new.
+func (s *Store) assignHopIDs(c *Connection, old []SSHHop) map[string]bool {
+	byID := map[string]SSHHop{}
+	for _, h := range old {
+		byID[h.ID] = h
+	}
+	fresh := map[string]bool{}
+	used := map[string]bool{}
+	for i := range jumpsOf(c) {
+		h := &c.SSH.Jumps[i]
+		if o, ok := byID[h.ID]; ok && h.ID != "" && !used[h.ID] {
+			h.HasPassword, h.HasPassphrase = o.HasPassword, o.HasPassphrase
+		} else {
+			h.ID = s.newID()
+			h.HasPassword, h.HasPassphrase = false, false
+			fresh[h.ID] = true
+		}
+		used[h.ID] = true
+	}
+	return fresh
+}
+
+// removedHops returns the hops of old that are not in c any more.
+func removedHops(c *Connection, old []SSHHop) []SSHHop {
+	keep := map[string]bool{}
+	for _, h := range jumpsOf(c) {
+		keep[h.ID] = true
+	}
+	var out []SSHHop
+	for _, h := range old {
+		if !keep[h.ID] {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// deleteHopSecrets removes every secret of the given hops.
+func (s *Store) deleteHopSecrets(id string, hops []SSHHop) error {
+	var errs []error
+	for i := range hops {
+		for _, slot := range hopSecretSlots(i+1, &hops[i]) {
+			if err := s.secrets.Delete(SecretKey(id, slot.purpose)); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func secretName(purpose string) string {
@@ -341,6 +487,7 @@ func (s *Store) Delete(id string) error {
 	if i < 0 {
 		return fmt.Errorf("%w: %s", ErrNotFound, id)
 	}
+	hops := jumpsOf(&f.Connections[i])
 	f.Connections = append(f.Connections[:i], f.Connections[i+1:]...)
 	if err := s.write(f); err != nil {
 		return err
@@ -350,6 +497,9 @@ func (s *Store) Delete(id string) error {
 		if err := s.secrets.Delete(SecretKey(id, purpose)); err != nil {
 			errs = append(errs, err)
 		}
+	}
+	if err := s.deleteHopSecrets(id, hops); err != nil {
+		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("connection deleted, but its password could not be removed: %w", errors.Join(errs...))
@@ -381,25 +531,39 @@ func (s *Store) Duplicate(id string) (Connection, error) {
 			_ = s.secrets.Delete(key)
 		}
 	}
-	for _, purpose := range secretPurposes {
-		flag := hasFlag(&c, purpose)
+	// copySecret copies one secret to the new connection (the hops keep
+	// their IDs: the keys differ by connection ID).
+	copySecret := func(purpose, name string, flag *bool) error {
 		if !*flag {
-			continue
+			return nil
 		}
 		v, err := s.secrets.Get(SecretKey(id, purpose))
 		switch {
 		case errors.Is(err, ErrSecretNotFound):
 			*flag = false
 		case err != nil:
-			undo()
-			return Connection{}, fmt.Errorf("read %s: %w", secretName(purpose), err)
+			return fmt.Errorf("read %s: %w", name, err)
 		default:
 			key := SecretKey(c.ID, purpose)
 			if err := s.secrets.Set(key, v); err != nil {
-				undo()
-				return Connection{}, fmt.Errorf("save %s: %w", secretName(purpose), err)
+				return fmt.Errorf("save %s: %w", name, err)
 			}
 			copied = append(copied, key)
+		}
+		return nil
+	}
+	for _, purpose := range secretPurposes {
+		if err := copySecret(purpose, secretName(purpose), hasFlag(&c, purpose)); err != nil {
+			undo()
+			return Connection{}, err
+		}
+	}
+	for n := range jumpsOf(&c) {
+		for _, slot := range hopSecretSlots(n+1, &c.SSH.Jumps[n]) {
+			if err := copySecret(slot.purpose, slot.name, slot.flag); err != nil {
+				undo()
+				return Connection{}, err
+			}
 		}
 	}
 	f.Connections = append(f.Connections, c)
@@ -433,6 +597,43 @@ func (s *Store) SSHSecrets(id string) (password, passphrase string, err error) {
 		return "", "", err
 	}
 	return password, passphrase, nil
+}
+
+// JumpSecrets returns the stored secrets of the jump hosts of connection
+// id, by hop ID. Only secrets the hop's flags report are read, so a
+// keychain that is missing or locked does not matter for hops without any.
+func (s *Store) JumpSecrets(id string) (map[string]HopSecret, error) {
+	s.mu.Lock()
+	f, err := s.load()
+	s.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]HopSecret{}
+	i := f.index(id)
+	if i < 0 {
+		return out, nil
+	}
+	for n, h := range jumpsOf(&f.Connections[i]) {
+		var hs HopSecret
+		for j, slot := range hopSecretSlots(n+1, &h) {
+			if !*slot.flag {
+				continue
+			}
+			v, err := s.secrets.Get(SecretKey(id, slot.purpose))
+			switch {
+			case errors.Is(err, ErrSecretNotFound):
+			case err != nil:
+				return nil, fmt.Errorf("read saved %s: %w", slot.name, err)
+			case j == 0:
+				hs.Password = v
+			default:
+				hs.Passphrase = v
+			}
+		}
+		out[h.ID] = hs
+	}
+	return out, nil
 }
 
 // secret reads one secret. When the connection's flag says none is saved,

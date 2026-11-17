@@ -76,6 +76,9 @@ const (
 // DefaultSSHPort is used when SSHConfig.Port is 0.
 const DefaultSSHPort = 22
 
+// MaxSSHJumps is the most jump hosts a connection may go through.
+const MaxSSHJumps = 3
+
 // SSHConfig describes an SSH tunnel to the database host. Secrets (the SSH
 // password and the key passphrase) are kept in the SecretStore under
 // SecretKey(id, SecretSSHPassword / SecretSSHPassphrase), never here.
@@ -88,6 +91,31 @@ type SSHConfig struct {
 	AuthMethod string `json:"authMethod,omitempty"`
 	// KeyPath is the private key file for "key" ("~" is expanded).
 	KeyPath string `json:"keyPath,omitempty"`
+	// Jumps are jump hosts (at most MaxSSHJumps), in the order they are
+	// dialled: Jumps[0] from this machine, and the last one reaches Host,
+	// which reaches the database. Empty for a direct SSH connection.
+	Jumps []SSHHop `json:"jumps,omitempty"`
+}
+
+// SSHHop is one jump host. Its secrets are kept in the SecretStore under
+// SecretKey(connection id, JumpSecretPurpose(hop.ID, ...)), so they stay
+// with the hop when hops are reordered.
+type SSHHop struct {
+	// ID identifies the hop (and its secrets) within the connection. It is
+	// assigned by Store: an ID the saved connection does not have is
+	// replaced by a new one.
+	ID   string `json:"id,omitempty"`
+	Host string `json:"host,omitempty"`
+	Port int    `json:"port,omitempty"`
+	User string `json:"user,omitempty"`
+	// AuthMethod is "password", "key" or "agent".
+	AuthMethod string `json:"authMethod,omitempty"`
+	// KeyPath is the private key file for "key" ("~" is expanded).
+	KeyPath string `json:"keyPath,omitempty"`
+	// HasPassword and HasPassphrase report saved secrets for this hop
+	// (maintained by Store, like Connection.HasSSHPassword).
+	HasPassword   bool `json:"hasPassword"`
+	HasPassphrase bool `json:"hasPassphrase"`
 }
 
 // SSL modes (SSLConfig.Mode). See driver.TLSDisable etc. for their meaning.
@@ -229,7 +257,23 @@ func (c *Connection) Normalize() {
 		if c.SSH.Port == 0 {
 			c.SSH.Port = DefaultSSHPort
 		}
-		if !c.SSH.Enabled && c.SSH.Host == "" && c.SSH.User == "" && c.SSH.KeyPath == "" {
+		for i := range c.SSH.Jumps {
+			h := &c.SSH.Jumps[i]
+			h.ID = strings.TrimSpace(h.ID)
+			h.Host = strings.TrimSpace(h.Host)
+			h.User = strings.TrimSpace(h.User)
+			h.KeyPath = strings.TrimSpace(h.KeyPath)
+			if h.AuthMethod == "" {
+				h.AuthMethod = SSHAuthPassword
+			}
+			if h.Port == 0 {
+				h.Port = DefaultSSHPort
+			}
+		}
+		if len(c.SSH.Jumps) == 0 {
+			c.SSH.Jumps = nil
+		}
+		if !c.SSH.Enabled && c.SSH.Host == "" && c.SSH.User == "" && c.SSH.KeyPath == "" && len(c.SSH.Jumps) == 0 {
 			c.SSH = nil
 		}
 	}
@@ -296,6 +340,14 @@ func (c *Connection) validateSSH() error {
 	if s.Port < 1 || s.Port > 65535 {
 		return invalid("ssh.port", "SSH port must be between 1 and 65535")
 	}
+	if len(s.Jumps) > MaxSSHJumps {
+		return invalid("ssh.jumps", "at most %d jump hosts are supported", MaxSSHJumps)
+	}
+	for i, h := range s.Jumps {
+		if err := validateHop(i, h, s.Enabled); err != nil {
+			return err
+		}
+	}
 	if !s.Enabled {
 		return nil
 	}
@@ -306,6 +358,33 @@ func (c *Connection) validateSSH() error {
 		return invalid("ssh.user", "SSH user is required")
 	case s.AuthMethod == SSHAuthKey && s.KeyPath == "":
 		return invalid("ssh.keyPath", "SSH private key file is required")
+	}
+	return nil
+}
+
+// validateHop checks jump host i (0-based); like the SSH host, a disabled
+// tunnel keeps incomplete hops.
+func validateHop(i int, h SSHHop, enabled bool) error {
+	field := func(name string) string { return fmt.Sprintf("ssh.jumps.%d.%s", i, name) }
+	n := i + 1
+	switch h.AuthMethod {
+	case SSHAuthPassword, SSHAuthKey, SSHAuthAgent:
+	default:
+		return invalid(field("authMethod"), "jump host %d: unknown SSH authentication method %q", n, h.AuthMethod)
+	}
+	if h.Port < 1 || h.Port > 65535 {
+		return invalid(field("port"), "jump host %d: SSH port must be between 1 and 65535", n)
+	}
+	if !enabled {
+		return nil
+	}
+	switch {
+	case h.Host == "":
+		return invalid(field("host"), "jump host %d: host is required", n)
+	case h.User == "":
+		return invalid(field("user"), "jump host %d: user is required", n)
+	case h.AuthMethod == SSHAuthKey && h.KeyPath == "":
+		return invalid(field("keyPath"), "jump host %d: private key file is required", n)
 	}
 	return nil
 }
@@ -335,6 +414,9 @@ func (c Connection) clone() Connection {
 	}
 	if c.SSH != nil {
 		s := *c.SSH
+		if s.Jumps != nil {
+			s.Jumps = append([]SSHHop(nil), s.Jumps...)
+		}
 		c.SSH = &s
 	}
 	if c.SSL != nil {

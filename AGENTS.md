@@ -18,7 +18,7 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `main.go`, `app.go`, `wails.go` | App entry, Wails wiring (services, dialogs) |
 | `internal/services/` | Wails-bound services (the only Go API the frontend sees). Keep them thin; logic lives in the packages below |
 | `internal/conn/` | Session manager: open/close sessions, pools, TLS. Several sessions can be open at once |
-| `internal/sshtunnel/` | Connecting through an SSH bastion (host keys checked against the user's `known_hosts`, read-only, and Lontar's own) |
+| `internal/sshtunnel/` | Connecting through an SSH bastion, optionally via up to 3 jump hosts (host keys checked on every hop against the user's `known_hosts`, read-only, and Lontar's own) |
 | `internal/driver/` (`postgres/`, `mysql/`, `sqlite/`, `all/`) | Per-engine dialect (quoting, placeholders) and introspection (tables, columns, structure, DDL). `objects.go`: the optional `ObjectLister` (functions, procedures, sequences, types, triggers, events for the sidebar); `ObjectDDL` must resolve the UI's `ObjectRef` with `FindObject` before touching SQL |
 | `internal/query/` | Table browsing (`browse.go`), the SQL editor runtime (`editor.go`, `execute.go`), statement classification, single-table SELECT parsing (`source.go`) |
 | `internal/edits/` | Staged grid edits: validates a structured `ChangeSet` against introspected metadata and applies it in one transaction; `source.go` maps query results onto a table |
@@ -30,7 +30,7 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `internal/appstate/`, `window.go` | `state.json`: main window bounds (tracked in `window.go`, wired in `main.go`) and UI values the frontend keeps via `UIStateService` (`frontend/src/lib/uiState.ts`, `panelLayout.ts`) |
 | `internal/update/` | On-demand self-update from GitHub Releases: ed25519-signed `SHA256SUMS`, per-install replacement (AppImage, exe, .app) |
 | `internal/values/` | Cell value model shared by grid, edits and export |
-| `internal/testutil/`, `internal/sshtest/`, `internal/tlstest/` | Test helpers (containers, in-process SSH server, certificates) |
+| `internal/testutil/`, `internal/sshtest/`, `internal/tlstest/` | Test helpers (containers, in-process SSH servers that can be chained as jump hosts, certificates) |
 | `tools/` | Build helpers (`stamp`, `iconrender`, `calver`, `updatesign`) — a **separate Go module** |
 | `website/` | Marketing site (Astro, static): home and download pages. A **separate npm project**; download links come from the GitHub Releases API at runtime (`src/lib/releases.ts`, `src/scripts/download.ts`) with fallback links to the latest release |
 | `build/` | Packaging per platform (nfpm, NSIS, plists, icons) |

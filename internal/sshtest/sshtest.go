@@ -1,6 +1,9 @@
 // Package sshtest runs an in-process SSH server for tests: password and
 // public-key authentication, "direct-tcpip" forwarding (what an SSH tunnel
 // uses) and keepalive replies. It never reads ~/.ssh.
+//
+// Servers can be chained like jump hosts (StartChain): a client reaches the
+// next server through a direct-tcpip channel of the previous one.
 package sshtest
 
 import (
@@ -250,6 +253,61 @@ func sshString(b []byte) (string, []byte, bool) {
 		return "", nil, false
 	}
 	return string(b[4 : 4+n]), b[4+n:], true
+}
+
+// StartChain starts one server per Options (for a chain of jump hosts:
+// the first one is dialled directly, the others through direct-tcpip
+// channels of the one before). On error the servers already started are
+// closed. Call CloseAll when done.
+func StartChain(opts ...Options) ([]*Server, error) {
+	out := make([]*Server, 0, len(opts))
+	for _, o := range opts {
+		s, err := Start(o)
+		if err != nil {
+			CloseAll(out)
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+// CloseAll closes every server.
+func CloseAll(servers []*Server) {
+	for _, s := range servers {
+		_ = s.Close()
+	}
+}
+
+// Blackhole starts a TCP server on 127.0.0.1 that accepts connections and
+// never answers (a hung SSH server). It returns the address and a stop
+// function that also drops the held connections.
+func Blackhole() (string, func(), error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, err
+	}
+	var mu sync.Mutex
+	var held []net.Conn
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			held = append(held, c)
+			mu.Unlock()
+		}
+	}()
+	return ln.Addr().String(), func() {
+		_ = ln.Close()
+		mu.Lock()
+		defer mu.Unlock()
+		for _, c := range held {
+			_ = c.Close()
+		}
+	}, nil
 }
 
 // Echo starts a TCP echo server on 127.0.0.1 and returns its address and a

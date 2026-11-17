@@ -119,7 +119,7 @@ describe('ConnectionForm', () => {
 
   it('validateDraft covers SQLite and port edge cases', () => {
     const base = { name: 'n', kind: 'postgres' as const, host: 'h', port: '1', user: '', database: '', filePath: '', readOnly: false, createIfMissing: false, tag: 'none' as const, color: '', safeMode: 'off' as const,
-      sshEnabled: false, sshHost: '', sshPort: '22', sshUser: '', sshAuth: 'password' as const, sshKeyPath: '', sslMode: '' as const, sslCA: '', sslCert: '', sslKey: '', options: [] }
+      sshEnabled: false, sshHost: '', sshPort: '22', sshUser: '', sshAuth: 'password' as const, sshKeyPath: '', sshJumps: [], sslMode: '' as const, sslCA: '', sslCert: '', sslKey: '', options: [] }
     expect(validateDraft(base)).toEqual({})
     expect(validateDraft({ ...base, port: '65535' })).toEqual({})
     expect(validateDraft({ ...base, port: '0' }).port).toBeDefined()

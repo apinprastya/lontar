@@ -8,7 +8,9 @@ export {
 
 export type {
     Connection,
+    HopSecrets,
     SSHConfig,
+    SSHHop,
     SSLConfig,
     Secrets
 } from "./models.js";
