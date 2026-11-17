@@ -31,6 +31,7 @@
     "react-dom": "^18.2.0",
     "react-resizable-panels": "^4.21.0",
     "simple-icons": "^15.22.0",
+    "sql-formatter": "15.9.0",
     "zustand": "^5.1.0"
   },
   "devDependencies": {

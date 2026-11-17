@@ -38,6 +38,9 @@ func mainWindowOptions(saved appstate.Window, ok bool) application.WebviewWindow
 		},
 		BackgroundColour: application.NewRGB(24, 25, 30),
 		URL:              "/",
+		// Files dropped on elements marked data-file-drop-target (the
+		// workspace) are reported as WindowFilesDropped (see filedrop.go).
+		EnableFileDrop: true,
 	}
 	if !ok || !saved.Valid() {
 		return opts

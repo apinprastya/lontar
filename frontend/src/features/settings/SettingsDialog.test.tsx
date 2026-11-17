@@ -38,6 +38,8 @@ describe('SettingsDialog', () => {
     await user.click(screen.getByRole('checkbox', { name: 'Header row' }))
     await user.click(screen.getByRole('checkbox', { name: 'CRLF line endings' }))
     await user.click(screen.getByRole('checkbox', { name: 'UTF-8 BOM (Excel)' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Keyword case' }), 'lower')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Indent' }), '4')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(SettingsService.Save).toHaveBeenCalledWith({
       ...DEFAULT_SETTINGS,
@@ -47,6 +49,7 @@ describe('SettingsDialog', () => {
       editorMaxRows: 2000,
       confirmCloseDirtyQuery: true,
       csvExport: { delimiter: ';', header: false, quote: '"', null: 'custom', nullText: 'NULL', crlf: true, bom: true },
+      sqlFormat: { keywordCase: 'lower', indent: 4 },
     })
     expect(useSettings.getState().open).toBe(false)
     expect(useSettings.getState().settings.theme).toBe('light')
@@ -68,6 +71,17 @@ describe('SettingsDialog', () => {
     useSettings.setState({ open: true })
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(useSettings.getState().open).toBe(false)
+  })
+
+  it('shows the SQL format defaults for settings without them (older backend)', async () => {
+    const user = userEvent.setup()
+    const { sqlFormat: _omit, ...old } = DEFAULT_SETTINGS
+    useSettings.setState({ settings: old as typeof DEFAULT_SETTINGS })
+    render(<SettingsDialog />)
+    expect(screen.getByRole('combobox', { name: 'Keyword case' })).toHaveValue('upper')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Keyword case' }), 'preserve')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(SettingsService.Save).toHaveBeenCalledWith(expect.objectContaining({ sqlFormat: { keywordCase: 'preserve', indent: 2 } }))
   })
 
   it('closes and checks for updates', async () => {

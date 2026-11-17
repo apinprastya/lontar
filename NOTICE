@@ -7,3 +7,10 @@ The PostgreSQL, MySQL, MariaDB and SQLite logos shown in the application come
 from Simple Icons (https://simpleicons.org, CC0-1.0). They are trademarks of
 their respective owners and are used only to identify the database engine of
 a connection.
+
+The SQL editor's formatter is sql-formatter
+(https://github.com/sql-formatter-org/sql-formatter, MIT License; Copyright
+(c) 2016-2020 ZeroTurnaround LLC, 2020-2021 George Leslie-Waksman and other
+contributors, 2021-present inferrinizzard and other contributors). It uses
+nearley (https://github.com/kach/nearley, MIT License; Copyright (c)
+2014-2019 Kartik Chandra, Tim Radvan).

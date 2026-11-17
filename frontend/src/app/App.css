@@ -1382,6 +1382,35 @@ button.ws-conn-card:hover:not(:disabled) {
   animation: pulse 1s ease-in-out infinite;
 }
 
+/* A query tab with changes not saved to its .sql file. */
+.tab-dirty {
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* The Save button: a dot on the icon while the file has unsaved changes. */
+.save-icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.save-icon .dirty-dot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* .sql files dragged over the workspace (Wails adds the class). */
+.ws.file-drop-target-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
 @keyframes pulse {
   50% {
     opacity: 0.3;

@@ -129,6 +129,9 @@ statements you run, so it is marked "(guess)".
 | Mod+Enter | Run the selection, or the statement under the cursor (highlighted) |
 | Mod+Shift+Enter | Run the whole script |
 | Mod+Shift+E | Explain the selection, or the statement under the cursor (query plan) |
+| Mod+Shift+F | Format the selection, or the whole script (in the editor) |
+| Mod+Shift+O | Open a `.sql` file |
+| Mod+Shift+S | Save the tab to its `.sql` file (Save as for a new tab) |
 | Esc | Stop the running query |
 | Mod+F | Search in the editor (in a table tab it opens the filter bar) |
 | Ctrl+Space / typing | Autocomplete tables, columns, `alias.column` and keywords (see below) |
@@ -164,6 +167,42 @@ duration, rows and errors, but never passwords) is stored in `history.db`
 next to `connections.json`, with the newest 10,000 runs kept per connection. Open
 it with **History**: click an entry to insert it, double-click to open it in a
 new tab.
+
+### Formatting
+
+**Format** (toolbar, Mod+Shift+F in the editor, or the command palette)
+reformats the selection, or the whole script when nothing is selected, in the
+connection's dialect (PostgreSQL, MySQL, MariaDB or SQLite). Keyword case
+(UPPER, lower or as typed) and the indent (2 or 4 spaces) are set in
+Settings. The change is a single edit, so Mod+Z undoes it, and the cursor stays
+on the same token. Comments are kept. Scripts with a MySQL `DELIMITER`
+command, and SQL the formatter cannot parse, are left unchanged with a short
+message above the results. The formatter is
+[sql-formatter](https://github.com/sql-formatter-org/sql-formatter), loaded on
+first use.
+
+### Opening and saving SQL files
+
+**Open SQL file…** in the toolbar (or Mod+Shift+O) opens a `.sql` file in a
+query tab, named after the file. If the file is already open, its tab is
+shown; if the current tab is an empty, untitled query, the file goes there;
+otherwise it gets a new tab. You can also drag `.sql` files from the file
+manager onto the window: each one opens in a tab (other files are ignored).
+
+**Save** in the query toolbar (or Mod+Shift+S) writes the tab back to its
+file; a tab that has no file yet asks where to save it (the tab name is
+suggested, and `.sql` is added when you type no extension). **Save SQL file
+as…** in the command palette saves to another file. A ● on the tab and on
+the Save button marks changes that are not saved yet. Closing such a tab asks
+**Save**, **Don't save** or **Cancel**. Disconnecting keeps them: the tab,
+with its unsaved changes and its file, comes back with the connection's
+drafts.
+
+Files are written atomically (to a temporary file that then replaces the
+original) and keep their permissions and line endings (LF or CRLF). If the
+file was changed by another program since it was opened or saved, Save asks
+before overwriting it. Limits: UTF-8 text only (a byte order mark is accepted
+but not written back), up to 10 MiB; other files are refused with a message.
 
 ### Query plans
 
@@ -461,7 +500,10 @@ versioned. You can set:
 - **Rows per table page** (default 300) and the editor's default **max
   rows** (1,000). Both apply to new tabs.
 - **CSV export defaults.**
-- **Ask before closing a query tab with unrun changes.**
+- **Ask before closing a query tab with unrun changes.** A tab whose text is
+  saved in its `.sql` file is not asked about.
+- **SQL format:** keyword case (UPPER, lower or as typed) and indent (2 or 4
+  spaces) of **Format** in the SQL editor.
 
 The **Check for updates…** button in the dialog is described in "Updates".
 

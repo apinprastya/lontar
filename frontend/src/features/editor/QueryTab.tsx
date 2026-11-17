@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import ToolButton from '../../components/ToolButton'
-import { ExplainAnalyzeIcon, ExplainIcon, HistoryIcon, PlayAllIcon, PlayIcon, StopIcon } from '../../components/icons'
+import { ExplainAnalyzeIcon, ExplainIcon, FormatIcon, HistoryIcon, PlayAllIcon, PlayIcon, SaveFileIcon, StopIcon } from '../../components/icons'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { usePanelLayout } from '../../lib/panelLayout'
 import { shortcutLabel } from '../../lib/mod'
-import type { QueryTabState } from '../../stores/queryTabs'
+import { fileDirty, type QueryTabState } from '../../stores/queryTabs'
 import { useWorkspace } from '../../stores/workspace'
 import { editorApi, type EditorApi } from './api'
 import HistoryPanel from './HistoryPanel'
@@ -43,6 +43,9 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
   const run = shortcutLabel(platform, 'Enter')
   const runAll = shortcutLabel(platform, 'Enter', { shift: true })
   const explain = shortcutLabel(platform, 'E', { shift: true })
+  const format = shortcutLabel(platform, 'F', { shift: true })
+  const saveKey = shortcutLabel(platform, 'S', { shift: true })
+  const dirty = fileDirty(tab)
 
   const editorAndResults = (
     <Group orientation="vertical" className="query-split" {...splitLayout}>
@@ -63,6 +66,7 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
             return true
           }}
           onNeedColumns={(table) => void s.loadCompletionColumns(table)}
+          onFormat={() => void s.formatQuery(tab.id)}
         />
       </Panel>
       <Separator className="resize-handle resize-handle-h" />
@@ -103,6 +107,12 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
           disabled={tab.running || kind === 'sqlite'}
           onClick={() => void s.explainQuery(tab.id, true)}
         />
+        <ToolButton
+          label="Format"
+          title={`Format the selection or the whole script (${format})`}
+          icon={<FormatIcon />}
+          onClick={() => void s.formatQuery(tab.id)}
+        />
         <ToolButton label="Stop" title="Stop the running query (Esc)" icon={<StopIcon />} disabled={!tab.running} onClick={() => s.cancelQuery(tab.id)} />
         <span className="toolbar-sep" aria-hidden />
         <label className="toolbar-check" title="Run the remaining statements after one fails">
@@ -122,6 +132,22 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
         <TxIndicator tx={tab.tx} />
         {tab.running && <span className="muted">Running…</span>}
         <span className="spacer" />
+        <ToolButton
+          className={dirty ? 'save-dirty' : undefined}
+          label="Save"
+          title={
+            tab.filePath
+              ? `Save to ${tab.filePath}${dirty ? ' (unsaved changes)' : ''} (${saveKey})`
+              : `Save as a .sql file (${saveKey})`
+          }
+          icon={
+            <span className="save-icon">
+              <SaveFileIcon />
+              {dirty && <span className="dirty-dot" data-testid="save-dirty" aria-hidden />}
+            </span>
+          }
+          onClick={() => void s.saveSqlFile(tab.id)}
+        />
         <ToolButton label="History" title="Query history" icon={<HistoryIcon />} aria-pressed={historyOpen} onClick={() => s.toggleHistory()} />
       </div>
       <div className="query-body">

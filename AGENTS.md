@@ -24,6 +24,7 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `internal/edits/` | Staged grid edits: validates a structured `ChangeSet` against introspected metadata and applies it in one transaction; `source.go` maps query results onto a table |
 | `internal/sqlsplit/` | Client-side script splitting (quotes, comments, `$$`, `DELIMITER`, triggers) |
 | `internal/export/`, `internal/importer/` | CSV/JSON/SQL export, CSV import |
+| `internal/textfile/` | The SQL editor's `.sql` files: read (UTF-8, size limit, EOL), atomic save with a changed-on-disk check (`SQLFileService`) |
 | `internal/store/`, `internal/settings/`, `internal/history/`, `internal/migrate/` | Saved connections + secrets, settings, query history, data migration from the old `dbedit` name |
 | `internal/appstate/`, `window.go` | `state.json`: main window bounds (tracked in `window.go`, wired in `main.go`) and UI values the frontend keeps via `UIStateService` (`frontend/src/lib/uiState.ts`, `panelLayout.ts`) |
 | `internal/update/` | On-demand self-update from GitHub Releases: ed25519-signed `SHA256SUMS`, per-install replacement (AppImage, exe, .app) |
