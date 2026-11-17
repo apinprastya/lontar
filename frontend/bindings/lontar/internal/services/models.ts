@@ -21,6 +21,9 @@ import * as query$0 from "../query/models.js";
 import * as settings$0 from "../settings/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as sqlfile$0 from "../sqlfile/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as store$0 from "../store/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -132,6 +135,22 @@ export interface ImportResult {
 export interface Location {
     "database": string;
     "schema": string;
+}
+
+/**
+ * SQLRunResult is the outcome of RunFile: either NeedsConfirm (nothing
+ * ran) or Result.
+ */
+export interface SQLRunResult {
+    /**
+     * NeedsConfirm: the connection is in "confirm" safe mode and the file
+     * has writes; call again with confirmed. Writes counts them and
+     * WriteStatements lists the first ConfirmWrites.
+     */
+    "needsConfirm": boolean;
+    "writes": number;
+    "writeStatements": sqlfile$0.StatementInfo[] | null;
+    "result": sqlfile$0.Result | null;
 }
 
 /**

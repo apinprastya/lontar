@@ -379,8 +379,8 @@ Each connection has a safe mode, set in the connection form:
 | Mode | Effect |
 |---|---|
 | Off | No restrictions |
-| Confirm writes | The SQL editor shows the statements that write and asks before running them. Committing grid edits always opens the preview first. Choosing the Production tag suggests this mode. |
-| Read-only | The session is read-only in the database itself (PostgreSQL `default_transaction_read_only`, MySQL `transaction_read_only`, MariaDB `tx_read_only`, SQLite `mode=ro`). Grid editing is disabled and the editor's writes are rejected. |
+| Confirm writes | The SQL editor shows the statements that write and asks before running them. Committing grid edits always opens the preview first. Imports and Run SQL file ask first. Choosing the Production tag suggests this mode. |
+| Read-only | The session is read-only in the database itself (PostgreSQL `default_transaction_read_only`, MySQL `transaction_read_only`, MariaDB `tx_read_only`, SQLite `mode=ro`). Grid editing and importing are disabled, the editor's writes are rejected, and Run SQL file refuses files that write. |
 
 The active mode is shown next to the connection name and applies from the
 next connect. "Confirm" decides by each statement's leading keyword and
@@ -488,24 +488,83 @@ when complete. Cancelling, or an error, removes the temporary file and
 leaves any existing file untouched. Exported files are created readable
 only by you (mode 0600 on Linux/macOS).
 
-## CSV import
+## Importing CSV and JSON
 
-**Import…** on a table tab loads a CSV file into that table:
+**Import…** on a table tab loads a CSV, JSON or NDJSON file into that table:
 
-1. Choose the file and how to read it: delimiter, quote, header row, a NULL
-   marker such as `\N`, empty fields as NULL, and rows to skip. Files must
-   be UTF-8; a byte order mark is skipped.
-2. Check the preview (the first 50 rows) and the mapping. CSV columns are
-   matched to table columns by header name, ignoring case. You can map any
-   column to another one, or ignore it. Table columns without a mapping get
-   their default.
+1. Choose the file and its format. The format is detected (`.ndjson` and
+   `.jsonl` are NDJSON; `.csv`, `.tsv` and `.txt` are CSV; otherwise a file
+   starting with `[` is JSON and one starting with `{` is NDJSON) and can be
+   overridden. For CSV, choose how to read it: delimiter, quote, header row,
+   a NULL marker such as `\N`, empty fields as NULL, and rows to skip. Files
+   must be UTF-8; a byte order mark is skipped.
+   - **JSON** is an array of objects, read element by element (the file is
+     never loaded whole). **NDJSON** has one object per line; blank lines are
+     skipped.
+   - The columns are the keys of the first 50 records, in the order they
+     first appear. A key that only appears later is an error that names it.
+     A key missing from a record is NULL.
+   - Strings are used as they are, numbers as their exact text (no rounding),
+     `true`/`false` as booleans, `null` as NULL, and nested objects and
+     arrays as compact JSON text (for json, jsonb or text columns).
+2. Check the preview (the first 50 rows) and the mapping. Columns (CSV
+   header names or JSON keys) are matched to table columns by name, ignoring
+   case. You can map any column to another one, or ignore it. Table columns
+   without a mapping get their default.
 3. **Import.** Every row is inserted in one transaction, with bound
    parameters and the same type handling as grid edits. Binary columns take
-   hex. If any row fails, nothing is imported, and the error names the CSV
-   line, and the column when the database says which. Cancelling rolls
-   everything back too.
+   hex. If any row fails, nothing is imported, and the error names the CSV or
+   NDJSON line (or the JSON array element), and the column when the database
+   says which. Cancelling rolls everything back too.
 
 Read-only safe mode does not allow importing, and Confirm mode asks first.
+
+## Running SQL files
+
+**Run SQL file…** in the toolbar (or in the command palette) runs a `.sql`
+file or database dump on the connection, statement by statement. The file is
+streamed, so dumps of many gigabytes run without being loaded into memory.
+
+1. Choose the file. Lontar shows its size, which tool wrote it and how many
+   statements it has (counted exactly for files up to 8 MiB, estimated from
+   the first 8 MiB otherwise), and warns when the dump looks like it is for
+   another engine. Compressed files are refused: decompress them first.
+2. Choose what happens on errors:
+   - **Stop at the first error** (the default). What ran before it stays.
+   - **Run in one transaction.** An error or Cancel rolls everything back.
+     The file's own `BEGIN`/`COMMIT` statements are skipped. On MySQL and
+     MariaDB, DDL statements (`CREATE`, `DROP`, `ALTER`, …) commit
+     implicitly, so they cannot be rolled back.
+   - **Continue after errors.** Every statement runs and the failures are
+     listed at the end.
+3. Follow the progress (how much of the file was read, statements run, rows
+   copied) and cancel if needed. The result lists how many statements ran,
+   failed and were skipped, and the errors with their line, the start of the
+   statement and the database's message. Click an error to open the
+   statement in a new query tab. The sidebar and the editor's completion are
+   refreshed afterwards.
+
+Supported files:
+
+| Tool | Notes |
+|---|---|
+| `pg_dump` (plain format) | `COPY … FROM stdin` data blocks are sent with PostgreSQL's COPY protocol. pg_dump's `\restrict`/`\unrestrict` lines are skipped; other psql meta-commands (such as `\connect`) fail as errors. Custom, directory and tar formats need `pg_restore`. |
+| `mysqldump`, `mariadb-dump` | `DELIMITER` blocks (triggers, routines, events) and `/*!…*/` version comments work. `DEFINER` clauses need the matching privileges. |
+| `sqlite3 .dump` | Runs as written (it has its own transaction). |
+| Any other SQL script | Split with the same rules as the SQL editor. |
+
+The file runs on its own connection, which is closed afterwards, so the
+settings a dump changes (search path, foreign key checks, …) do not affect
+the rest of the session. A single statement may be at most 64 MiB (COPY data
+is not limited); a larger one stops the run with an error. `COPY … FROM
+stdin` only works on PostgreSQL; on MySQL and SQLite it is an ordinary
+statement and fails.
+
+Safe mode is enforced before anything runs: on a read-only connection a
+file with any write statement is refused (the file is read up to the first
+write), and on a Confirm connection the whole file is read first and the
+number of writes and the first 20 of them are shown; it runs after you
+confirm once.
 
 ## Command palette
 

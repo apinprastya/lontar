@@ -3,6 +3,8 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import { matchesShortcut } from '../../lib/mod'
 import ExportDialog from '../export/ExportDialog'
 import ImportWizard from '../import/ImportWizard'
+import RunSqlFileDialog from '../runsql/RunSqlFileDialog'
+import type { SqlRunApi } from '../runsql/api'
 import CommandPalette, { type PaletteConnection, type PaletteMode, type PaletteTable } from '../palette/CommandPalette'
 import HostKeyDialog from '../connections/HostKeyDialog'
 import { connectionSummary } from '../connections/types'
@@ -28,6 +30,7 @@ import {
   PanelRightIcon,
   RefreshIcon,
   RowPlusIcon,
+  RunFileIcon,
   SearchIcon,
   ShieldIcon,
   UnplugIcon,
@@ -54,6 +57,7 @@ export interface WorkspaceProps {
   editor?: EditorApi
   edits?: EditApi
   files?: SqlFileApi
+  sqlRun?: SqlRunApi
 }
 
 /** Event (Go filedrop.go) with the paths of .sql files dropped on the workspace. */
@@ -117,12 +121,14 @@ function WorkspaceView({
   store,
   editor,
   api,
+  sqlRun,
   storeOf,
 }: {
   platform?: string
   store: WorkspaceStore
   editor: EditorApi
   api: WorkspaceApi
+  sqlRun?: SqlRunApi
   /** The workspace store of another open session. */
   storeOf(sessionId: string): WorkspaceStore | undefined
 }) {
@@ -150,6 +156,7 @@ function WorkspaceView({
   const tabs = useWorkspace((s) => s.tabs)
   const exportRequest = useWorkspace((s) => s.exportRequest)
   const importRequest = useWorkspace((s) => s.importRequest)
+  const runSqlFileOpen = useWorkspace((s) => s.runSqlFileOpen)
   const closeConfirm = useWorkspace((s) => s.closeConfirm)
   const saveAsk = useWorkspace((s) => s.saveAsk)
   const fileConflict = useWorkspace((s) => s.fileConflict)
@@ -158,7 +165,7 @@ function WorkspaceView({
   const paletteTables = usePaletteTables(store, api, palette === 'tables')
   const objects = useWorkspace((s) => s.objects)
   // Overlays (palette, dialogs) own the keyboard while open.
-  const overlay = Boolean(palette || exportRequest || importRequest || closeConfirm || hostKey || closeSessionAsk || saveAsk || fileConflict)
+  const overlay = Boolean(palette || exportRequest || importRequest || runSqlFileOpen || closeConfirm || hostKey || closeSessionAsk || saveAsk || fileConflict)
   const overlayRef = useRef(overlay)
   overlayRef.current = overlay
   const openSwitcher = () => {
@@ -357,8 +364,19 @@ function WorkspaceView({
                 <ToolButton label="Export…" title="Export rows to CSV, JSON or SQL" icon={<ExportIcon />} onClick={() => runCommand('exportData', commandContext)} />
               )}
               {tableTab && commandAvailable('importCsv', store.getState()) && (
-                <ToolButton label="Import…" title="Import a CSV file into this table" icon={<ImportIcon />} onClick={() => runCommand('importCsv', commandContext)} />
+                <ToolButton
+                  label="Import…"
+                  title="Import a CSV or JSON file into this table"
+                  icon={<ImportIcon />}
+                  onClick={() => runCommand('importCsv', commandContext)}
+                />
               )}
+              <ToolButton
+                label="Run SQL file…"
+                title="Run a .sql file or dump (pg_dump, mysqldump, sqlite3 .dump)"
+                icon={<RunFileIcon />}
+                onClick={() => runCommand('runSqlFile', commandContext)}
+              />
               <span className="spacer" />
               <ToolButton
                 className="danger-tool"
@@ -479,6 +497,16 @@ function WorkspaceView({
           onImported={() => void store.getState().refresh()}
         />
       )}
+      {runSqlFileOpen && (
+        <RunSqlFileDialog
+          sessionId={session.id}
+          safeMode={safeMode}
+          api={sqlRun}
+          onClose={() => store.getState().requestRunSqlFile(false)}
+          onRan={() => void store.getState().refresh()}
+          onOpenStatement={(sql) => store.getState().newQueryTab(sql)}
+        />
+      )}
       {saveAsk && (
         <ConfirmDialog
           title={`Save changes to ${queryTitle(saveAsk) ?? 'this file'}?`}
@@ -518,7 +546,7 @@ function WorkspaceView({
  * Workspace for the open session: sidebar | table tabs | optional row
  * detail, with a status bar. Each session gets its own workspace store.
  */
-export default function Workspace({ platform, api = workspaceApi, editor = editorApi, edits = editApi, files = sqlFileApi }: WorkspaceProps) {
+export default function Workspace({ platform, api = workspaceApi, editor = editorApi, edits = editApi, files = sqlFileApi, sqlRun }: WorkspaceProps) {
   const session = useConnections((s) => s.session)
   // One store per open session: switching keeps each session's tabs,
   // results and staged edits. A store is disposed when its session closes.
@@ -558,7 +586,7 @@ export default function Workspace({ platform, api = workspaceApi, editor = edito
   if (!store || !session) return null
   return (
     <WorkspaceContext.Provider value={store}>
-      <WorkspaceView key={session.id} platform={platform} store={store} editor={editor} api={api} storeOf={(id) => stores.current.get(id)} />
+      <WorkspaceView key={session.id} platform={platform} store={store} editor={editor} api={api} sqlRun={sqlRun} storeOf={(id) => stores.current.get(id)} />
     </WorkspaceContext.Provider>
   )
 }

@@ -278,9 +278,12 @@ export interface WorkspaceState extends QueryState {
   /** The export dialog to show (table, query result or selection). */
   exportRequest: ExportSource | null
   requestExport(source: ExportSource | null): void
-  /** The CSV import wizard to show (target table). */
+  /** The CSV/JSON import wizard to show (target table). */
   importRequest: { schema: string; table: string } | null
   requestImport(target: { schema: string; table: string } | null): void
+  /** Whether the Run SQL file dialog is shown. */
+  runSqlFileOpen: boolean
+  requestRunSqlFile(open: boolean): void
   /** A query tab with unrun changes waiting for "close anyway" (setting). */
   closeConfirm: string | null
   /** Closes a tab; force skips the unrun-changes question. */
@@ -1091,6 +1094,10 @@ export function createWorkspaceStore(
       importRequest: null,
       requestImport(target) {
         set({ importRequest: target })
+      },
+      runSqlFileOpen: false,
+      requestRunSqlFile(open) {
+        set({ runSqlFileOpen: open })
       },
       closeConfirm: null,
 

@@ -73,6 +73,10 @@ func TestSplit(t *testing.T) {
 		{"pg begin transaction", []driver.Kind{pg}, "BEGIN; UPDATE t SET a = 1; COMMIT;", []string{"BEGIN", "UPDATE t SET a = 1", "COMMIT"}},
 		{"pg procedure without atomic", []driver.Kind{pg}, "CREATE PROCEDURE p() LANGUAGE sql AS 'SELECT 1'; CALL p()", []string{"CREATE PROCEDURE p() LANGUAGE sql AS 'SELECT 1'", "CALL p()"}},
 		{"pg backtick is plain", []driver.Kind{pg}, "SELECT `a;b`", []string{"SELECT `a", "b`"}},
+		{"pg meta commands", []driver.Kind{pg}, "\\restrict abc \r\n\nSELECT 1;\n  \\connect db\nSELECT 2", []string{"\\restrict abc", "SELECT 1", "\\connect db", "SELECT 2"}},
+		{"pg meta command at eof", []driver.Kind{pg}, "SELECT 1; \\", []string{"SELECT 1", "\\"}},
+		{"pg backslash inside statement", []driver.Kind{pg}, "SELECT 1 \\x\n;", []string{"SELECT 1 \\x"}},
+		{"backslash is plain elsewhere", []driver.Kind{my, lite}, "\\x; SELECT 1", []string{"\\x", "SELECT 1"}},
 		{"pg number then E", []driver.Kind{pg}, `SELECT 1e'\'; SELECT 2`, []string{`SELECT 1e'\'`, "SELECT 2"}},
 
 		// MySQL / MariaDB
@@ -150,8 +154,8 @@ func TestSplitOffsets(t *testing.T) {
 	script := "  SELECT 1 ;\n\nSELECT 2"
 	got := Split(driver.Postgres, script)
 	want := []Statement{
-		{Text: "SELECT 1", Start: 2, End: 10, DelimEnd: 12},
-		{Text: "SELECT 2", Start: 14, End: 22, DelimEnd: 22},
+		{Text: "SELECT 1", Start: 2, End: 10, DelimEnd: 12, Line: 1},
+		{Text: "SELECT 2", Start: 14, End: 22, DelimEnd: 22, Line: 3},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
@@ -201,6 +205,10 @@ func FuzzSplit(f *testing.F) {
 		"CREATE FUNCTION f() BEGIN ATOMIC SELECT 1; END;",
 		"SELECT 'ä;ö'; SELECT '\xff\xfe';",
 		"delimiter\t;;\nselect 1;;",
+		"COPY t (a) FROM stdin;\n1\n\\\\.\n\\.\nSELECT 1;",
+		"COPY t FROM STDIN;\r\n\\.\r\n",
+		"COPY t FROM stdin;\nunterminated",
+		"\\restrict k\nSELECT 1;\n\\unrestrict k\n",
 	} {
 		f.Add(s, 0)
 	}
@@ -223,6 +231,9 @@ func FuzzSplit(f *testing.F) {
 			if ok && (st.Start < 0 || st.End > len(script)) {
 				t.Fatalf("StatementAt out of range: %+v", st)
 			}
+			// The streaming scanner over random chunk sizes gives the
+			// same statements as Split.
+			checkEquivalent(t, k, script, int64(cursor))
 		}
 	})
 }

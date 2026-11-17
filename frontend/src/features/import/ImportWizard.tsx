@@ -4,7 +4,7 @@ import { onEvent } from '../../lib/events'
 import { newRequestId } from '../../stores/workspace'
 import { dialogApi } from '../connections/dialogApi'
 import type { SafeMode } from '../edits/types'
-import { filesApi, type FilesApi, type ImportFailure, type ImportMapping, type ImportOptions, type ImportPreview } from '../export/api'
+import { filesApi, type FilesApi, type ImportFailure, type ImportFormat, type ImportMapping, type ImportOptions, type ImportPreview } from '../export/api'
 import { DELIMITERS } from '../settings/SettingsDialog'
 
 export interface ImportWizardProps {
@@ -30,18 +30,44 @@ type Phase =
   | { s: 'failed'; preview: ImportPreview; failure: ImportFailure | null; message: string }
   | { s: 'done'; rows: number }
 
-const DEFAULT_OPTIONS: ImportOptions = { delimiter: ',', header: true, quote: '"', encoding: 'utf-8', nullMarker: '', emptyAsNull: false, skip: 0 }
+const DEFAULT_OPTIONS: ImportOptions = { format: '', delimiter: ',', header: true, quote: '"', encoding: 'utf-8', nullMarker: '', emptyAsNull: false, skip: 0 }
 
-/** CSV column index → target column ('' = ignored). */
+export const FORMAT_LABELS: Record<Exclude<ImportFormat, ''>, string> = {
+  csv: 'CSV',
+  json: 'JSON (array of objects)',
+  ndjson: 'NDJSON (one object per line)',
+}
+
+/**
+ * The format a path probably has, from its extension (the backend also
+ * looks at the first byte when the format is left on auto).
+ */
+export function guessFormat(path: string): Exclude<ImportFormat, ''> {
+  const ext = /\.([^./\\]+)$/.exec(path.trim().toLowerCase())?.[1] ?? ''
+  if (ext === 'ndjson' || ext === 'jsonl') return 'ndjson'
+  if (ext === 'json') return 'json'
+  return 'csv'
+}
+
+/** Where a failure is: "Line 7", "Element 3" (null when unknown). */
+export function failurePlace(f: ImportFailure): string | null {
+  if (f.element > 0) return `Element ${f.element}`
+  if (f.line > 0) return `Line ${f.line}`
+  return null
+}
+
+/** File column index → target column ('' = ignored). */
 export function mappingByColumn(preview: ImportPreview, mapping: ImportMapping[]): string[] {
   return preview.headers.map((_, i) => mapping.find((m) => m.source === i)?.column ?? '')
 }
 
 /**
- * CSV import into the current table: choose the file and how to read it,
- * check the preview (first 50 rows) and the column mapping (matched by
- * header name; remap or ignore columns), then import in one transaction.
- * A failing row rolls everything back and is reported with its line.
+ * CSV, JSON or NDJSON import into the current table: choose the file and
+ * how to read it (the format is detected and can be overridden; CSV options
+ * are only shown for CSV), check the preview (first 50 rows) and the column
+ * mapping (matched by header or key name; remap or ignore columns), then
+ * import in one transaction. A failing row rolls everything back and is
+ * reported with its line (or JSON array element).
  */
 export default function ImportWizard({
   sessionId,
@@ -51,7 +77,11 @@ export default function ImportWizard({
   onClose,
   onImported,
   api = filesApi,
-  pickFile = (t) => dialogApi.openFile(t, [{ displayName: 'CSV files (*.csv, *.tsv, *.txt)', pattern: '*.csv;*.tsv;*.txt' }, { displayName: 'All files', pattern: '*' }]),
+  pickFile = (t) =>
+    dialogApi.openFile(t, [
+      { displayName: 'Data files (*.csv, *.tsv, *.txt, *.json, *.ndjson, *.jsonl)', pattern: '*.csv;*.tsv;*.txt;*.json;*.ndjson;*.jsonl' },
+      { displayName: 'All files', pattern: '*' },
+    ]),
 }: ImportWizardProps) {
   const uid = useId()
   const [path, setPath] = useState('')
@@ -61,6 +91,7 @@ export default function ImportWizard({
   const [error, setError] = useState<string | null>(null)
   const jobRef = useRef<string | null>(null)
   const readOnly = safeMode === 'readonly'
+  const format = opts.format || guessFormat(path)
 
   useEffect(
     () =>
@@ -84,13 +115,15 @@ export default function ImportWizard({
 
   async function loadPreview() {
     if (!path.trim()) {
-      setError('Choose a CSV file.')
+      setError('Choose a file.')
       return
     }
     setError(null)
     setPhase({ s: 'previewing' })
     try {
       const preview = await api.previewImport(sessionId, path.trim(), opts, schema, table)
+      // Keep what was read (the detected format) for Back and the import.
+      setOpts((o) => ({ ...o, format: preview.format }))
       setTargets(mappingByColumn(preview, preview.mapping))
       setPhase({ s: 'map', preview })
     } catch (err) {
@@ -110,7 +143,12 @@ export default function ImportWizard({
     jobRef.current = jobId
     setPhase({ s: 'running', preview, jobId, rows: 0 })
     try {
-      const res = await api.runImport(jobId, sessionId, { path: path.trim(), options: opts, schema, table, mapping: mapping(), batchSize: 500 }, confirmed)
+      const res = await api.runImport(
+        jobId,
+        sessionId,
+        { path: path.trim(), options: { ...opts, format: preview.format }, schema, table, mapping: mapping(), batchSize: 500 },
+        confirmed,
+      )
       if (res.needsConfirm) setPhase({ s: 'confirm', preview })
       else if (res.ok) {
         setPhase({ s: 'done', rows: res.rows })
@@ -143,7 +181,7 @@ export default function ImportWizard({
         }}
       >
         <h2 id={id('title')}>
-          Import CSV into {schema ? `${schema}.` : ''}
+          Import into {schema ? `${schema}.` : ''}
           {table}
         </h2>
         {readOnly && (
@@ -161,41 +199,62 @@ export default function ImportWizard({
                 Browse…
               </button>
             </div>
-            <label htmlFor={id('delim')}>Delimiter</label>
-            <select id={id('delim')} value={opts.delimiter} onChange={(e) => set('delimiter', e.target.value)}>
-              {DELIMITERS.map((d) => (
-                <option key={d.label} value={d.value}>
-                  {d.label}
+            <label htmlFor={id('format')}>Format</label>
+            <select id={id('format')} value={opts.format} onChange={(e) => set('format', e.target.value as ImportFormat)}>
+              <option value="">Auto-detect ({FORMAT_LABELS[guessFormat(path)]})</option>
+              {(Object.keys(FORMAT_LABELS) as (keyof typeof FORMAT_LABELS)[]).map((f) => (
+                <option key={f} value={f}>
+                  {FORMAT_LABELS[f]}
                 </option>
               ))}
             </select>
-            <label htmlFor={id('quote')}>Quote</label>
-            <select id={id('quote')} value={opts.quote} onChange={(e) => set('quote', e.target.value)}>
-              <option value={'"'}>Double quote (")</option>
-              <option value="'">Single quote (')</option>
-            </select>
-            <label htmlFor={id('null')}>NULL marker</label>
-            <input id={id('null')} className="mono" placeholder="none (e.g. \N or NULL)" value={opts.nullMarker} onChange={(e) => set('nullMarker', e.target.value)} />
-            <label htmlFor={id('skip')}>Rows to skip</label>
-            <input id={id('skip')} type="number" min={0} value={opts.skip} onChange={(e) => set('skip', Math.max(0, Number(e.target.value) || 0))} />
-            <span />
-            <div className="checks">
-              <label>
-                <input type="checkbox" checked={opts.header} onChange={(e) => set('header', e.target.checked)} /> First row is a header
-              </label>
-              <label>
-                <input type="checkbox" checked={opts.emptyAsNull} onChange={(e) => set('emptyAsNull', e.target.checked)} /> Empty fields are NULL
-              </label>
-              <span className="hint">UTF-8 only (a byte order mark is skipped).</span>
-            </div>
+            {format === 'csv' ? (
+              <>
+                <label htmlFor={id('delim')}>Delimiter</label>
+                <select id={id('delim')} value={opts.delimiter} onChange={(e) => set('delimiter', e.target.value)}>
+                  {DELIMITERS.map((d) => (
+                    <option key={d.label} value={d.value}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+                <label htmlFor={id('quote')}>Quote</label>
+                <select id={id('quote')} value={opts.quote} onChange={(e) => set('quote', e.target.value)}>
+                  <option value={'"'}>Double quote (")</option>
+                  <option value="'">Single quote (')</option>
+                </select>
+                <label htmlFor={id('null')}>NULL marker</label>
+                <input id={id('null')} className="mono" placeholder="none (e.g. \N or NULL)" value={opts.nullMarker} onChange={(e) => set('nullMarker', e.target.value)} />
+                <label htmlFor={id('skip')}>Rows to skip</label>
+                <input id={id('skip')} type="number" min={0} value={opts.skip} onChange={(e) => set('skip', Math.max(0, Number(e.target.value) || 0))} />
+                <span />
+                <div className="checks">
+                  <label>
+                    <input type="checkbox" checked={opts.header} onChange={(e) => set('header', e.target.checked)} /> First row is a header
+                  </label>
+                  <label>
+                    <input type="checkbox" checked={opts.emptyAsNull} onChange={(e) => set('emptyAsNull', e.target.checked)} /> Empty fields are NULL
+                  </label>
+                  <span className="hint">UTF-8 only (a byte order mark is skipped).</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <span />
+                <p className="hint">
+                  {format === 'json' ? 'An array of objects' : 'One object per line'}; the keys of the first 50 records become the columns. Numbers keep
+                  their exact text, nested objects and arrays become JSON text, null is NULL. UTF-8 only.
+                </p>
+              </>
+            )}
           </div>
         )}
 
         {preview && (
           <>
             <p className="hint">
-              Map each CSV column to a column of {table}. Columns matched by header name are pre-selected; unmapped table columns get their
-              default. Showing the first {preview.rows.length} rows.
+              {FORMAT_LABELS[preview.format]}: map each {preview.format === 'csv' ? 'column' : 'key'} to a column of {table}. Matches by name are
+              pre-selected; unmapped table columns get their default. Showing the first {preview.rows.length} rows.
             </p>
             <div className="import-preview">
               <table className="structure-table">
@@ -251,9 +310,9 @@ export default function ImportWizard({
           {phase.s === 'done' && <span className="ok">Imported {phase.rows.toLocaleString()} rows.</span>}
           {phase.s === 'failed' && (
             <div className="error" role="alert">
-              {phase.failure && phase.failure.line > 0 && (
+              {phase.failure && failurePlace(phase.failure) && (
                 <strong>
-                  Line {phase.failure.line}
+                  {failurePlace(phase.failure)}
                   {phase.failure.column ? `, column ${phase.failure.column}` : ''}:{' '}
                 </strong>
               )}

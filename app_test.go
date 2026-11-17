@@ -22,11 +22,14 @@ func TestAppOptions(t *testing.T) {
 	if opts.Name != "Lontar" {
 		t.Fatalf("Name = %q, want Lontar", opts.Name)
 	}
-	if len(opts.Services) != 14 {
-		t.Fatalf("expected 14 bound services, got %d", len(opts.Services))
+	if len(opts.Services) != 15 {
+		t.Fatalf("expected 15 bound services, got %d", len(opts.Services))
 	}
 	if opts.Services[13].Instance() != b.sqlFiles || b.sqlFiles == nil {
 		t.Fatal("SQLFileService not registered")
+	}
+	if opts.Services[14].Instance() != b.sqlRun || b.sqlRun == nil {
+		t.Fatal("SQLRunService not registered")
 	}
 	if opts.Services[11].Instance() != b.update {
 		t.Fatal("UpdateService not registered")

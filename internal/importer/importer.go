@@ -1,4 +1,14 @@
-// Package importer loads CSV files into an existing table.
+// Package importer loads CSV, JSON and NDJSON files into an existing
+// table. Every format is a source of records (see source) that shares the
+// preview, the column mapping, batching, the single transaction and
+// RowError.
+//
+// JSON is an array of objects, streamed element by element; NDJSON holds
+// one object per line (blank lines are skipped). The columns are the keys
+// of the first PreviewRows records in first-seen order; a key that only
+// appears later is an error naming it. Strings are used as they are,
+// numbers as their literal text, booleans as true/false, null as NULL and
+// nested objects and arrays as compact JSON text.
 //
 // Parsing uses encoding/csv. The quote character can be changed: since
 // encoding/csv only knows '"', the input bytes of the chosen quote
@@ -26,6 +36,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -39,8 +50,19 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+// Formats.
+const (
+	FormatCSV    = "csv"
+	FormatJSON   = "json"
+	FormatNDJSON = "ndjson"
+)
+
 // Options controls parsing.
 type Options struct {
+	// Format is FormatCSV, FormatJSON or FormatNDJSON; empty detects it
+	// from the file name and its first byte (see DetectFormat). The other
+	// options are CSV-only.
+	Format string `json:"format"`
 	// Delimiter is one character (default ","; "\t" for TSV).
 	Delimiter string `json:"delimiter"`
 	// Header: the first record (after Skip) holds column names.
@@ -73,11 +95,14 @@ type Mapping struct {
 	Column string `json:"column"`
 }
 
-// RowError is an import failure at a CSV line. Nothing was imported.
+// RowError is an import failure at a record. Nothing was imported.
 type RowError struct {
 	// Line is the 1-based line in the file where the record starts (0
-	// when unknown).
+	// when unknown or when Element is set).
 	Line int `json:"line"`
+	// Element is the 1-based element of a JSON array (0 for CSV and
+	// NDJSON, which have lines).
+	Element int `json:"element"`
 	// Column is the target column, when known.
 	Column  string `json:"column"`
 	Message string `json:"message"`
@@ -86,6 +111,9 @@ type RowError struct {
 
 func (e *RowError) Error() string {
 	where := "line " + strconv.Itoa(e.Line)
+	if e.Element > 0 {
+		where = "element " + strconv.Itoa(e.Element)
+	}
 	if e.Column != "" {
 		where += ", column " + e.Column
 	}
@@ -94,8 +122,23 @@ func (e *RowError) Error() string {
 
 func (e *RowError) Unwrap() error { return e.Err }
 
+// source is a stream of records: CSV (reader) or JSON (jsonSource).
+type source interface {
+	// start skips what precedes the data and returns the column names
+	// (nil when there are none).
+	start() ([]string, error)
+	// next returns the next record's fields (nil for NULL) and its
+	// position (line, or element when elements is set); io.EOF at the end.
+	next() ([]*string, int, error)
+	// width is the number of fields of the widest record seen so far.
+	width() int
+	// elements reports positions that are JSON array elements.
+	elements() bool
+}
+
 // reader parses a CSV stream with opts.
 type reader struct {
+	opts  Options
 	csv   *csv.Reader
 	quote byte // swapped with '"' when not '"'
 	null  string
@@ -160,7 +203,7 @@ func newReader(r io.Reader, o Options) (*reader, error) {
 		_, _ = br.Discard(3)
 	}
 	var in io.Reader = br
-	rd := &reader{quote: '"', null: o.NullMarker, empty: o.EmptyAsNull}
+	rd := &reader{opts: o, quote: '"', null: o.NullMarker, empty: o.EmptyAsNull}
 	if quote != '"' {
 		in = swapReader{r: br, a: quote, b: '"'}
 		rd.quote = quote
@@ -270,8 +313,12 @@ func swapBack(s string, q byte) string {
 	return string(b)
 }
 
+func (r *reader) width() int     { return r.cols }
+func (r *reader) elements() bool { return false }
+
 // start skips records and reads the header.
-func (r *reader) start(o Options) ([]string, error) {
+func (r *reader) start() ([]string, error) {
+	o := r.opts
 	for i := 0; i < o.Skip; i++ {
 		if _, _, err := r.next(); err != nil {
 			if errors.Is(err, io.EOF) {
@@ -312,7 +359,11 @@ type TargetColumn struct {
 
 // Preview is the start of a file and a suggested mapping.
 type Preview struct {
-	// Headers names every CSV field: the header row, or "Column 1", ….
+	// Format is the format the file was read as (detected when the
+	// options left it empty).
+	Format string `json:"format"`
+	// Headers names every field: the CSV header row or the JSON keys, or
+	// "Column 1", ….
 	Headers []string `json:"headers"`
 	// Rows are up to PreviewRows data rows (null = NULL).
 	Rows    [][]*string    `json:"rows"`
@@ -336,30 +387,84 @@ func PreviewFile(ctx context.Context, db *sql.DB, e Engine, path string, o Optio
 		return nil, err
 	}
 	defer f.Close()
-	return preview(f, o, t)
+	return preview(f, path, o, t)
 }
 
-func preview(in io.Reader, o Options, t edits.Table) (*Preview, error) {
-	r, err := newReader(in, o)
+// openSource resolves the format (detecting it when o.Format is empty) and
+// returns the source over in.
+func openSource(in io.Reader, name string, o Options) (source, string, error) {
+	br := bufio.NewReaderSize(in, 64<<10)
+	format := strings.ToLower(o.Format)
+	if format == "" {
+		head, _ := br.Peek(512)
+		format = DetectFormat(name, head)
+	}
+	switch format {
+	case FormatCSV:
+		r, err := newReader(br, o)
+		return r, format, err
+	case FormatJSON, FormatNDJSON:
+		return newJSONSource(br, format == FormatNDJSON), format, nil
+	}
+	return nil, "", fmt.Errorf("%w: unknown format %q (use csv, json or ndjson)", ErrOptions, o.Format)
+}
+
+// DetectFormat guesses the format of a file from its name and its first
+// bytes: .ndjson/.jsonl are NDJSON and .csv/.tsv/.txt are CSV; otherwise a
+// file starting with "[" is JSON, one starting with "{" is NDJSON, other
+// .json files are JSON and anything else is CSV.
+func DetectFormat(name string, head []byte) string {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".ndjson", ".jsonl":
+		return FormatNDJSON
+	case ".csv", ".tsv", ".txt":
+		return FormatCSV
+	}
+	head = bytes.TrimPrefix(head, []byte{0xef, 0xbb, 0xbf})
+	head = bytes.TrimLeft(head, " \t\r\n")
+	switch {
+	case len(head) > 0 && head[0] == '[':
+		return FormatJSON
+	case len(head) > 0 && head[0] == '{':
+		return FormatNDJSON
+	case ext == ".json":
+		return FormatJSON
+	}
+	return FormatCSV
+}
+
+// atElement moves a RowError's position to Element for JSON array
+// sources.
+func atElement(err error, src source) error {
+	var re *RowError
+	if src.elements() && errors.As(err, &re) && re.Element == 0 {
+		re.Element, re.Line = re.Line, 0
+	}
+	return err
+}
+
+func preview(in io.Reader, name string, o Options, t edits.Table) (*Preview, error) {
+	r, format, err := openSource(in, name, o)
 	if err != nil {
 		return nil, err
 	}
-	header, err := r.start(o)
+	header, err := r.start()
 	if err != nil {
-		return nil, err
+		return nil, atElement(err, r)
 	}
-	p := &Preview{Rows: [][]*string{}, Mapping: []Mapping{}}
+	p := &Preview{Format: format, Rows: [][]*string{}, Mapping: []Mapping{}}
 	for len(p.Rows) < PreviewRows {
 		rec, _, err := r.next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, atElement(err, r)
 		}
 		p.Rows = append(p.Rows, rec)
 	}
-	width := max(len(header), r.cols)
+	width := max(len(header), r.width())
 	p.Headers = make([]string, width)
 	for i := range p.Headers {
 		if i < len(header) && header[i] != "" {
@@ -428,7 +533,7 @@ type plan struct {
 
 func makePlan(t edits.Table, m []Mapping) (*plan, error) {
 	if len(m) == 0 {
-		return nil, fmt.Errorf("%w: map at least one CSV column to a table column", ErrMapping)
+		return nil, fmt.Errorf("%w: map at least one file column to a table column", ErrMapping)
 	}
 	p := &plan{t: t}
 	seen := map[string]bool{}
@@ -440,7 +545,7 @@ func makePlan(t edits.Table, m []Mapping) (*plan, error) {
 		case seen[mp.Column]:
 			return nil, fmt.Errorf("%w: column %q is mapped twice", ErrMapping, mp.Column)
 		case mp.Source < 0:
-			return nil, fmt.Errorf("%w: invalid CSV column %d", ErrMapping, mp.Source)
+			return nil, fmt.Errorf("%w: invalid file column %d", ErrMapping, mp.Source)
 		}
 		seen[mp.Column] = true
 		c := t.Columns[i]
@@ -520,7 +625,7 @@ func (p *plan) insertSQL(d driver.Dialect, n int) string {
 }
 
 // Run imports req.Path into the table in one transaction.
-func Run(ctx context.Context, db *sql.DB, e Engine, req Request, ro RunOptions, progress Progress) (*Result, error) {
+func Run(ctx context.Context, db *sql.DB, e Engine, req Request, ro RunOptions, progress Progress) (_ *Result, err error) {
 	if ro.ReadOnly {
 		return nil, ErrReadOnly
 	}
@@ -537,11 +642,12 @@ func Run(ctx context.Context, db *sql.DB, e Engine, req Request, ro RunOptions, 
 		return nil, err
 	}
 	defer f.Close()
-	r, err := newReader(f, req.Options)
+	r, _, err := openSource(f, req.Path, req.Options)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := r.start(req.Options); err != nil {
+	defer func() { err = atElement(err, r) }()
+	if _, err := r.start(); err != nil {
 		return nil, err
 	}
 	batch := req.BatchSize

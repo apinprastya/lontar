@@ -13,9 +13,10 @@ vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/m
 
 import { ImportService, resetBindings } from '../../test/mockBindings'
 import { filesApi, type FilesApi, type ImportPreview, type ImportResult } from '../export/api'
-import ImportWizard, { IMPORT_PROGRESS_EVENT, mappingByColumn, type ImportWizardProps } from './ImportWizard'
+import ImportWizard, { IMPORT_PROGRESS_EVENT, failurePlace, guessFormat, mappingByColumn, type ImportWizardProps } from './ImportWizard'
 
 const preview: ImportPreview = {
+  format: 'csv',
   headers: ['ID', 'name', 'extra'],
   rows: [
     ['1', 'alice', 'x'],
@@ -73,7 +74,7 @@ describe('ImportWizard', () => {
     const api = fakeFiles({ runImport: vi.fn(() => new Promise<ImportResult>((r) => (finish = r))) })
     const { props, user } = setup({ api })
     await user.click(screen.getByRole('button', { name: 'Preview' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Choose a CSV file.')
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a file.')
     await user.click(screen.getByRole('button', { name: 'Browse…' }))
     expect(screen.getByLabelText('File')).toHaveValue('/data/users.csv')
     await user.selectOptions(screen.getByLabelText('Delimiter'), ';')
@@ -83,7 +84,7 @@ describe('ImportWizard', () => {
     await user.type(screen.getByLabelText('Rows to skip'), '2')
     await user.click(screen.getByRole('checkbox', { name: 'Empty fields are NULL' }))
     await user.click(screen.getByRole('button', { name: 'Preview' }))
-    expect(api.previewImport).toHaveBeenCalledWith('s1', '/data/users.csv', { delimiter: ';', header: true, quote: "'", encoding: 'utf-8', nullMarker: '\\N', emptyAsNull: true, skip: 2 }, 'public', 'users')
+    expect(api.previewImport).toHaveBeenCalledWith('s1', '/data/users.csv', { format: '', delimiter: ';', header: true, quote: "'", encoding: 'utf-8', nullMarker: '\\N', emptyAsNull: true, skip: 2 }, 'public', 'users')
 
     // Auto-mapped by name; the unmatched column is ignored. NULLs are shown.
     expect(await screen.findByLabelText('Target for ID')).toHaveValue('id')
@@ -157,7 +158,9 @@ describe('ImportWizard', () => {
   it('maps by column and wraps the bindings', async () => {
     expect(mappingByColumn(preview, [{ source: 2, column: 'id' }])).toEqual(['', '', 'id'])
     ImportService.Preview.mockResolvedValue({ headers: null, rows: null, columns: null, mapping: null })
-    expect(await filesApi.previewImport('s', '/p', {} as never, 'a', 'b')).toEqual({ headers: [], rows: [], columns: [], mapping: [] })
+    expect(await filesApi.previewImport('s', '/p', {} as never, 'a', 'b')).toEqual({ format: 'csv', headers: [], rows: [], columns: [], mapping: [] })
+    ImportService.Preview.mockResolvedValue({ format: 'ndjson', headers: ['a'], rows: [], columns: [], mapping: [] })
+    expect((await filesApi.previewImport('s', '/p', {} as never, 'a', 'b')).format).toBe('ndjson')
     ImportService.Preview.mockResolvedValue(null)
     await expect(filesApi.previewImport('s', '/p', {} as never, 'a', 'b')).rejects.toThrow('empty response')
     ImportService.Import.mockResolvedValue({ ok: true, rows: 1 })
@@ -166,5 +169,49 @@ describe('ImportWizard', () => {
     await expect(filesApi.runImport('j', 's', {} as never, false)).rejects.toThrow('empty response')
     await filesApi.cancelImport('j')
     expect(ImportService.Cancel).toHaveBeenCalledWith('j')
+  })
+
+  it('detects the format, hides CSV options for JSON and reports elements', async () => {
+    const jsonPreview: ImportPreview = { ...preview, format: 'json', headers: ['id', 'name', 'meta'] }
+    const runImport = vi.fn().mockResolvedValueOnce({ ok: false, rows: 0, needsConfirm: false, failure: { line: 0, element: 3, column: 'id', message: 'duplicate key' } })
+    const api = fakeFiles({ previewImport: vi.fn(async () => jsonPreview), runImport })
+    const { user } = setup({ api, pickFile: vi.fn(async () => '/data/users.json') })
+    const format = screen.getByLabelText('Format')
+    expect(format).toHaveValue('')
+    expect(screen.getByRole('option', { name: 'Auto-detect (CSV)' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Delimiter')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Browse…' }))
+    // Auto-detect follows the extension: the CSV options are hidden.
+    expect(screen.getByRole('option', { name: 'Auto-detect (JSON (array of objects))' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Delimiter')).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'First row is a header' })).not.toBeInTheDocument()
+    expect(screen.getByText(/An array of objects/)).toBeInTheDocument()
+    // Override: NDJSON, then CSV brings the options back.
+    await user.selectOptions(format, 'ndjson')
+    expect(screen.getByText(/One object per line/)).toBeInTheDocument()
+    await user.selectOptions(format, 'csv')
+    expect(screen.getByLabelText('Delimiter')).toBeInTheDocument()
+    await user.selectOptions(format, '')
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(api.previewImport).toHaveBeenCalledWith('s1', '/data/users.json', expect.objectContaining({ format: '' }), 'public', 'users')
+    expect(await screen.findByText(/JSON \(array of objects\): map each key/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Import' }))
+    expect(runImport).toHaveBeenCalledWith(expect.any(String), 's1', expect.objectContaining({ options: expect.objectContaining({ format: 'json' }) }), false)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Element 3, column id: duplicate key')
+    // Back keeps the detected format.
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByLabelText('Format')).toHaveValue('json')
+  })
+
+  it('guesses formats and names failure places', () => {
+    expect(guessFormat('/a/b.JSON')).toBe('json')
+    expect(guessFormat('x.ndjson')).toBe('ndjson')
+    expect(guessFormat('x.jsonl ')).toBe('ndjson')
+    expect(guessFormat('x.tsv')).toBe('csv')
+    expect(guessFormat('/dir.json/file')).toBe('csv')
+    expect(guessFormat('')).toBe('csv')
+    expect(failurePlace({ line: 4, element: 0, column: '', message: '' })).toBe('Line 4')
+    expect(failurePlace({ line: 0, element: 2, column: '', message: '' })).toBe('Element 2')
+    expect(failurePlace({ line: 0, element: 0, column: '', message: '' })).toBeNull()
   })
 })
