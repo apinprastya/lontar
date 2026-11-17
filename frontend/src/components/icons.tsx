@@ -169,6 +169,17 @@ export function ImportIcon(p: IconProps) {
   )
 }
 
+/** Run SQL file: a page with a play triangle. */
+export function RunFileIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M9.5 1.5H4A1.5 1.5 0 0 0 2.5 3v10A1.5 1.5 0 0 0 4 14.5h3" {...stroke} />
+      <path d="M9.5 1.5l3 3V7" {...stroke} />
+      <path d="M10 9.5v5l4-2.5z" {...stroke} />
+    </Svg>
+  )
+}
+
 /** Disconnect: an unplugged cable. */
 export function UnplugIcon(p: IconProps) {
   return (

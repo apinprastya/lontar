@@ -52,6 +52,7 @@ const ACTIONS: Record<string, (ctx: CommandContext) => void> = {
     const t = importTargetFor(ctx.store.getState())
     if (t) ctx.store.getState().requestImport(t)
   },
+  runSqlFile: (ctx) => ctx.store.getState().requestRunSqlFile(true),
   toggleTheme: () => {
     const st = useSettings.getState()
     const next = resolveTheme(st.settings.theme, st.systemDark) === 'dark' ? 'light' : 'dark'

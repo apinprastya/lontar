@@ -176,13 +176,61 @@ describe('Workspace M6: palette, export, import, settings', () => {
     expect(screen.getByRole('heading', { name: 'Export users' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     await user.click(screen.getByRole('button', { name: 'Import…' }))
-    expect(screen.getByRole('heading', { name: 'Import CSV into public.users' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Import into public.users' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     // Settings via Mod+, is handled by App; via the palette here.
     key('P', { shiftKey: true })
     await user.keyboard('settings{Enter}')
     expect(useSettings.getState().open).toBe(true)
+  })
+
+  it('runs a SQL file from the toolbar and the palette, refreshes and opens failed statements', async () => {
+    const user = userEvent.setup()
+    const info = { path: '/d/dump.sql', name: 'dump.sql', size: 100, dumpType: 'sql', hasCopy: false, statements: 3, exact: true, warning: '' }
+    const sqlRun = {
+      pickAndInspect: vi.fn(async () => info),
+      inspect: vi.fn(async () => info),
+      runFile: vi.fn(async () => ({
+        needsConfirm: false,
+        writes: 0,
+        writeStatements: [],
+        result: {
+          run: 2,
+          failed: 1,
+          skipped: 0,
+          rowsCopied: 0,
+          errors: [{ line: 3, preview: 'DROP TABLE nope', message: 'no such table', sql: 'DROP TABLE nope' }],
+          cancelled: false,
+          stopped: true,
+          rolledBack: false,
+          durationMs: 10,
+        },
+      })),
+      cancel: vi.fn(async () => true),
+    }
+    render(<Workspace api={api} platform="linux" editor={fakeEditorApi()} sqlRun={sqlRun} />)
+    await screen.findByRole('button', { name: /^users/ })
+    await user.click(screen.getByRole('button', { name: 'Run SQL file…' }))
+    expect(screen.getByRole('dialog', { name: 'Run SQL file' })).toBeInTheDocument()
+    // The dialog owns the keyboard: Mod+T does not open a tab behind it.
+    key('t')
+    expect(screen.queryByRole('tab', { name: /Query 1/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Run SQL file' })).not.toBeInTheDocument()
+
+    key('P', { shiftKey: true })
+    await user.keyboard('run sql file{Enter}')
+    expect(await screen.findByRole('dialog', { name: 'Run SQL file' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Browse…' }))
+    const listed = api.listTables.mock.calls.length
+    await user.click(await screen.findByRole('button', { name: 'Run' }))
+    expect(await within(screen.getByRole('dialog', { name: 'Run SQL file' })).findByRole('status')).toHaveTextContent('Stopped at an error')
+    // The schema and the table list are reloaded.
+    await waitFor(() => expect(api.listTables.mock.calls.length).toBeGreaterThan(listed))
+    await user.click(within(screen.getByRole('list', { name: 'Errors' })).getByRole('button'))
+    expect(screen.queryByRole('dialog', { name: 'Run SQL file' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /Query 1/ })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('asks before closing a query tab with unrun changes (setting)', async () => {

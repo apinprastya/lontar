@@ -63,6 +63,7 @@ type backend struct {
 	update      *services.UpdateService
 	uiState     *services.UIStateService
 	sqlFiles    *services.SQLFileService
+	sqlRun      *services.SQLRunService
 
 	// state is state.json: the window bounds (used by main) and UI values.
 	state *appstate.Store
@@ -146,6 +147,7 @@ func newBackend(configDir string) backend {
 		update:      newUpdateService(events),
 		uiState:     services.NewUIStateService(state),
 		sqlFiles:    services.NewSQLFileService(WailsDialogs{}),
+		sqlRun:      services.NewSQLRunService(sessions, WailsDialogs{}, events),
 		state:       state,
 	}
 }
@@ -199,6 +201,7 @@ func appOptions(assets fs.FS, b backend) application.Options {
 			application.NewService(b.update),
 			application.NewService(b.uiState),
 			application.NewService(b.sqlFiles),
+			application.NewService(b.sqlRun),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

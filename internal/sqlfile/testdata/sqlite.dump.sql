@@ -1,0 +1,24 @@
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT, data BLOB, qty REAL);
+INSERT INTO items VALUES(1,'plain',NULL,X'deadbeef',12.5);
+INSERT INTO items VALUES(2,unistr('tab\u0009here'),unistr('two\u000alines'),NULL,NULL);
+INSERT INTO items VALUES(3,'back\slash','it''s "quoted"; -- not a comment',NULL,-1.0);
+INSERT INTO items VALUES(4,'ünïcødé 日本',unistr('\u000d\u000aCRLF'),X'00',0.0);
+INSERT INTO items VALUES(5,'semi;colon','/* not a comment */',NULL,3.140000000000000124);
+CREATE TABLE child (id INTEGER PRIMARY KEY, item_id INTEGER REFERENCES items(id), label TEXT);
+INSERT INTO child VALUES(1,1,'one');
+INSERT INTO child VALUES(2,3,'three');
+CREATE TABLE audit (id INTEGER PRIMARY KEY, msg TEXT);
+INSERT INTO audit VALUES(1,'added; plain');
+INSERT INTO audit VALUES(2,unistr('added; tab\u0009here'));
+INSERT INTO audit VALUES(3,'added; back\slash');
+INSERT INTO audit VALUES(4,'added; ünïcødé 日本');
+INSERT INTO audit VALUES(5,'added; semi;colon');
+CREATE VIEW item_names AS SELECT id, upper(name) AS name FROM items;
+CREATE TRIGGER items_ai AFTER INSERT ON items BEGIN
+  INSERT INTO audit (msg) VALUES ('added; ' || NEW.name);
+  UPDATE audit SET msg = CASE WHEN msg IS NULL THEN '' ELSE msg END WHERE id = last_insert_rowid();
+END;
+CREATE INDEX items_name ON items(name);
+COMMIT;

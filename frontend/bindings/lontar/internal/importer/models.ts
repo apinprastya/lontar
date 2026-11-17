@@ -14,6 +14,13 @@ export interface Mapping {
  */
 export interface Options {
     /**
+     * Format is FormatCSV, FormatJSON or FormatNDJSON; empty detects it
+     * from the file name and its first byte (see DetectFormat). The other
+     * options are CSV-only.
+     */
+    "format": string;
+
+    /**
      * Delimiter is one character (default ","; "\t" for TSV).
      */
     "delimiter": string;
@@ -54,7 +61,14 @@ export interface Options {
  */
 export interface Preview {
     /**
-     * Headers names every CSV field: the header row, or "Column 1", ….
+     * Format is the format the file was read as (detected when the
+     * options left it empty).
+     */
+    "format": string;
+
+    /**
+     * Headers names every field: the CSV header row or the JSON keys, or
+     * "Column 1", ….
      */
     "headers": string[] | null;
 
@@ -89,14 +103,20 @@ export interface Request {
 }
 
 /**
- * RowError is an import failure at a CSV line. Nothing was imported.
+ * RowError is an import failure at a record. Nothing was imported.
  */
 export interface RowError {
     /**
      * Line is the 1-based line in the file where the record starts (0
-     * when unknown).
+     * when unknown or when Element is set).
      */
     "line": number;
+
+    /**
+     * Element is the 1-based element of a JSON array (0 for CSV and
+     * NDJSON, which have lines).
+     */
+    "element": number;
 
     /**
      * Column is the target column, when known.

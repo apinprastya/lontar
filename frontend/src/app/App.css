@@ -2431,6 +2431,112 @@ textarea.cell-editor-input {
   margin-bottom: 4px;
 }
 
+/* ---- Run SQL file dialog ------------------------------------------------- */
+
+.run-sql-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.run-sql-facts {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 4px 10px;
+  margin: 0 0 12px;
+}
+
+.run-sql-facts dt {
+  color: var(--muted);
+}
+
+.run-sql-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-sql-legend {
+  font-weight: 600;
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.run-sql-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.run-sql-progress progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.run-sql-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  max-height: 200px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.run-sql-list li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.run-sql-errors {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.run-sql-errors li + li {
+  border-top: 1px solid var(--border);
+}
+
+.run-sql-error {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 6px 10px;
+}
+
+.run-sql-error:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.run-sql-where {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.run-sql-stmt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-sql-msg {
+  grid-column: 2;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
 /* ---- Command palette ------------------------------------------------------ */
 
 .palette-backdrop {

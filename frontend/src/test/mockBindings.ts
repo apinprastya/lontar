@@ -110,6 +110,13 @@ export const SQLFileService = {
   SaveSQLFile: vi.fn<(path: string, name: string, text: string, eol: string, expectedModTime: number) => Promise<unknown>>(),
 }
 
+export const SQLRunService = {
+  PickAndInspect: vi.fn<(sessionId: string) => Promise<unknown>>(),
+  Inspect: vi.fn<(sessionId: string, path: string) => Promise<unknown>>(),
+  RunFile: vi.fn<(jobId: string, sessionId: string, path: string, opts: unknown, confirmed: boolean) => Promise<unknown>>(),
+  Cancel: vi.fn<(jobId: string) => Promise<boolean>>(),
+}
+
 export const DRIVERS: DriverInfo[] = [
   { kind: 'postgres', displayName: 'PostgreSQL', defaultPort: 5432, fileBased: false },
   { kind: 'mysql', displayName: 'MySQL', defaultPort: 3306, fileBased: false },
@@ -162,6 +169,7 @@ export function resetBindings() {
     ...Object.values(SettingsService),
     ...Object.values(UpdateService),
     ...Object.values(SQLFileService),
+    ...Object.values(SQLRunService),
   ])
     fn.mockReset()
   AppService.Version.mockResolvedValue('0.0.1')
@@ -182,6 +190,8 @@ export function resetBindings() {
   ExportService.Cancel.mockResolvedValue(true)
   ExportService.CheckQuery.mockResolvedValue(undefined)
   ImportService.Cancel.mockResolvedValue(true)
+  SQLRunService.Cancel.mockResolvedValue(true)
+  SQLRunService.PickAndInspect.mockResolvedValue(null)
   SettingsService.Get.mockResolvedValue({ settings: DEFAULT_SETTINGS, error: '' })
   SettingsService.Save.mockImplementation(async (s) => s)
 }

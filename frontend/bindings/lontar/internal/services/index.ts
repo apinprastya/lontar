@@ -11,6 +11,7 @@ import * as ExportService from "./exportservice.js";
 import * as HistoryService from "./historyservice.js";
 import * as ImportService from "./importservice.js";
 import * as SQLFileService from "./sqlfileservice.js";
+import * as SQLRunService from "./sqlrunservice.js";
 import * as SchemaService from "./schemaservice.js";
 import * as SettingsService from "./settingsservice.js";
 import * as UIStateService from "./uistateservice.js";
@@ -26,6 +27,7 @@ export {
     HistoryService,
     ImportService,
     SQLFileService,
+    SQLRunService,
     SchemaService,
     SettingsService,
     UIStateService,
@@ -42,6 +44,7 @@ export type {
     FileFilter,
     ImportResult,
     Location,
+    SQLRunResult,
     SessionInfo,
     SettingsState,
     Statement,

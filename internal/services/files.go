@@ -265,7 +265,7 @@ type ImportResult struct {
 	Failure      *importer.RowError `json:"failure"`
 }
 
-// ImportService loads CSV files into tables (see package importer).
+// ImportService loads CSV, JSON and NDJSON files into tables (see package importer).
 // Progress is sent as "import:progress" events; Cancel rolls back.
 type ImportService struct {
 	sessions Sessions

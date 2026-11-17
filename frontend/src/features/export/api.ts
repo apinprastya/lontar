@@ -45,7 +45,11 @@ export interface ExportRequest {
   rows?: Cell[][]
 }
 
+/** Import file formats ('' = detect from the file name and first byte). */
+export type ImportFormat = '' | 'csv' | 'json' | 'ndjson'
+
 export interface ImportOptions {
+  format: ImportFormat
   delimiter: string
   header: boolean
   quote: string
@@ -69,6 +73,8 @@ export interface TargetColumn {
 }
 
 export interface ImportPreview {
+  /** The format the file was read as. */
+  format: Exclude<ImportFormat, ''>
   headers: string[]
   rows: (string | null)[][]
   columns: TargetColumn[]
@@ -86,6 +92,8 @@ export interface ImportRequest {
 
 export interface ImportFailure {
   line: number
+  /** JSON array element (1-based; 0 when the failure has a line). */
+  element: number
   column: string
   message: string
 }
@@ -125,7 +133,7 @@ export const filesApi: FilesApi = {
   async previewImport(sessionId, path, opts, schema, table) {
     const p = await ImportService.Preview(sessionId, path, opts as unknown as Bind<typeof ImportService.Preview, 2>, schema, table)
     if (!p) throw new Error('empty response')
-    return { headers: p.headers ?? [], rows: (p.rows ?? []) as (string | null)[][], columns: (p.columns ?? []) as TargetColumn[], mapping: p.mapping ?? [] }
+    return { format: (p.format || 'csv') as ImportPreview['format'], headers: p.headers ?? [], rows: (p.rows ?? []) as (string | null)[][], columns: (p.columns ?? []) as TargetColumn[], mapping: p.mapping ?? [] }
   },
   async runImport(jobId, sessionId, req, confirmed) {
     const r = await ImportService.Import(jobId, sessionId, req as unknown as Bind<typeof ImportService.Import, 2>, confirmed)
