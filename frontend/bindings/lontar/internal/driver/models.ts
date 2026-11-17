@@ -173,6 +173,112 @@ export enum Kind {
 };
 
 /**
+ * Object is a function, procedure, aggregate, sequence, type, trigger or
+ * event of a schema, as listed in the sidebar.
+ */
+export interface $Object {
+    "schema": string;
+    "kind": ObjectKind;
+    "name": string;
+
+    /**
+     * Signature is the argument list of a routine ("a integer, b text");
+     * "" for other kinds. PostgreSQL routines are overloaded by it.
+     */
+    "signature": string;
+
+    /**
+     * Detail is a one-line summary (return type and language, enum labels,
+     * trigger timing, sequence range...).
+     */
+    "detail": string;
+
+    /**
+     * Table is the table a trigger belongs to ("" for other kinds).
+     */
+    "table": string;
+
+    /**
+     * ID identifies the object within the engine where the name does not
+     * (PostgreSQL: the catalog OID; MySQL routines: the specific name).
+     */
+    "id": string;
+
+    /**
+     * Properties are the details shown by the object tab, in order.
+     */
+    "properties": Property[] | null;
+}
+
+/**
+ * ObjectKind classifies a schema object other than a table or view.
+ */
+export enum ObjectKind {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * Object kinds returned by ObjectLister.ListObjects.
+     */
+    ObjectFunction = "function",
+    ObjectProcedure = "procedure",
+
+    /**
+     * PostgreSQL
+     */
+    ObjectAggregate = "aggregate",
+
+    /**
+     * PostgreSQL, MariaDB 10.3+
+     */
+    ObjectSequence = "sequence",
+
+    /**
+     * PostgreSQL
+     */
+    ObjectEnum = "enum",
+
+    /**
+     * PostgreSQL
+     */
+    ObjectComposite = "composite",
+
+    /**
+     * PostgreSQL
+     */
+    ObjectDomain = "domain",
+    ObjectTrigger = "trigger",
+
+    /**
+     * MySQL/MariaDB
+     */
+    ObjectEvent = "event",
+};
+
+/**
+ * ObjectRef names an object as ListObjects reported it. It comes from the
+ * UI, so it is only ever matched against a fresh listing, never put into
+ * SQL.
+ */
+export interface ObjectRef {
+    "kind": ObjectKind;
+    "name": string;
+    "signature": string;
+    "table": string;
+    "id": string;
+}
+
+/**
+ * Property is one key/value line of an object's details.
+ */
+export interface Property {
+    "key": string;
+    "value": string;
+}
+
+/**
  * Table describes a table or view.
  */
 export interface Table {

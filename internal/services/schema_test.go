@@ -202,3 +202,47 @@ func TestBrowseServiceSQLite(t *testing.T) {
 		t.Fatal("not cancelled")
 	}
 }
+
+func TestSchemaServiceObjects(t *testing.T) {
+	m, id := openSQLiteSession(t)
+	s, err := m.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`CREATE TRIGGER t_ai AFTER INSERT ON t BEGIN SELECT 1; END`); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewSchemaService(m, all.Registry())
+	ctx := context.Background()
+	objs, err := svc.ListObjects(ctx, id, "main")
+	if err != nil || len(objs) != 1 || objs[0].Kind != driver.ObjectTrigger || objs[0].Table != "t" {
+		t.Fatalf("ListObjects = %+v, %v", objs, err)
+	}
+	ddl, err := svc.ObjectDDL(ctx, id, "main", objs[0].Ref())
+	if err != nil || ddl != "CREATE TRIGGER t_ai AFTER INSERT ON t BEGIN SELECT 1; END;\n" {
+		t.Fatalf("ObjectDDL = %q, %v", ddl, err)
+	}
+	forged := objs[0].Ref()
+	forged.Name = `t_ai' OR 1=1 --`
+	if _, err := svc.ObjectDDL(ctx, id, "main", forged); !errors.Is(err, driver.ErrObjectNotFound) {
+		t.Fatalf("forged ref err = %v", err)
+	}
+	for name, call := range map[string]func() error{
+		"ListObjects": func() error { _, err := svc.ListObjects(ctx, "nope", "main"); return err },
+		"ObjectDDL":   func() error { _, err := svc.ObjectDDL(ctx, "nope", "main", objs[0].Ref()); return err },
+	} {
+		if err := call(); !errors.Is(err, conn.ErrSessionNotFound) {
+			t.Errorf("%s err = %v", name, err)
+		}
+	}
+
+	// An engine without driver.ObjectLister has no objects.
+	sess := &unknownKindSessions{conn.Session{ID: "s", Kind: "oracle"}}
+	svc = NewSchemaService(sess, oneDriver{failingIntrospector{}})
+	if objs, err := svc.ListObjects(ctx, "s", "x"); err != nil || objs == nil || len(objs) != 0 {
+		t.Fatalf("ListObjects without lister = %v, %v", objs, err)
+	}
+	if _, err := svc.ObjectDDL(ctx, "s", "x", driver.ObjectRef{Kind: driver.ObjectTrigger, Name: "t"}); !errors.Is(err, driver.ErrObjectNotFound) {
+		t.Fatalf("ObjectDDL without lister err = %v", err)
+	}
+}

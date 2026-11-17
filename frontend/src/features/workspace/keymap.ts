@@ -22,7 +22,7 @@ export interface Shortcut {
 }
 
 export const SHORTCUTS: Shortcut[] = [
-  { id: 'quickOpen', key: 'p', mod: true, scope: 'global', description: 'Open a table or view…', command: true },
+  { id: 'quickOpen', key: 'p', mod: true, scope: 'global', description: 'Open a table, view or object…', command: true },
   { id: 'commandPalette', key: 'p', mod: true, shift: true, scope: 'global', description: 'Show all commands' },
   { id: 'switchConnection', key: 'k', mod: true, scope: 'global', description: 'Switch connection…', command: true },
   { id: 'settings', key: ',', mod: true, scope: 'global', description: 'Settings…', command: true },

@@ -3,6 +3,7 @@
 
 export {
     Kind,
+    ObjectKind,
     TableType
 } from "./models.js";
 
@@ -13,6 +14,9 @@ export type {
     ForeignKey,
     Index,
     Info,
+    $Object,
+    ObjectRef,
+    Property,
     Table,
     TableDetail,
     Trigger

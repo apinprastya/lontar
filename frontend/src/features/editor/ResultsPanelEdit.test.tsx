@@ -41,6 +41,8 @@ const wsApi: WorkspaceApi = {
   cancel: vi.fn(async () => true),
   tableInfo: vi.fn(async () => makeDetail()),
   tableDDL: vi.fn(async () => ''),
+  listObjects: vi.fn(async () => []),
+  objectDDL: vi.fn(async () => ''),
 }
 
 const editable: ResultSource = {

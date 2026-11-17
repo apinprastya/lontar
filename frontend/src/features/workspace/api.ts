@@ -1,6 +1,9 @@
 import { BrowseService, SchemaService } from '../../../bindings/lontar/internal/services'
 import type { Cell, FetchRequest, Location, Page, TableInfo } from './types'
 import { normalizeDetail, type TableDetail } from '../structure/types'
+import { normalizeObject, type DbObject, type ObjectRef } from '../objects/types'
+
+type BindingRef = Parameters<typeof SchemaService.ObjectDDL>[2]
 
 type BindingRequest = Parameters<typeof BrowseService.FetchTable>[2]
 
@@ -16,6 +19,9 @@ export interface WorkspaceApi {
   cancel(requestId: string): Promise<boolean>
   tableInfo(sessionId: string, schema: string, table: string): Promise<TableDetail>
   tableDDL(sessionId: string, schema: string, table: string): Promise<string>
+  /** Functions, sequences, types, triggers, events of a schema ([] when the engine has none). */
+  listObjects(sessionId: string, schema: string): Promise<DbObject[]>
+  objectDDL(sessionId: string, schema: string, ref: ObjectRef): Promise<string>
 }
 
 /** Typed wrapper around the generated SchemaService/BrowseService bindings. */
@@ -58,5 +64,12 @@ export const workspaceApi: WorkspaceApi = {
   },
   async tableDDL(sessionId, schema, table) {
     return SchemaService.TableDDL(sessionId, schema, table)
+  },
+  async listObjects(sessionId, schema) {
+    const list = ((await SchemaService.ListObjects(sessionId, schema)) ?? []) as unknown as DbObject[]
+    return list.map(normalizeObject)
+  },
+  async objectDDL(sessionId, schema, ref) {
+    return SchemaService.ObjectDDL(sessionId, schema, ref as unknown as BindingRef)
   },
 }

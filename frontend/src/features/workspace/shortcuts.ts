@@ -106,7 +106,7 @@ export function handleShortcut(e: ModifierEvent, platform: string | undefined, s
       void s.refresh()
       return true
     case 'f':
-      if (!tab) return false
+      if (!tab || tab.kind === 'object') return false
       if (tab.kind === 'query') s.requestEditor(tab.id, { type: 'search' })
       else if (tab.view === 'structure') {
         // The filter bar belongs to the data view.

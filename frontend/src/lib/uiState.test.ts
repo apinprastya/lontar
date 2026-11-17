@@ -7,6 +7,7 @@ import {
   initUIState,
   isBoolean,
   isWidthMap,
+  isStringArray,
   setUIJSON,
   setUIState,
   type UIStateBackend,
@@ -104,5 +105,9 @@ describe('uiState', () => {
     expect(isWidthMap({ a: Infinity })).toBe(false)
     expect(isWidthMap([1])).toBe(false)
     expect(isWidthMap(null)).toBe(false)
+    expect(isStringArray(['a', 'b'])).toBe(true)
+    expect(isStringArray([])).toBe(true)
+    expect(isStringArray(['a', 1])).toBe(false)
+    expect(isStringArray('a')).toBe(false)
   })
 })

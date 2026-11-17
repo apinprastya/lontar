@@ -42,6 +42,8 @@ const api: WorkspaceApi = {
   cancel: vi.fn(async () => true),
   tableInfo: vi.fn(async () => makeDetail()),
   tableDDL: vi.fn(async () => ''),
+  listObjects: vi.fn(async () => []),
+  objectDDL: vi.fn(async () => ''),
 }
 const edits = { preview: vi.fn(async () => []), apply: vi.fn(async () => ({ ok: true, result: null, failure: null })), resultSource: vi.fn(async () => ({ editable: false, reason: 'n/a', schema: '', table: '', columns: [] })) }
 

@@ -45,6 +45,8 @@ function api(fks = [fk]): WorkspaceApi {
     cancel: vi.fn(async () => true),
     tableInfo: vi.fn(async () => makeDetail({ name: 't', foreignKeys: fks })),
     tableDDL: vi.fn(async () => ''),
+    listObjects: vi.fn(async () => []),
+    objectDDL: vi.fn(async () => ''),
   }
 }
 

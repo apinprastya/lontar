@@ -22,6 +22,7 @@ import { copyText } from '../lib/clipboard'
 import { getUIJSON, isBoolean, isWidthMap, setUIJSON } from '../lib/uiState'
 import { referenceFilters } from '../features/structure/fk'
 import type { ForeignKey, StructureSection, TableDetail } from '../features/structure/types'
+import { objectKey, objectRef, type DbObject } from '../features/objects/types'
 import {
   HISTORY_OPEN_KEY,
   MESSAGES,
@@ -131,6 +132,20 @@ export interface TabState {
 
 export type TabView = 'data' | 'structure'
 
+/** A read-only tab showing a function, sequence, type, trigger or event. */
+export interface ObjectTabState {
+  kind: 'object'
+  id: string
+  /** Object tabs are never previews. */
+  pinned: true
+  object: DbObject
+  ddl: string | null
+  ddlLoading: boolean
+  ddlError: string | null
+  /** Object tabs have no rows (kept for the shared row-detail code). */
+  selectedRow: null
+}
+
 /** Why a table tab cannot be edited (null: it can). */
 export function readOnlyReason(tab: Pick<TabState, 'type' | 'columns'>, safeMode: SafeMode): string | null {
   if (safeMode === 'readonly') return 'This connection is in read-only safe mode. Change it in the connection settings to edit data.'
@@ -155,8 +170,8 @@ export interface Guard {
 
 export type GuardChoice = 'commit' | 'discard' | 'cancel'
 
-/** A tab of the workspace: a table or an SQL editor. */
-export type Tab = TabState | QueryTabState
+/** A tab of the workspace: a table, an SQL editor or a schema object. */
+export type Tab = TabState | QueryTabState | ObjectTabState
 
 export interface WorkspaceState extends QueryState {
   sessionId: string
@@ -170,6 +185,9 @@ export interface WorkspaceState extends QueryState {
   showSystem: boolean
   tables: TableInfo[]
   tablesLoading: boolean
+  /** Functions, sequences, types, triggers and events of the schema. */
+  objects: DbObject[]
+  objectsLoading: boolean
   /** Errors of sidebar actions (listing, switching); shown inline. */
   sidebarError: string | null
   search: string
@@ -195,6 +213,13 @@ export interface WorkspaceState extends QueryState {
   loadDDL(id: string): Promise<void>
   /** Copies a table's DDL (sidebar menu); errors go to the sidebar. */
   copyDDL(schema: string, name: string): Promise<boolean>
+  /** Opens (or shows) the read-only tab of an object. */
+  openObject(object: DbObject): void
+  loadObjectDDL(id: string): Promise<void>
+  /** Copies an object's DDL (sidebar menu); errors go to the sidebar. */
+  copyObjectDDL(object: DbObject): Promise<boolean>
+  /** Opens an object's DDL in a new query tab (sidebar menu). */
+  objectDDLToQuery(object: DbObject): Promise<boolean>
   /**
    * Opens the row a foreign key of the row points at: the referenced
    * table's tab (reused, after the unsaved-changes guard, or new) filtered
@@ -453,23 +478,42 @@ export function createWorkspaceStore(
       }
     }
 
+    /** Objects load next to the tables; the tables never wait for them. */
+    const loadObjects = async () => {
+      const { sessionId, schema } = get()
+      set({ objectsLoading: true })
+      try {
+        const objects = schema ? await api.listObjects(sessionId, schema) : []
+        if (!disposed && get().schema === schema) set({ objects, objectsLoading: false })
+      } catch (err) {
+        if (!disposed && get().schema === schema) set({ objects: [], objectsLoading: false, sidebarError: errorMessage(err) })
+      }
+    }
+
     const loadTables = async () => {
       const { sessionId, schema } = get()
       set({ tablesLoading: true })
+      const objects = loadObjects()
       try {
         const tables = schema ? await api.listTables(sessionId, schema) : []
         set({ tables, tablesLoading: false })
       } catch (err) {
         set({ tables: [], tablesLoading: false, sidebarError: errorMessage(err) })
       }
+      await objects
     }
 
-    /** Closes the table tabs (they belong to the previous database); query tabs stay. */
+    const findObjectTab = (id: string) => get().tabs.find((t): t is ObjectTabState => t.id === id && t.kind === 'object')
+    const patchObjectTab = (id: string, patch: Partial<ObjectTabState>) => {
+      set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && t.kind === 'object' ? { ...t, ...patch } : t)) }))
+    }
+
+    /** Closes the table and object tabs (they belong to the previous database); query tabs stay. */
     const closeTableTabs = () => {
       const { tabs, activeTabId } = get()
       for (const t of tabs) if (t.kind === 'table') cancelRequests(t)
       // Query results came from the previous database: no editing them.
-      const rest = tabs.filter((t) => t.kind !== 'table').map((t) => (t.kind === 'query' && t.result ? { ...t, edit: null, resultsStale: true } : t))
+      const rest = tabs.filter((t): t is QueryTabState => t.kind === 'query').map((t) => (t.result ? { ...t, edit: null, resultsStale: true } : t))
       set({ tabs: rest, activeTabId: rest.some((t) => t.id === activeTabId) ? activeTabId : (rest[0]?.id ?? null) })
     }
 
@@ -751,6 +795,8 @@ export function createWorkspaceStore(
       showSystem: false,
       tables: [],
       tablesLoading: false,
+      objects: [],
+      objectsLoading: false,
       sidebarError: null,
       search: '',
       tabs: restored,
@@ -792,7 +838,7 @@ export function createWorkspaceStore(
           const loc = await api.useDatabase(get().sessionId, database)
           // Table tabs belong to the previous database's pool.
           closeTableTabs()
-          set({ database: loc.database, schema: loc.schema, tables: [], completion: null })
+          set({ database: loc.database, schema: loc.schema, tables: [], objects: [], completion: null })
         } catch (err) {
           set({ sidebarError: errorMessage(err), tablesLoading: false })
           return
@@ -895,6 +941,61 @@ export function createWorkspaceStore(
         }
       },
 
+      openObject(object) {
+        const key = objectKey(object)
+        const existing = get().tabs.find((t): t is ObjectTabState => t.kind === 'object' && objectKey(t.object) === key)
+        if (existing) {
+          set({ activeTabId: existing.id })
+          return
+        }
+        const tab: ObjectTabState = {
+          kind: 'object',
+          id: newRequestId('obj'),
+          pinned: true,
+          object,
+          ddl: null,
+          ddlLoading: false,
+          ddlError: null,
+          selectedRow: null,
+        }
+        set({ tabs: [...get().tabs, tab], activeTabId: tab.id })
+        void get().loadObjectDDL(tab.id)
+      },
+
+      async loadObjectDDL(id) {
+        const tab = findObjectTab(id)
+        if (!tab) return
+        patchObjectTab(id, { ddlLoading: true, ddlError: null })
+        try {
+          const ddl = await api.objectDDL(get().sessionId, tab.object.schema, objectRef(tab.object))
+          if (!disposed) patchObjectTab(id, { ddl, ddlLoading: false })
+        } catch (err) {
+          if (!disposed) patchObjectTab(id, { ddlLoading: false, ddlError: errorMessage(err) })
+        }
+      },
+
+      async copyObjectDDL(object) {
+        set({ sidebarError: null })
+        try {
+          await copyText(await api.objectDDL(get().sessionId, object.schema, objectRef(object)))
+          return true
+        } catch (err) {
+          set({ sidebarError: errorMessage(err) })
+          return false
+        }
+      },
+
+      async objectDDLToQuery(object) {
+        set({ sidebarError: null })
+        try {
+          get().newQueryTab(await api.objectDDL(get().sessionId, object.schema, objectRef(object)))
+          return true
+        } catch (err) {
+          set({ sidebarError: errorMessage(err) })
+          return false
+        }
+      },
+
       followReference(id, fk, row) {
         const tab = findTab(id)
         if (!tab) return false
@@ -966,7 +1067,7 @@ export function createWorkspaceStore(
         if (activeTabId === id) active = (rest[i] ?? rest[i - 1])?.id ?? null
         set({ tabs: rest, activeTabId: active })
         if (tab.kind === 'table') cancelRequests(tab)
-        else get().releaseQueryTab(tab)
+        else if (tab.kind === 'query') get().releaseQueryTab(tab)
       },
 
       async resolveSaveAsk(choice) {
@@ -1050,6 +1151,13 @@ export function createWorkspaceStore(
         const tab = get().activeTab()
         if (tab?.kind === 'query') {
           await Promise.all([get().refreshTables(), get().completion ? get().loadCompletion(true) : Promise.resolve()])
+        } else if (tab?.kind === 'object') {
+          await get().refreshTables()
+          // The object may have been re-created (new OID): follow it by name.
+          const key = objectKey(tab.object)
+          const fresh = get().objects.find((o) => objectKey(o) === key)
+          if (fresh) patchObjectTab(tab.id, { object: fresh })
+          await get().loadObjectDDL(tab.id)
         } else if (tab?.view === 'structure') {
           // Structure only: nothing staged is lost, so no guard.
           await Promise.all([get().refreshTables(), get().loadStructure(tab.id), tab.ddl !== null ? get().loadDDL(tab.id) : Promise.resolve()])
@@ -1159,7 +1267,7 @@ export function createWorkspaceStore(
         disposed = true
         for (const t of get().tabs) {
           if (t.kind === 'table') cancelRequests(t)
-          else if (t.requestId) void editor.cancel(t.requestId).catch(() => {})
+          else if (t.kind === 'query' && t.requestId) void editor.cancel(t.requestId).catch(() => {})
         }
       },
     }

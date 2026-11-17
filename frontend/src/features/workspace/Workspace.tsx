@@ -45,6 +45,7 @@ import { detailEditing, type Editable } from '../grid/editing'
 import StatusBar from './StatusBar'
 import TabBar from './TabBar'
 import TableTab from './TableTab'
+import ObjectView from '../objects/ObjectView'
 
 export interface WorkspaceProps {
   platform?: string
@@ -107,7 +108,7 @@ export function stagedChanges(store: WorkspaceStore | undefined): number {
   if (!store) return 0
   return store.getState().tabs.reduce((n, t) => {
     if (t.kind === 'table') return n + pendingCount(t.pending)
-    return n + (t.edit ? pendingCount(t.edit.pending) : 0)
+    return n + (t.kind === 'query' && t.edit ? pendingCount(t.edit.pending) : 0)
   }, 0)
 }
 
@@ -155,6 +156,7 @@ function WorkspaceView({
   const fileError = useWorkspace((s) => s.fileError)
   const [palette, setPalette] = useState<PaletteMode | null>(null)
   const paletteTables = usePaletteTables(store, api, palette === 'tables')
+  const objects = useWorkspace((s) => s.objects)
   // Overlays (palette, dialogs) own the keyboard while open.
   const overlay = Boolean(palette || exportRequest || importRequest || closeConfirm || hostKey || closeSessionAsk || saveAsk || fileConflict)
   const overlayRef = useRef(overlay)
@@ -325,7 +327,7 @@ function WorkspaceView({
                 icon={<OpenFileIcon />}
                 onClick={() => void store.getState().openSqlFile()}
               />
-              <ToolButton label="Open…" title={`Open a table or view (${shortcutLabel(platform, 'P')})`} icon={<SearchIcon />} onClick={() => setPalette('tables')} />
+              <ToolButton label="Open…" title={`Open a table, view or object (${shortcutLabel(platform, 'P')})`} icon={<SearchIcon />} onClick={() => setPalette('tables')} />
               <span className="toolbar-sep" aria-hidden />
               {tab?.kind === 'table' && (
                 <ToolButton
@@ -369,6 +371,7 @@ function WorkspaceView({
             <TabBar platform={platform} />
             {tab?.kind === 'table' && <TableTab key={tab.id} tab={tab} platform={platform} />}
             {tab?.kind === 'query' && <QueryTab key={tab.id} tab={tab} platform={platform} api={editor} />}
+            {tab?.kind === 'object' && <ObjectView key={tab.id} tab={tab} />}
             {!tab && (
               <div className="ws-empty muted">
                 <p>Select a table in the sidebar to browse its rows.</p>
@@ -453,6 +456,11 @@ function WorkspaceView({
           onOpenTable={(t, view) => {
             setPalette(null)
             store.getState().openTableView(t.schema, t.name, view)
+          }}
+          objects={objects}
+          onOpenObject={(o) => {
+            setPalette(null)
+            store.getState().openObject(o)
           }}
           onCommand={(id) => {
             setPalette(null)

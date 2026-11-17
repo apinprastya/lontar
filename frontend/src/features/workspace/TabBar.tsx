@@ -3,14 +3,18 @@ import { useWorkspace, type Tab } from '../../stores/workspace'
 import { shortcutLabel } from '../../lib/mod'
 import { displayName } from '../structure/fk'
 import { fileDirty } from '../../stores/queryTabs'
+import ObjectIcon from '../objects/ObjectIcon'
+import { OBJECT_KIND_LABELS, objectLabel } from '../objects/types'
 
 /** Tab title; tables of another schema (e.g. opened by a foreign key) are qualified. */
 function tabTitle(t: Tab, schema: string): string {
+  if (t.kind === 'object') return displayName(t.object.schema, objectLabel(t.object), schema)
   return t.kind === 'query' ? t.title : displayName(t.schema, t.table, schema)
 }
 
 function tabTooltip(t: Tab): string {
-  if (t.kind !== 'query') return `${t.schema}.${t.table}`
+  if (t.kind === 'object') return `${t.object.schema}.${objectLabel(t.object)} (${OBJECT_KIND_LABELS[t.object.kind]})`
+  if (t.kind === 'table') return `${t.schema}.${t.table}`
   return t.filePath ? `${t.filePath}${fileDirty(t) ? ' (unsaved changes)' : ''}` : `${t.title} — double-click to rename`
 }
 
@@ -49,7 +53,7 @@ export default function TabBar({ platform }: { platform?: string }) {
           onClick={() => activateTab(t.id)}
           onDoubleClick={() => {
             if (t.kind === 'table') pinTab(t.id)
-            else {
+            else if (t.kind === 'query') {
               setDraft(t.title)
               setEditing(t.id)
             }
@@ -59,6 +63,7 @@ export default function TabBar({ platform }: { platform?: string }) {
           }}
         >
           {t.kind === 'query' && <span className="tab-sql-icon" aria-hidden="true">SQL</span>}
+          {t.kind === 'object' && <ObjectIcon kind={t.object.kind} />}
           {editing === t.id ? (
             <input
               className="tab-rename"
