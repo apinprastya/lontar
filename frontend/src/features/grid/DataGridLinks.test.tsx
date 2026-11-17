@@ -14,6 +14,8 @@ interface FakeProps {
   drawCell?(args: { ctx: unknown; rect: { x: number; y: number; width: number; height: number }; row: number; col: number }, draw: () => void): void
 }
 let lastProps: FakeProps | null = null
+const copyText = vi.fn<(t: string) => Promise<void>>(() => Promise.resolve())
+vi.mock('../../lib/clipboard', () => ({ copyText: (t: string) => copyText(t) }))
 vi.mock('@glideapps/glide-data-grid', async (importOriginal) => {
   const real = await importOriginal<typeof import('@glideapps/glide-data-grid')>()
   const React = await import('react')
@@ -170,5 +172,46 @@ describe('DataGrid export selection', () => {
     act(() => p().onCellContextMenu?.([0, 1], ctxEv(0)))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Export selection…' }))
     expect(onExportSelection).toHaveBeenLastCalledWith({ rows: [0, 1] })
+  })
+})
+
+describe('DataGrid copy menu', () => {
+  afterEach(() => {
+    cleanup()
+    copyText.mockClear()
+  })
+
+  it('copies from the context menu in a read-only grid', () => {
+    const multi: Cell[][] = [[{ k: 'num', v: 1 }, { k: 'null' }, { k: 'str', v: 'two\nlines' }]]
+    render(
+      <DataGrid
+        columns={columns}
+        rows={multi}
+        offset={0}
+        sort={[]}
+        columnWidths={{}}
+        platform="linux"
+        onHeaderClick={vi.fn()}
+        onColumnResize={vi.fn()}
+        onSelectRow={vi.fn()}
+        onToggleDetail={vi.fn()}
+      />,
+    )
+    const p = () => lastProps as FakeProps
+    const ctxEv = { preventDefault: vi.fn(), bounds: { x: 0, y: 0 }, localEventX: 1, localEventY: 1 }
+    act(() => p().onCellContextMenu?.([2, 0], ctxEv))
+    expect(screen.queryByRole('menuitem', { name: /Edit cell/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Export selection/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Copy(?! value)/ }))
+    expect(copyText).toHaveBeenLastCalledWith('two lines')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    act(() => p().onCellContextMenu?.([2, 0], ctxEv))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy value' }))
+    expect(copyText).toHaveBeenLastCalledWith('two\nlines')
+    // The whole row when it is selected.
+    act(() => p().onGridSelectionChange({ columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection(0) }))
+    act(() => p().onCellContextMenu?.([0, 0], ctxEv))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Copy(?! value)/ }))
+    expect(copyText).toHaveBeenLastCalledWith('1\t\ttwo lines')
   })
 })

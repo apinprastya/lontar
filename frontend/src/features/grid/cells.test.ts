@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Cell, ResultColumn } from '../workspace/types'
-import { binaryLabel, cellCopyText, cellDisplay, cellText, defaultColumnWidth, headerTitle, isNull, isNumeric, selectionToTSV, selectionToCSV, MAX_CELL_CHARS } from './cells'
+import { binaryLabel, cellCopyText, cellValueText, cellDisplay, cellText, defaultColumnWidth, headerTitle, isNull, isNumeric, selectionToTSV, selectionToCSV, MAX_CELL_CHARS } from './cells'
 
 const cols: ResultColumn[] = [
   { name: 'id', type: 'int', isPK: true, nullable: false },
@@ -47,6 +47,15 @@ describe('cell text', () => {
     expect(cellCopyText({ k: 'bytes', v: '00ff', len: 2 })).toBe('00ff')
     expect(cellCopyText({ k: 'bytes', len: 2 })).toBe('')
     expect(cellCopyText({ k: 'str', v: 'a\tb\nc' })).toBe('a b c')
+  })
+
+  it('copies a single value intact', () => {
+    expect(cellValueText({ k: 'null' })).toBe('')
+    expect(cellValueText(undefined)).toBe('')
+    expect(cellValueText({ k: 'bytes', v: '00ff', len: 2 })).toBe('00ff')
+    expect(cellValueText({ k: 'bytes', len: 2 })).toBe('')
+    expect(cellValueText({ k: 'str', v: 'a\tb\nc' })).toBe('a\tb\nc')
+    expect(cellValueText({ k: 'num', v: 3 })).toBe('3')
   })
 })
 
