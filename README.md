@@ -103,6 +103,7 @@ exact count is known.
 | Mod+F | Toggle the filter bar (Enter applies) |
 | Mod+I / Space | Toggle the row detail panel |
 | Mod+C | Copy the selected cells as TSV |
+| Right-click | **Copy** (cells as TSV) and **Copy value** (the cell's full value, line breaks kept); works in read-only grids too |
 | Mod+W | Close the tab |
 | Mod+1 … Mod+9 | Switch tabs (Mod+9 = last) |
 

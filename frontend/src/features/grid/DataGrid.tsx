@@ -23,7 +23,7 @@ import { CellEditor, type EditorHandle } from '../edits/editors'
 import type { EditValue } from '../edits/types'
 import type { DisplayRow } from '../../stores/pending'
 import type { Cell, ResultColumn, SortSpec } from '../workspace/types'
-import { cellDisplay, defaultColumnWidth, headerTitle, isNull, isNumeric, selectionToTSV, type SelectionSpec } from './cells'
+import { cellDisplay, cellValueText, defaultColumnWidth, headerTitle, isNull, isNumeric, selectionToTSV, type SelectionSpec } from './cells'
 
 export interface DataGridProps {
   columns: ResultColumn[]
@@ -439,6 +439,14 @@ export default function DataGrid(props: DataGridProps) {
     [onSelectRow],
   )
 
+  /** Copies the cells as TSV; false when there is nothing to copy. */
+  const copySelection = (spec: SelectionSpec): boolean => {
+    const tsv = selectionToTSV(columns, rows, spec)
+    if (!tsv) return false
+    void copyText(tsv)
+    return true
+  }
+
   /** Grid key handling; returns true when the key was consumed. */
   const handleKey = (e: ModifierEvent): boolean => {
     if (editing && handleEditKey(e)) return true
@@ -446,12 +454,7 @@ export default function DataGrid(props: DataGridProps) {
       if (current && links.canFollow(current[1], current[0])) links.onFollow(current[1], current[0])
       return true
     }
-    if (matchesShortcut(e, platform, 'c')) {
-      const tsv = selectionToTSV(columns, rows, toSelectionSpec(selection))
-      if (!tsv) return false
-      void copyText(tsv)
-      return true
-    }
+    if (matchesShortcut(e, platform, 'c')) return copySelection(toSelectionSpec(selection))
     if (e.key === ' ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
       onToggleDetail()
       return true
@@ -568,14 +571,10 @@ export default function DataGrid(props: DataGridProps) {
             : undefined
         }
         onCellActivated={editing ? ([col, row]) => startEdit(col, row) : undefined}
-        onCellContextMenu={
-          editing || links || onExportSelection
-            ? ([col, row], e) => {
-                e.preventDefault()
-                setMenu({ col, row, x: e.bounds.x + e.localEventX, y: e.bounds.y + e.localEventY })
-              }
-            : undefined
-        }
+        onCellContextMenu={([col, row], e) => {
+          e.preventDefault()
+          setMenu({ col, row, x: e.bounds.x + e.localEventX, y: e.bounds.y + e.localEventY })
+        }}
         onDelete={() => false}
         onPaste={
           editing
@@ -626,7 +625,7 @@ export default function DataGrid(props: DataGridProps) {
           />
         </div>
       )}
-      {menu && (editing || links || onExportSelection) && (
+      {menu && (
         <div className="context-menu-backdrop" onMouseDown={() => setMenu(null)} onContextMenu={(e) => (e.preventDefault(), setMenu(null))}>
           <ul
             className="context-menu"
@@ -635,6 +634,9 @@ export default function DataGrid(props: DataGridProps) {
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.key === 'Escape' && setMenu(null)}
           >
+            <MenuItem label="Copy" hint={mod('C')} onClick={menuAction(() => copySelection(menuSelection(menu)))} />
+            <MenuItem label="Copy value" onClick={menuAction(() => void copyText(cellValueText(rows[menu.row]?.[menu.col])))} />
+            {(links || editing) && <li role="separator" />}
             {links && (
               <MenuItem
                 label="Open referenced row"
@@ -658,7 +660,7 @@ export default function DataGrid(props: DataGridProps) {
             )}
             {onExportSelection && (
               <>
-                {(links || editing) && <li role="separator" />}
+                <li role="separator" />
                 <MenuItem label="Export selection…" onClick={menuAction(() => onExportSelection(menuSelection(menu)))} />
               </>
             )}

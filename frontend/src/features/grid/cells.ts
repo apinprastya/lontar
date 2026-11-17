@@ -39,6 +39,13 @@ export function cellCopyText(cell: Cell | undefined): string {
   return cellText(cell).replace(/[\t\r\n]+/g, ' ')
 }
 
+/** One cell's full value for "Copy value": like the TSV copy, but line breaks and tabs are kept. */
+export function cellValueText(cell: Cell | undefined): string {
+  if (isNull(cell)) return ''
+  if (cell?.k === 'bytes') return String(cell.v ?? '')
+  return cellText(cell)
+}
+
 /** A rectangular selection in grid coordinates (column/row indexes). */
 export interface SelectionSpec {
   /** Cell range: x/y are the top-left column/row. */
