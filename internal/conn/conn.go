@@ -54,6 +54,8 @@ type Source interface {
 	Get(id string) (store.Connection, error)
 	Password(id string) (string, error)
 	SSHSecrets(id string) (password, passphrase string, err error)
+	// JumpSecrets returns the jump host secrets by hop ID.
+	JumpSecrets(id string) (map[string]store.HopSecret, error)
 }
 
 // Secrets are the secrets used to open a connection.
@@ -61,6 +63,9 @@ type Secrets struct {
 	Password      string
 	SSHPassword   string
 	SSHPassphrase string
+	// Jumps are the jump host secrets, in the order of the connection's
+	// SSH.Jumps (missing entries mean none).
+	Jumps []store.HopSecret
 }
 
 // Tunnel is an open SSH tunnel (*sshtunnel.Tunnel).
@@ -271,9 +276,9 @@ func (m *Manager) openDB(ctx context.Context, c store.Connection, sec Secrets, t
 	return &opened{db: db, version: version, current: current, tunnel: tun}, nil
 }
 
-// sshConfig builds the tunnel settings of c.
+// sshConfig builds the tunnel settings of c, with its jump hosts.
 func sshConfig(c store.Connection, sec Secrets) sshtunnel.Config {
-	return sshtunnel.Config{
+	cfg := sshtunnel.Config{
 		Host:       c.SSH.Host,
 		Port:       c.SSH.Port,
 		User:       c.SSH.User,
@@ -282,6 +287,22 @@ func sshConfig(c store.Connection, sec Secrets) sshtunnel.Config {
 		Password:   sec.SSHPassword,
 		Passphrase: sec.SSHPassphrase,
 	}
+	for i, h := range c.SSH.Jumps {
+		var hs store.HopSecret
+		if i < len(sec.Jumps) {
+			hs = sec.Jumps[i]
+		}
+		cfg.Jumps = append(cfg.Jumps, sshtunnel.Config{
+			Host:       h.Host,
+			Port:       h.Port,
+			User:       h.User,
+			Auth:       sshtunnel.AuthMethod(h.AuthMethod),
+			KeyPath:    h.KeyPath,
+			Password:   hs.Password,
+			Passphrase: hs.Passphrase,
+		})
+	}
+	return cfg
 }
 
 // expandTLS expands "~" in the certificate paths.
@@ -332,6 +353,15 @@ func (m *Manager) secrets(c store.Connection) (Secrets, error) {
 	if c.SSHEnabled() {
 		if sec.SSHPassword, sec.SSHPassphrase, err = m.src.SSHSecrets(c.ID); err != nil {
 			return Secrets{}, err
+		}
+		if len(c.SSH.Jumps) > 0 {
+			byID, err := m.src.JumpSecrets(c.ID)
+			if err != nil {
+				return Secrets{}, err
+			}
+			for _, h := range c.SSH.Jumps {
+				sec.Jumps = append(sec.Jumps, byID[h.ID])
+			}
 		}
 	}
 	return sec, nil

@@ -7,7 +7,7 @@ import RunSqlFileDialog from '../runsql/RunSqlFileDialog'
 import type { SqlRunApi } from '../runsql/api'
 import CommandPalette, { type PaletteConnection, type PaletteMode, type PaletteTable } from '../palette/CommandPalette'
 import HostKeyDialog from '../connections/HostKeyDialog'
-import { connectionSummary } from '../connections/types'
+import { connectionSummary, sshBadgeTitle } from '../connections/types'
 import { commandAvailable, runCommand } from '../palette/commands'
 import { resultEditView } from '../../stores/queryTabs'
 import { editorApi, type EditorApi } from '../editor/api'
@@ -292,7 +292,7 @@ function WorkspaceView({
               <>
                 <SafeModeBadge mode={safeMode} />
                 {session.tunneled && (
-                  <span className="ssh-badge" title="Connected through an SSH tunnel" data-testid="ssh-badge">
+                  <span className="ssh-badge" title={sshBadgeTitle(connection?.ssh)} data-testid="ssh-badge">
                     SSH
                   </span>
                 )}

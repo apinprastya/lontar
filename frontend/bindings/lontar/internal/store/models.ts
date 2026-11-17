@@ -57,6 +57,14 @@ export interface Connection {
 }
 
 /**
+ * HopSecrets are the secrets of one jump host (nil keeps, "" removes).
+ */
+export interface HopSecrets {
+    "password": string | null;
+    "passphrase": string | null;
+}
+
+/**
  * SSHConfig describes an SSH tunnel to the database host. Secrets (the SSH
  * password and the key passphrase) are kept in the SecretStore under
  * SecretKey(id, SecretSSHPassword / SecretSSHPassphrase), never here.
@@ -76,6 +84,47 @@ export interface SSHConfig {
      * KeyPath is the private key file for "key" ("~" is expanded).
      */
     "keyPath"?: string;
+
+    /**
+     * Jumps are jump hosts (at most MaxSSHJumps), in the order they are
+     * dialled: Jumps[0] from this machine, and the last one reaches Host,
+     * which reaches the database. Empty for a direct SSH connection.
+     */
+    "jumps"?: SSHHop[] | null;
+}
+
+/**
+ * SSHHop is one jump host. Its secrets are kept in the SecretStore under
+ * SecretKey(connection id, JumpSecretPurpose(hop.ID, ...)), so they stay
+ * with the hop when hops are reordered.
+ */
+export interface SSHHop {
+    /**
+     * ID identifies the hop (and its secrets) within the connection. It is
+     * assigned by Store: an ID the saved connection does not have is
+     * replaced by a new one.
+     */
+    "id"?: string;
+    "host"?: string;
+    "port"?: number;
+    "user"?: string;
+
+    /**
+     * AuthMethod is "password", "key" or "agent".
+     */
+    "authMethod"?: string;
+
+    /**
+     * KeyPath is the private key file for "key" ("~" is expanded).
+     */
+    "keyPath"?: string;
+
+    /**
+     * HasPassword and HasPassphrase report saved secrets for this hop
+     * (maintained by Store, like Connection.HasSSHPassword).
+     */
+    "hasPassword": boolean;
+    "hasPassphrase": boolean;
 }
 
 /**
@@ -129,6 +178,13 @@ export interface Secrets {
     "password": string | null;
     "sshPassword": string | null;
     "sshPassphrase": string | null;
+
+    /**
+     * Jumps holds the jump host secrets in the order of the saved
+     * connection's SSH.Jumps (by position, so that a hop the UI just added
+     * can have secrets). Missing entries keep the stored values.
+     */
+    "jumps": HopSecrets[] | null;
 }
 
 /**

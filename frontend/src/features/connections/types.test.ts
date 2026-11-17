@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeConnection } from '../../test/mockBindings'
-import { connectionColor, connectionSummary, isFileBased } from './types'
+import { connectionColor, connectionSummary, isFileBased, sshBadgeTitle, sshChain } from './types'
 
 describe('connection helpers', () => {
   it('summarises server and file connections', () => {
@@ -20,5 +20,16 @@ describe('connection helpers', () => {
   it('knows file-based kinds', () => {
     expect(isFileBased('sqlite')).toBe(true)
     expect(isFileBased('mysql')).toBe(false)
+  })
+
+  it('describes the SSH chain', () => {
+    const ssh = { enabled: true, host: 'gw', jumps: [{ host: 'b1' }, { host: 'b2' }] }
+    expect(sshChain(ssh)).toBe('you → b1 → b2 → gw')
+    expect(sshChain({ enabled: true, host: 'gw' })).toBe('you → gw')
+    expect(sshChain({ enabled: true, jumps: [{}] })).toBe('you →  → ')
+    expect(sshChain(null)).toBe('')
+    expect(sshBadgeTitle(ssh)).toBe('Connected through SSH: you → b1 → b2 → gw')
+    expect(sshBadgeTitle({ enabled: true, host: 'gw', jumps: [] })).toBe('Connected through an SSH tunnel')
+    expect(sshBadgeTitle(undefined)).toBe('Connected through an SSH tunnel')
   })
 })

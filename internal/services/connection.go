@@ -20,6 +20,7 @@ type ConnectionStore interface {
 	Duplicate(id string) (store.Connection, error)
 	Password(id string) (string, error)
 	SSHSecrets(id string) (password, passphrase string, err error)
+	JumpSecrets(id string) (map[string]store.HopSecret, error)
 }
 
 // HostKeyAccepter records an SSH host key the user accepted
@@ -129,9 +130,41 @@ func (s *ConnectionService) Test(ctx context.Context, c store.Connection, secret
 		}
 		sec.SSHPassword = orStored(secrets.SSHPassword, storedPw)
 		sec.SSHPassphrase = orStored(secrets.SSHPassphrase, storedPhrase)
+		if sec.Jumps, err = s.jumpSecrets(c, secrets.Jumps); err != nil {
+			return "", err
+		}
 	}
 	v, err := s.sessions.Test(ctx, c, sec)
 	return v, hostKeyError(err)
+}
+
+// jumpSecrets returns the secrets for c's jump hosts: the ones given (by
+// position) and, for null ones of an existing connection, the stored
+// secrets of the hop with the same ID.
+func (s *ConnectionService) jumpSecrets(c store.Connection, given []store.HopSecrets) ([]store.HopSecret, error) {
+	if len(c.SSH.Jumps) == 0 {
+		return nil, nil
+	}
+	var stored map[string]store.HopSecret
+	if c.ID != "" {
+		var err error
+		if stored, err = s.store.JumpSecrets(c.ID); err != nil {
+			return nil, err
+		}
+	}
+	out := make([]store.HopSecret, len(c.SSH.Jumps))
+	for i, h := range c.SSH.Jumps {
+		var g store.HopSecrets
+		if i < len(given) {
+			g = given[i]
+		}
+		st := stored[h.ID]
+		if h.ID == "" {
+			st = store.HopSecret{}
+		}
+		out[i] = store.HopSecret{Password: orStored(g.Password, st.Password), Passphrase: orStored(g.Passphrase, st.Passphrase)}
+	}
+	return out, nil
 }
 
 func orStored(v *string, stored string) string {

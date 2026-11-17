@@ -5,6 +5,7 @@ import { hostKeyInfo, type HostKeyInfo } from '../../lib/hostkey'
 import { SAFE_MODES, type SafeMode } from '../edits/types'
 import { matchesShortcut, shortcutLabel } from '../../lib/mod'
 import HostKeyDialog from './HostKeyDialog'
+import JumpHosts, { afterSave, hopSecrets, toHopDrafts, toHops, validateHops, type HopDraft, type HopErrors } from './JumpHosts'
 import { dialogApi, type FileFilter } from './dialogApi'
 import {
   Connection,
@@ -57,6 +58,8 @@ interface Draft {
   sshUser: string
   sshAuth: SSHAuthMethod
   sshKeyPath: string
+  /** Jump hosts, in dialling order. */
+  sshJumps: HopDraft[]
   sslMode: SSLMode
   sslCA: string
   sslCert: string
@@ -112,6 +115,7 @@ function toDraft(c: Connection | undefined, drivers: DriverInfo[]): Draft {
     sshUser: c?.ssh?.user ?? '',
     sshAuth: c?.ssh?.authMethod ?? 'password',
     sshKeyPath: c?.ssh?.keyPath ?? '',
+    sshJumps: toHopDrafts(c?.ssh?.jumps),
     sslMode: c?.ssl?.mode ?? '',
     sslCA: c?.ssl?.caFile ?? '',
     sslCert: c?.ssl?.certFile ?? '',
@@ -161,6 +165,7 @@ export function validateDraft(d: Draft): Errors {
       if (!validPort(d.sshPort)) errors.sshPort = 'Port must be between 1 and 65535'
       if (!d.sshUser.trim()) errors.sshUser = 'SSH user is required'
       if (d.sshAuth === 'key' && !d.sshKeyPath.trim()) errors.sshKeyPath = 'Private key file is required'
+      if (Object.keys(validateHops(d.sshJumps)).length) errors.sshJumps = 'Check the jump hosts'
     }
     if (Boolean(d.sslCert.trim()) !== Boolean(d.sslKey.trim())) errors.sslKey = 'Give both the client certificate and its key'
     const optionsError = validateOptions(d.kind, d.options)
@@ -208,6 +213,8 @@ function toConnection(d: Draft, initial: Connection | undefined): Connection {
           user: d.sshUser.trim(),
           authMethod: d.sshAuth,
           keyPath: d.sshKeyPath.trim(),
+          // Only with jump hosts, so connections without keep their shape.
+          ...(d.sshJumps.length ? { jumps: toHops(d.sshJumps) } : {}),
         },
     options: file ? initial?.options : toOptions(d.options),
     ssl: file ? null : { mode: d.sslMode, caFile: d.sslCA.trim(), certFile: d.sslCert.trim(), keyFile: d.sslKey.trim() },
@@ -250,6 +257,7 @@ export default function ConnectionForm({
   const [password, setPassword] = useState('')
   const [passwordTouched, setPasswordTouched] = useState(false)
   const [errors, setErrors] = useState<Errors>({})
+  const [hopErrors, setHopErrors] = useState<Record<number, HopErrors>>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [test, setTest] = useState<TestState>({ status: 'idle' })
@@ -293,12 +301,19 @@ export default function ConnectionForm({
       password: passwordTouched ? password : null,
       sshPassword: sshPassword.touched ? sshPassword.value : null,
       sshPassphrase: sshPassphrase.touched ? sshPassphrase.value : null,
+      ...(draft.sshJumps.length && !file ? { jumps: hopSecrets(draft.sshJumps) } : {}),
     }
+  }
+
+  function changeJumps(hops: HopDraft[]) {
+    update('sshJumps', hops)
+    setHopErrors({})
   }
 
   function check(): Connection | null {
     const errs = validateDraft(draft)
     setErrors(errs)
+    setHopErrors(errs.sshJumps ? validateHops(draft.sshJumps) : {})
     const first = Object.keys(errs)[0] as keyof Draft | undefined
     if (first) {
       setTab(tabOf(first))
@@ -338,6 +353,16 @@ export default function ConnectionForm({
     await runTest()
   }
 
+  async function browseHopKey(i: number) {
+    setPickError(null)
+    try {
+      const path = await pickFile(`Choose an SSH private key for jump host ${i + 1}`, KEY_FILTERS)
+      if (path) changeJumps(draft.sshJumps.map((h, j) => (j === i ? { ...h, keyPath: path } : h)))
+    } catch (err) {
+      setPickError(errorMessage(err))
+    }
+  }
+
   async function browse(key: 'sshKeyPath' | 'sslCA' | 'sslCert' | 'sslKey', title: string, filters: FileFilter[]) {
     setPickError(null)
     try {
@@ -360,6 +385,7 @@ export default function ConnectionForm({
       setPasswordTouched(false)
       setSshPassword(untouched)
       setSshPassphrase(untouched)
+      setDraft((d) => ({ ...d, sshJumps: afterSave(d.sshJumps, saved.ssh?.jumps) }))
       return saved
     } catch (err) {
       setSubmitError(errorMessage(err))
@@ -543,9 +569,14 @@ export default function ConnectionForm({
             )}
             <span />
             <span className="hint">
-              The database host and port are reached from the SSH server. Unknown host keys are shown for you to confirm; jump hosts are not
-              supported.
+              The database host and port are reached from the SSH server. Unknown host keys are shown for you to confirm, on every hop.
             </span>
+
+            <span>Jump hosts</span>
+            <div className="field">
+              <JumpHosts hops={draft.sshJumps} errors={hopErrors} disabled={!draft.sshEnabled} onChange={changeJumps} onBrowseKey={(i) => void browseHopKey(i)} />
+              {err('sshJumps')}
+            </div>
           </div>
         )}
 

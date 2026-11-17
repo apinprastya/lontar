@@ -28,6 +28,7 @@ type fakeSource struct {
 	passwords map[string]string
 	pwErr     error
 	sshErr    error
+	jumpErr   error
 }
 
 func newFakeSource(conns ...store.Connection) *fakeSource {
@@ -58,6 +59,24 @@ func (f *fakeSource) SSHSecrets(id string) (string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.passwords[id+":ssh-password"], f.passwords[id+":ssh-passphrase"], f.sshErr
+}
+
+func (f *fakeSource) JumpSecrets(id string) (map[string]store.HopSecret, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.jumpErr != nil {
+		return nil, f.jumpErr
+	}
+	out := map[string]store.HopSecret{}
+	if c, ok := f.conns[id]; ok && c.SSH != nil {
+		for _, h := range c.SSH.Jumps {
+			out[h.ID] = store.HopSecret{
+				Password:   f.passwords[store.SecretKey(id, store.JumpSecretPurpose(h.ID, "password"))],
+				Passphrase: f.passwords[store.SecretKey(id, store.JumpSecretPurpose(h.ID, "passphrase"))],
+			}
+		}
+	}
+	return out, nil
 }
 
 func sqliteConn(t *testing.T, id string, create bool) store.Connection {

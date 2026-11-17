@@ -113,3 +113,69 @@ func TestParseDirect(t *testing.T) {
 	}
 	_ = net.IPv4zero
 }
+
+func TestChain(t *testing.T) {
+	servers, err := StartChain(Options{User: "u", Password: "a"}, Options{User: "u", Password: "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer CloseAll(servers)
+	echo, stop, err := Echo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	first, err := dial(t, servers[0], ssh.Password("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	raw, err := first.Dial("tcp", servers[1].Addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, chans, reqs, err := ssh.NewClientConn(raw, servers[1].Addr, &ssh.ClientConfig{
+		User: "u", Auth: []ssh.AuthMethod{ssh.Password("b")},
+		HostKeyCallback: ssh.FixedHostKey(servers[1].HostKey.PublicKey()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := ssh.NewClient(sc, chans, reqs)
+	defer second.Close()
+	conn, err := second.Dial("tcp", echo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Write([]byte("hi")); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 2)
+	if _, err := io.ReadFull(conn, buf); err != nil || string(buf) != "hi" {
+		t.Fatalf("echo = %q %v", buf, err)
+	}
+	if servers[0].Forwards() != 1 || servers[1].Forwards() != 1 {
+		t.Fatalf("forwards = %d %d", servers[0].Forwards(), servers[1].Forwards())
+	}
+	// A bad listen address closes the servers already started.
+	if _, err := StartChain(Options{}, Options{Listen: "256.0.0.1:0"}); err == nil {
+		t.Fatal("bad listen address accepted")
+	}
+}
+
+func TestBlackhole(t *testing.T) {
+	addr, stop, err := Blackhole()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	_ = c.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	if _, err := c.Read(make([]byte, 1)); err == nil {
+		t.Fatal("blackhole answered")
+	}
+	stop()
+}

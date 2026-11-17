@@ -2,10 +2,10 @@ package services
 
 import (
 	"context"
-	"lontar/internal/sshtunnel"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +13,7 @@ import (
 	"lontar/internal/conn"
 	"lontar/internal/driver"
 	"lontar/internal/driver/all"
+	"lontar/internal/sshtunnel"
 	"lontar/internal/store"
 )
 
@@ -217,7 +218,7 @@ func TestConnectionServiceSSH(t *testing.T) {
 	if _, err := svc.Test(context.Background(), saved, store.Secrets{SSHPassphrase: ptr("typed")}); err != nil {
 		t.Fatal(err)
 	}
-	if fs.testedSec != (conn.Secrets{Password: "db", SSHPassword: "sp", SSHPassphrase: "typed"}) {
+	if !reflect.DeepEqual(fs.testedSec, conn.Secrets{Password: "db", SSHPassword: "sp", SSHPassphrase: "typed"}) {
 		t.Fatalf("secrets = %+v", fs.testedSec)
 	}
 	// Disabled SSH sends no SSH secrets.
@@ -256,5 +257,45 @@ func TestConnectionServiceSSH(t *testing.T) {
 	}
 	if err := svc.AcceptHostKey("b", "bad"); !errors.Is(err, sshtunnel.ErrNoPendingKey) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestConnectionServiceTestJumpSecrets(t *testing.T) {
+	svc, _, sec, fs := newService(t)
+	in := store.Connection{Name: "pg", Kind: driver.Postgres, Host: "h", SSH: &store.SSHConfig{Enabled: true, Host: "gw", User: "u",
+		Jumps: []store.SSHHop{{Host: "b1", User: "u1"}, {Host: "b2", User: "u2", AuthMethod: store.SSHAuthKey, KeyPath: "~/k"}}}}
+	c, err := svc.Save(in, store.Secrets{Jumps: []store.HopSecrets{{Password: ptr("stored-1")}, {Passphrase: ptr("stored-2")}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	// null uses the stored secret of the hop with that ID, even after a
+	// reorder in the (unsaved) form; a given secret wins.
+	form := c
+	form.SSH = &store.SSHConfig{}
+	*form.SSH = *c.SSH
+	form.SSH.Jumps = []store.SSHHop{c.SSH.Jumps[1], c.SSH.Jumps[0], {Host: "new", User: "n"}}
+	if _, err := svc.Test(ctx, form, store.Secrets{Jumps: []store.HopSecrets{{}, {}, {Password: ptr("typed")}}}); err != nil {
+		t.Fatal(err)
+	}
+	want := []store.HopSecret{{Passphrase: "stored-2"}, {Password: "stored-1"}, {Password: "typed"}}
+	if fmt.Sprint(fs.testedSec.Jumps) != fmt.Sprint(want) {
+		t.Fatalf("jumps = %+v", fs.testedSec.Jumps)
+	}
+	// A new connection has nothing stored.
+	in.SSH.Jumps[0].ID = c.SSH.Jumps[0].ID
+	if _, err := svc.Test(ctx, in, store.Secrets{}); err != nil || fmt.Sprint(fs.testedSec.Jumps) != "[{ } { }]" {
+		t.Fatalf("new = %+v %v", fs.testedSec.Jumps, err)
+	}
+	// A keychain error is reported.
+	sec.Err = errors.New("locked")
+	if _, err := svc.Test(ctx, c, store.Secrets{SSHPassword: ptr("x"), SSHPassphrase: ptr("y")}); err == nil {
+		t.Fatal("expected keychain error")
+	}
+	sec.Err = nil
+	// No jump hosts: no hop secrets.
+	c.SSH.Jumps = nil
+	if _, err := svc.Test(ctx, c, store.Secrets{}); err != nil || fs.testedSec.Jumps != nil {
+		t.Fatalf("plain = %+v %v", fs.testedSec.Jumps, err)
 	}
 }

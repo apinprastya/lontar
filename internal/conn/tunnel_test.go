@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -78,7 +79,7 @@ func TestTunnelLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := sshtunnel.Config{Host: "bastion", Port: 2222, User: "jump", Auth: "key", KeyPath: "~/id", Password: "sshpw", Passphrase: "phrase"}
-	if gotCfg != want {
+	if !reflect.DeepEqual(gotCfg, want) {
 		t.Fatalf("ssh cfg = %+v", gotCfg)
 	}
 	s, _ := m.Get(id)
@@ -163,5 +164,52 @@ func TestTunnelLifecycle(t *testing.T) {
 	d := sshtunnel.New(sshtunnel.Options{HostKeys: &sshtunnel.HostKeys{}})
 	if _, err := SSHTunnels(d)(ctx, sshtunnel.Config{Host: "127.0.0.1", Port: 1, User: "u"}); err == nil {
 		t.Fatal("expected dial error")
+	}
+}
+
+func TestTunnelJumpHosts(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "x.db")
+	var mu sync.Mutex
+	var cfgs []driver.Config
+	reg := driver.NewRegistry(dialRecorder{fakeServerOpen{fakeServer: fakeServer{Driver: sqlite.New(), dbs: []string{"one"}}, path: path, lite: sqlite.New()}, &mu, &cfgs})
+	c := store.Connection{ID: "p", Name: "pg", Kind: driver.Postgres, Host: "db", Database: "one",
+		SSH: &store.SSHConfig{Enabled: true, Host: "gw", Port: 22, User: "final", AuthMethod: "password",
+			Jumps: []store.SSHHop{
+				{ID: "h1", Host: "b1", Port: 2201, User: "u1", AuthMethod: "agent"},
+				{ID: "h2", Host: "b2", Port: 22, User: "u2", AuthMethod: "key", KeyPath: "~/k2"},
+			}}}
+	src := newFakeSource(c)
+	src.passwords["p:ssh-password"] = "final-pw"
+	src.passwords[store.SecretKey("p", store.JumpSecretPurpose("h2", "passphrase"))] = "phrase-2"
+	src.passwords[store.SecretKey("p", store.JumpSecretPurpose("h1", "password"))] = "pw-1"
+	m := NewManager(src, reg)
+	var got []sshtunnel.Config
+	m.Tunnels = func(_ context.Context, cfg sshtunnel.Config) (Tunnel, error) {
+		got = append(got, cfg)
+		return &fakeTunnel{}, nil
+	}
+	if _, err := m.Connect(ctx, "p"); err != nil {
+		t.Fatal(err)
+	}
+	want := sshtunnel.Config{Host: "gw", Port: 22, User: "final", Auth: "password", Password: "final-pw",
+		Jumps: []sshtunnel.Config{
+			{Host: "b1", Port: 2201, User: "u1", Auth: "agent", Password: "pw-1"},
+			{Host: "b2", Port: 22, User: "u2", Auth: "key", KeyPath: "~/k2", Passphrase: "phrase-2"},
+		}}
+	if !reflect.DeepEqual(got[0], want) {
+		t.Fatalf("cfg = %+v", got[0])
+	}
+	// Test takes the secrets by position (missing ones are empty).
+	if _, err := m.Test(ctx, c, Secrets{Jumps: []store.HopSecret{{Password: "typed"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got[1].Jumps[0].Password != "typed" || got[1].Jumps[1].Passphrase != "" {
+		t.Fatalf("test cfg = %+v", got[1])
+	}
+	// A keychain error for the hop secrets fails the connect.
+	src.jumpErr = errors.New("hop keychain")
+	if _, err := m.Connect(ctx, "p"); err == nil || !strings.Contains(err.Error(), "hop keychain") {
+		t.Fatalf("err = %v", err)
 	}
 }

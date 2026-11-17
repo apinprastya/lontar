@@ -8,6 +8,10 @@ export interface HostKeyInfo {
   /** Changed keys: the recorded entries ("file:line"). */
   known?: string[]
   message: string
+  /** With jump hosts: the hop that presented the key, e.g. "jump host 2 (bastion)" or "SSH host (gw)". */
+  hopLabel?: string
+  /** 1-based jump host number, 0 for the final SSH host. */
+  hop?: number
 }
 
 /** The structured host key error carried by a rejected backend call, if any. */

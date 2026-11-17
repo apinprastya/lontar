@@ -27,7 +27,16 @@
 // Dial (the pool's next new connection) reconnects the tunnel once and
 // reports the error if that fails too.
 //
-// Jump hosts (ProxyJump) are not supported.
+// # Jump hosts
+//
+// Config.Jumps lists up to a few SSH servers to go through before the
+// final one (like OpenSSH's ProxyJump). Jumps[0] is dialled directly from
+// this machine; every next server, and finally Config itself, is reached
+// through a direct-tcpip channel of the previous one. Host keys and
+// authentication are checked on every hop, and errors name the hop
+// (*HopError, and the Hop/HopLabel fields of the host key errors). The
+// tunnel keeps the whole chain: Close closes it from the last client to the
+// first, and a lost connection rebuilds the whole chain.
 package sshtunnel
 
 import (
@@ -78,7 +87,33 @@ type Config struct {
 	Password string
 	// Passphrase decrypts an encrypted private key (AuthKey).
 	Passphrase string
+	// Jumps are the jump hosts to go through, in order: Jumps[0] is
+	// dialled from this machine and the last one reaches this server. The
+	// Jumps of a jump host are ignored.
+	Jumps []Config
 }
+
+// HopError is an error of one hop of a chain with jump hosts. Hop is the
+// 1-based jump host number, or 0 for the final SSH server.
+type HopError struct {
+	Hop  int
+	Host string
+	Err  error
+}
+
+// HopLabel names a hop for messages: "jump host 2 (bastion)" or
+// "SSH host (db-gw)".
+func HopLabel(hop int, host string) string {
+	if hop > 0 {
+		return fmt.Sprintf("jump host %d (%s)", hop, host)
+	}
+	return fmt.Sprintf("SSH host (%s)", host)
+}
+
+func (e *HopError) Error() string { return HopLabel(e.Hop, e.Host) + ": " + e.Err.Error() }
+
+// Unwrap returns the hop's error.
+func (e *HopError) Unwrap() error { return e.Err }
 
 // Address returns "host:port".
 func (c Config) Address() string {
@@ -120,6 +155,8 @@ type Options struct {
 // Dialer opens tunnels.
 type Dialer struct {
 	opts Options
+	// onClose observes every client closed by closeChain (tests).
+	onClose func(*ssh.Client)
 }
 
 // New returns a Dialer.
@@ -229,8 +266,82 @@ func ParseKey(pem []byte, passphrase string) (ssh.Signer, error) {
 	return nil, fmt.Errorf("SSH key: %w", err)
 }
 
-// connect dials the SSH server and authenticates.
-func (d *Dialer) connect(ctx context.Context, cfg Config) (*ssh.Client, error) {
+// closeClient closes one client of a chain.
+func (d *Dialer) closeClient(c *ssh.Client) error {
+	if d.onClose != nil {
+		d.onClose(c)
+	}
+	return c.Close()
+}
+
+// closeChain closes the clients of a chain from the last to the first, so
+// that each one's transport (a channel of the previous client) is still up
+// while it says goodbye. It returns the first error.
+func (d *Dialer) closeChain(chain []*ssh.Client) error {
+	var first error
+	for i := len(chain) - 1; i >= 0; i-- {
+		if err := d.closeClient(chain[i]); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// connect dials the SSH server, through its jump hosts if any, and
+// authenticates on every hop. It returns the chain of clients (the last one
+// is connected to cfg's server). Options.Timeout bounds the whole chain.
+func (d *Dialer) connect(ctx context.Context, cfg Config) ([]*ssh.Client, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.opts.Timeout)
+	defer cancel()
+	final := cfg
+	final.Jumps = nil
+	hops := append(append([]Config{}, cfg.Jumps...), final)
+	chain := make([]*ssh.Client, 0, len(hops))
+	for i, h := range hops {
+		h.Jumps = nil
+		var via *ssh.Client
+		if i > 0 {
+			via = chain[i-1]
+		}
+		c, err := d.connectHop(ctx, h, via)
+		if err != nil {
+			_ = d.closeChain(chain)
+			if len(cfg.Jumps) == 0 {
+				return nil, err
+			}
+			hop := i + 1
+			if i == len(hops)-1 {
+				hop = 0
+			}
+			return nil, hopError(hop, h.Host, err)
+		}
+		chain = append(chain, c)
+	}
+	return chain, nil
+}
+
+// hopError names the hop in err. The host key errors stay unwrapped (so
+// that callers and the UI get their fields) and carry the hop themselves.
+func hopError(hop int, host string, err error) error {
+	label := HopLabel(hop, host)
+	var unknown *HostKeyUnknownError
+	var changed *HostKeyChangedError
+	switch {
+	case errors.As(err, &unknown):
+		unknown.Hop, unknown.HopLabel = hop, label
+		unknown.Message = label + ": " + unknown.Message
+		return unknown
+	case errors.As(err, &changed):
+		changed.Hop, changed.HopLabel = hop, label
+		changed.Message = label + ": " + changed.Message
+		return changed
+	}
+	return &HopError{Hop: hop, Host: host, Err: err}
+}
+
+// connectHop dials one SSH server, directly (via == nil) or through a
+// direct-tcpip channel of via, and authenticates.
+func (d *Dialer) connectHop(ctx context.Context, cfg Config, via *ssh.Client) (*ssh.Client, error) {
 	if strings.TrimSpace(cfg.Host) == "" {
 		return nil, errors.New("no SSH host is set")
 	}
@@ -251,31 +362,40 @@ func (d *Dialer) connect(ctx context.Context, cfg Config) (*ssh.Client, error) {
 		HostKeyAlgorithms: algos,
 		Timeout:           d.opts.Timeout,
 	}
-	ctx, cancel := context.WithTimeout(ctx, d.opts.Timeout)
-	defer cancel()
-	var nd net.Dialer
-	raw, err := nd.DialContext(ctx, "tcp", addr)
+	var raw net.Conn
+	if via == nil {
+		var nd net.Dialer
+		raw, err = nd.DialContext(ctx, "tcp", addr)
+	} else {
+		raw, err = via.DialContext(ctx, "tcp", addr)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("SSH: connect to %s: %w", addr, err)
 	}
-	// Bound the handshake by the context too.
-	stop := context.AfterFunc(ctx, func() { _ = raw.SetDeadline(time.Now()) })
+	// Bound the handshake by the context too. A channel of the previous hop
+	// has no deadlines: close it instead.
+	stop := context.AfterFunc(ctx, func() {
+		if raw.SetDeadline(time.Now()) != nil {
+			_ = raw.Close()
+		}
+	})
 	c, chans, reqs, err := ssh.NewClientConn(raw, addr, cc)
 	stop()
 	if err != nil {
 		_ = raw.Close()
 		var unknown *HostKeyUnknownError
 		var changed *HostKeyChangedError
-		if errors.As(err, &unknown) || errors.As(err, &changed) {
+		switch {
+		case errors.As(err, &unknown):
 			// Return the structured error itself (not wrapped by ssh) so
 			// callers can use errors.As and the UI gets its fields.
-			if unknown != nil {
-				return nil, unknown
-			}
+			return nil, unknown
+		case errors.As(err, &changed):
 			return nil, changed
-		}
-		if strings.Contains(err.Error(), "unable to authenticate") {
+		case strings.Contains(err.Error(), "unable to authenticate"):
 			return nil, fmt.Errorf("SSH authentication failed for %s@%s: %w", cfg.User, addr, err)
+		case ctx.Err() != nil:
+			return nil, fmt.Errorf("SSH: %s: %w", addr, ctx.Err())
 		}
 		return nil, fmt.Errorf("SSH: %s: %w", addr, err)
 	}
@@ -293,42 +413,54 @@ type Tunnel struct {
 	// a drop share one new SSH connection.
 	reconnecting sync.Mutex
 
-	mu      sync.Mutex
+	mu sync.Mutex
+	// client is the last client of chain (the one connected to the final
+	// SSH server); chain holds the jump host clients before it.
 	client  *ssh.Client
+	chain   []*ssh.Client
 	closed  bool
 	lastErr error
 	done    chan struct{} // closed by Close (stops the keepalive loop)
 }
 
-// Open connects to the SSH server and returns the tunnel.
+// Open connects to the SSH server (through its jump hosts) and returns the
+// tunnel.
 func (d *Dialer) Open(ctx context.Context, cfg Config) (*Tunnel, error) {
-	c, err := d.connect(ctx, cfg)
+	chain, err := d.connect(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	t := &Tunnel{d: d, cfg: cfg, done: make(chan struct{})}
-	t.attach(c)
+	t.attach(chain)
 	if d.opts.KeepAlive > 0 {
 		go t.keepAlive(d.opts.KeepAlive)
 	}
 	return t, nil
 }
 
-// attach makes c the current client and watches it for disconnects.
-func (t *Tunnel) attach(c *ssh.Client) {
+// attach makes chain the current one and watches its last client for
+// disconnects. A jump host that drops takes the channels through it, and so
+// the last client, down with it. When the last client is gone, the rest of
+// its chain is closed.
+func (t *Tunnel) attach(chain []*ssh.Client) {
+	c := chain[len(chain)-1]
 	t.mu.Lock()
-	t.client = c
+	t.client, t.chain = c, chain
 	t.mu.Unlock()
 	go func() {
 		err := c.Wait()
 		t.mu.Lock()
-		defer t.mu.Unlock()
-		if t.client == c {
-			t.client = nil
+		current := t.client == c
+		if current {
+			t.client, t.chain = nil, nil
 			if err == nil {
 				err = errors.New("connection closed")
 			}
 			t.lastErr = fmt.Errorf("SSH connection to %s lost: %w", t.cfg.Address(), err)
+		}
+		t.mu.Unlock()
+		if current {
+			_ = t.d.closeChain(chain[:len(chain)-1])
 		}
 	}()
 }
@@ -392,7 +524,8 @@ func (t *Tunnel) current(ctx context.Context) (*ssh.Client, error) {
 	return t.reconnect(ctx, nil)
 }
 
-// reconnect replaces the client (unless another goroutine already did).
+// reconnect replaces the client chain (unless another goroutine already
+// did). The whole chain is rebuilt from the first jump host.
 func (t *Tunnel) reconnect(ctx context.Context, dead *ssh.Client) (*ssh.Client, error) {
 	t.reconnecting.Lock()
 	defer t.reconnecting.Unlock()
@@ -406,15 +539,20 @@ func (t *Tunnel) reconnect(ctx context.Context, dead *ssh.Client) (*ssh.Client, 
 		t.mu.Unlock()
 		return c, nil
 	}
+	var old []*ssh.Client
 	if dead != nil && t.client == dead {
-		t.client = nil
+		old = t.chain
+		t.client, t.chain = nil, nil
 	}
 	lost := t.lastErr
 	t.mu.Unlock()
-	if dead != nil {
-		_ = dead.Close()
+	switch {
+	case old != nil:
+		_ = t.d.closeChain(old)
+	case dead != nil:
+		_ = t.d.closeClient(dead)
 	}
-	c, err := t.d.connect(ctx, t.cfg)
+	chain, err := t.d.connect(ctx, t.cfg)
 	if err != nil {
 		if lost != nil {
 			return nil, fmt.Errorf("%w; reconnecting failed: %w", lost, err)
@@ -424,12 +562,12 @@ func (t *Tunnel) reconnect(ctx context.Context, dead *ssh.Client) (*ssh.Client, 
 	t.mu.Lock()
 	if t.closed {
 		t.mu.Unlock()
-		_ = c.Close()
+		_ = t.d.closeChain(chain)
 		return nil, ErrClosed
 	}
 	t.mu.Unlock()
-	t.attach(c)
-	return c, nil
+	t.attach(chain)
+	return chain[len(chain)-1], nil
 }
 
 // Dial opens a connection to addr ("host:port", resolved by the SSH
@@ -468,8 +606,8 @@ func isConnectionLost(err error) bool {
 	return true
 }
 
-// Close closes the SSH connection; open database connections through it
-// fail afterwards.
+// Close closes the SSH connection (the chain from the last client to the
+// first); open database connections through it fail afterwards.
 func (t *Tunnel) Close() error {
 	t.mu.Lock()
 	if t.closed {
@@ -477,12 +615,9 @@ func (t *Tunnel) Close() error {
 		return nil
 	}
 	t.closed = true
-	c := t.client
-	t.client = nil
+	chain := t.chain
+	t.client, t.chain = nil, nil
 	close(t.done)
 	t.mu.Unlock()
-	if c != nil {
-		return c.Close()
-	}
-	return nil
+	return t.d.closeChain(chain)
 }

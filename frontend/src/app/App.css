@@ -2376,6 +2376,48 @@ textarea.cell-editor-input {
   border-top-color: var(--danger);
 }
 
+.hostkey-hop {
+  margin: 0 0 6px;
+}
+
+.jump-hosts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jump-hop {
+  position: relative;
+  margin: 0;
+  padding: 6px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.jump-hop legend {
+  padding: 0 4px;
+  color: var(--text);
+}
+
+.jump-hop-actions {
+  position: absolute;
+  top: -4px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.jump-hop-grid {
+  grid-template-columns: 90px 1fr;
+  margin-top: 6px;
+}
+
+.jump-hosts-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .hostkey-facts {
   display: grid;
   grid-template-columns: 90px 1fr;

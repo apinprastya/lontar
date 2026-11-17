@@ -417,10 +417,39 @@ channel of one SSH connection, made in-process.
 - A keepalive is sent every 30 seconds. If the SSH connection drops, the
   running query fails with an error, and the next query reconnects the
   tunnel once. Switching databases reuses the tunnel; disconnecting closes it.
-- **Test** goes through the tunnel too. Jump hosts (ProxyJump) and Pageant
-  are not supported.
+- **Test** goes through the tunnel too, including every jump host.
+  Pageant (PuTTY's agent) is not supported.
 
-Sessions through SSH show an **SSH** badge next to the connection name.
+### Jump hosts
+
+When the SSH server is itself only reachable through other bastions, add
+up to **3 jump hosts** under **Jump hosts** on the SSH tab (**Add jump
+host**, **Remove**, and the ↑/↓ buttons to reorder). This is the same idea
+as OpenSSH's `ProxyJump`, but configured in the form; `~/.ssh/config` is not
+read.
+
+- **Order:** jump host 1 is dialled first, directly from this machine. Each
+  next hop is reached through the previous one, and the **SSH host** at the
+  top of the tab is the *last* hop: the one that reaches the database. The
+  chain is you → jump host 1 → jump host 2 → … → SSH host → database.
+- Each hop has its own host, port, user and authentication (password,
+  private key with **Browse…** and passphrase, or the SSH agent). Hop
+  secrets are kept in the keychain like the others, each under its own
+  entry, and stay with their hop when you reorder the list. Removing a hop
+  (or the connection) removes its saved secrets.
+- **Host keys are checked on every hop**, against the same `known_hosts`
+  files. An unknown or changed key stops the chain at that hop, and the
+  dialog names it (for example *jump host 2 (bastion2.example.com)*).
+  Trusting it adds that hop's key to Lontar's `known_hosts`, and the next
+  attempt continues to the next hop. A changed key is never replaced.
+- Authentication and connection errors name the hop too. The connect
+  timeout covers the whole chain.
+- The keepalive runs on the last hop. If any hop drops, the whole chain is
+  rebuilt on the next query; disconnecting closes it from the last hop back
+  to the first.
+
+Sessions through SSH show an **SSH** badge next to the connection name; with
+jump hosts its tooltip shows the chain (`you → bastion1 → bastion2 → gw`).
 
 ## SSL/TLS
 
@@ -675,11 +704,13 @@ mode `0600` in a `0700` directory) in the per-user config directory:
 | Windows | `%AppData%\lontar\connections.json` |
 | macOS | `~/Library/Application Support/lontar/connections.json` |
 
-**Passwords (database, SSH password, SSH key passphrase) are never written to
-`connections.json`** and are never sent back to the UI (it only learns whether
+**Passwords (database, SSH password, SSH key passphrase, and those of every
+jump host) are never written to `connections.json`** and are never sent back to the UI (it only learns whether
 one is saved). They are kept in the OS
 keychain via [go-keyring](https://github.com/zalando/go-keyring), under the
-service `lontar` with the connection ID as the account:
+service `lontar` with the connection ID as the account (SSH and jump host
+secrets use `<id>:<purpose>`, e.g. `<id>:ssh.jump.<hop id>.password`, where
+the hop ID is a stable identifier of the jump host, not its position):
 
 - macOS: Keychain
 - Windows: Credential Manager
@@ -696,7 +727,8 @@ fallback copy is then removed. On macOS and Windows there is no fallback, and
 keychain errors are reported.
 
 Deleting a connection also deletes its saved passwords. `connections.json` is
-at schema version 3 (M6). Older files are upgraded on the next save, and a file
+at schema version 3 (M6); jump hosts are an optional `ssh.jumps` list in the
+same version, so connections without them are unchanged. Older files are upgraded on the next save, and a file
 from a newer Lontar is refused rather than overwritten.
 
 ### Upgrading from dbedit
