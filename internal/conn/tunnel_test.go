@@ -184,6 +184,8 @@ func TestTunnelJumpHosts(t *testing.T) {
 	src.passwords[store.SecretKey("p", store.JumpSecretPurpose("h2", "passphrase"))] = "phrase-2"
 	src.passwords[store.SecretKey("p", store.JumpSecretPurpose("h1", "password"))] = "pw-1"
 	m := NewManager(src, reg)
+	// Release the SQLite file before TempDir cleanup (Windows cannot delete open files).
+	t.Cleanup(func() { _ = m.DisconnectAll() })
 	var got []sshtunnel.Config
 	m.Tunnels = func(_ context.Context, cfg sshtunnel.Config) (Tunnel, error) {
 		got = append(got, cfg)
