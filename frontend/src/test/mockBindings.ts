@@ -49,6 +49,7 @@ export const EditorService = {
   OpenEditor: vi.fn<(sessionId: string) => Promise<string>>(),
   CloseEditor: vi.fn<(editorId: string) => Promise<void>>(),
   Execute: vi.fn<(editorId: string, requestId: string, sql: string, opts: unknown) => Promise<unknown>>(),
+  Explain: vi.fn<(editorId: string, requestId: string, sql: string, opts: unknown) => Promise<unknown>>(),
   Cancel: vi.fn<(requestId: string) => Promise<boolean>>(),
   FetchMore: vi.fn<(editorId: string, requestId: string, resultId: string, n: number) => Promise<unknown>>(),
   TxState: vi.fn<(editorId: string) => Promise<unknown>>(),

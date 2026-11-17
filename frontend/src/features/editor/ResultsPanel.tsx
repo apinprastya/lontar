@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWorkspace } from '../../stores/workspace'
-import { MESSAGES, resultEditView, resultSets, type QueryTabState, type ResultEditView } from '../../stores/queryTabs'
+import { MESSAGES, PLAN, resultEditView, resultSets, type QueryTabState, type ResultEditView } from '../../stores/queryTabs'
 import DataGrid from '../grid/DataGrid'
 import { gridEditing } from '../grid/editing'
 import { shortcutLabel } from '../../lib/mod'
 import { LockIcon } from '../../components/icons'
 import Messages from './Messages'
+import PlanView from './PlanView'
 
 /** Whether the active result can be edited, and why not. */
 export function EditBadge({ ev }: { ev: ResultEditView }) {
@@ -30,7 +31,7 @@ export function EditBadge({ ev }: { ev: ResultEditView }) {
 
 const fmt = (n: number) => n.toLocaleString('en-US')
 
-/** Results of the last run: one tab per result set plus Messages. */
+/** Results of the last run: one tab per result set plus Messages, and the last query plan. */
 export default function ResultsPanel({ tab, platform }: { tab: QueryTabState; platform?: string }) {
   const s = useWorkspace((st) => st)
   const safeMode = useWorkspace((st) => st.safeMode)
@@ -54,7 +55,9 @@ export default function ResultsPanel({ tab, platform }: { tab: QueryTabState; pl
     return gridEditing({ id: tab.id, columns: ev.columns, rows: ev.view.set.rows, pending: e.pending, failed: e.failed }, ev.rows, kind, s)
   }, [ev, tab.id, kind, s])
 
-  if (!tab.result) {
+  const showPlan = tab.plan !== null && (tab.activeResult === PLAN || !tab.result)
+
+  if (!tab.result && !tab.plan) {
     return (
       <div className="results results-empty">
         {tab.error && (
@@ -65,7 +68,7 @@ export default function ResultsPanel({ tab, platform }: { tab: QueryTabState; pl
         <p className="muted">
           {tab.running
             ? 'Running…'
-            : `Run the statement under the cursor with ${shortcutLabel(platform, 'Enter')}, or everything with ${shortcutLabel(platform, 'Enter', { shift: true })}.`}
+            : `Run the statement under the cursor with ${shortcutLabel(platform, 'Enter')}, or everything with ${shortcutLabel(platform, 'Enter', { shift: true })}. Explain it with ${shortcutLabel(platform, 'E', { shift: true })}.`}
         </p>
       </div>
     )
@@ -80,13 +83,21 @@ export default function ResultsPanel({ tab, platform }: { tab: QueryTabState; pl
             <span className="muted"> {fmt(rs.rows.length)}{rs.truncated ? '+' : ''}</span>
           </button>
         ))}
-        <button type="button" role="tab" aria-selected={tab.activeResult === MESSAGES} onClick={() => s.setActiveResult(tab.id, MESSAGES)}>
-          Messages
-          {errors > 0 && <span className="result-tab-errors"> {errors} ✗</span>}
-        </button>
+        {tab.result && (
+          <button type="button" role="tab" aria-selected={!showPlan && tab.activeResult === MESSAGES} onClick={() => s.setActiveResult(tab.id, MESSAGES)}>
+            Messages
+            {errors > 0 && <span className="result-tab-errors"> {errors} ✗</span>}
+          </button>
+        )}
+        {tab.plan && (
+          <button type="button" role="tab" aria-selected={showPlan} onClick={() => s.setActiveResult(tab.id, PLAN)}>
+            Plan
+            {tab.plan.plan.error && <span className="result-tab-errors"> ✗</span>}
+          </button>
+        )}
         {tab.running && <span className="muted result-running">Running…</span>}
-        {ev && <span className="spacer" />}
-        {ev && <EditBadge ev={ev} />}
+        {ev && !showPlan && <span className="spacer" />}
+        {ev && !showPlan && <EditBadge ev={ev} />}
       </div>
       {tab.error && (
         <div className="banner error results-error" role="alert">
@@ -100,7 +111,9 @@ export default function ResultsPanel({ tab, platform }: { tab: QueryTabState; pl
           </span>
         </div>
       )}
-      {view && ev ? (
+      {showPlan && tab.plan ? (
+        <PlanView state={tab.plan} platform={platform} />
+      ) : view && ev ? (
         <>
           {view.set.truncated && (
             <div className="banner truncated-banner" role="status">
@@ -136,7 +149,7 @@ export default function ResultsPanel({ tab, platform }: { tab: QueryTabState; pl
           </div>
         </>
       ) : (
-        <Messages result={tab.result} onShow={(i) => s.showStatement(tab.id, i)} />
+        tab.result && <Messages result={tab.result} onShow={(i) => s.showStatement(tab.id, i)} />
       )}
     </div>
   )

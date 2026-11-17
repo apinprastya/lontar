@@ -55,6 +55,7 @@ describe('handleShortcut with SQL tabs', () => {
       activeTab: () => ({ id: 'q1', kind: 'query', running }),
       newQueryTab: vi.fn(),
       runQuery: vi.fn(async () => {}),
+      explainQuery: vi.fn(async () => {}),
       cancelQuery: vi.fn(),
       requestEditor: vi.fn(),
       toggleFilterBar: vi.fn(),
@@ -77,6 +78,17 @@ describe('handleShortcut with SQL tabs', () => {
     expect(handleShortcut(key('Escape', { ctrlKey: false }), 'linux', running)).toBe(true)
     expect(running.cancelQuery).toHaveBeenCalledWith('q1')
     expect(handleShortcut(key('Escape'), 'linux', running)).toBe(false) // Ctrl+Esc
+  })
+
+  it('explains with Mod+Shift+E in SQL tabs only', () => {
+    const s = queryState()
+    expect(handleShortcut(key('E', { shiftKey: true }), 'linux', s)).toBe(true)
+    expect(s.explainQuery).toHaveBeenCalledWith('q1', false)
+    expect(handleShortcut(key('e', { shiftKey: true, ctrlKey: false, metaKey: true }), 'darwin', s)).toBe(true)
+    expect(handleShortcut(key('e', { shiftKey: true }), 'linux', fakeState())).toBe(false)
+    expect(conflicts()).toEqual([])
+    expect(SHORTCUTS.find((x) => x.id === 'explain')).toMatchObject({ key: 'e', mod: true, shift: true, command: true })
+    expect(SHORTCUTS.find((x) => x.id === 'explainAnalyze')).toMatchObject({ key: '', command: true })
   })
 
   it('sends Mod+F to the editor search in SQL tabs (no filter bar)', () => {

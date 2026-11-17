@@ -1,16 +1,19 @@
 import { EditorService, HistoryService } from '../../../bindings/lontar/internal/services'
 import type { Kind } from '../connections/types'
 import type { Cell } from '../workspace/types'
-import type { CompletionColumn, CompletionSchema, ExecOptions, ExecResult, HistoryEntry, ResultSet, Statement } from './types'
+import type { CompletionColumn, CompletionSchema, ExecOptions, ExecResult, ExplainOptions, HistoryEntry, Plan, PlanNode, ResultSet, Statement } from './types'
 
 type BindingKind = Parameters<typeof EditorService.Split>[0]
 type BindingResultSet = NonNullable<Awaited<ReturnType<typeof EditorService.FetchMore>>>
+type BindingPlan = NonNullable<Awaited<ReturnType<typeof EditorService.Explain>>>
+type BindingPlanNode = NonNullable<BindingPlan['nodes']>[number]
 
 /** Backend calls of the SQL editor (injectable for tests). */
 export interface EditorApi {
   openEditor(sessionId: string): Promise<string>
   closeEditor(editorId: string): Promise<void>
   execute(editorId: string, requestId: string, sql: string, opts: ExecOptions): Promise<ExecResult>
+  explain(editorId: string, requestId: string, sql: string, opts: ExplainOptions): Promise<Plan>
   cancel(requestId: string): Promise<boolean>
   fetchMore(editorId: string, requestId: string, resultId: string, n: number): Promise<ResultSet>
   statementAt(kind: Kind, sql: string, cursor: number): Promise<Statement | null>
@@ -30,6 +33,35 @@ export function toResultSet(rs: BindingResultSet): ResultSet {
     truncated: rs.truncated,
     canLoadMore: rs.canLoadMore,
   }
+}
+
+/** Converts a plan node from the bindings (nil slices → [], missing numbers → null). */
+export function toPlanNode(n: BindingPlanNode): PlanNode {
+  return {
+    op: n.op,
+    object: n.object,
+    detail: n.detail,
+    estRows: n.estRows ?? null,
+    actualRows: n.actualRows ?? null,
+    loops: n.loops ?? null,
+    cost: n.cost ?? null,
+    timeMs: n.timeMs ?? null,
+    props: n.props ?? [],
+    children: (n.children ?? []).map(toPlanNode),
+  }
+}
+
+/** Converts a plan from the bindings. */
+export function toPlan(p: BindingPlan): Plan {
+  return {
+    ...p,
+    rawFormat: p.rawFormat === 'text' ? 'text' : 'json',
+    planningMs: p.planningMs ?? null,
+    executionMs: p.executionMs ?? null,
+    nodes: (p.nodes ?? []).map(toPlanNode),
+    notices: p.notices ?? [],
+    error: p.error ? { ...p.error, position: p.error.position ?? null } : null,
+  } as Plan
 }
 
 /** Typed wrapper around the generated EditorService/HistoryService bindings. */
@@ -55,6 +87,11 @@ export const editorApi: EditorApi = {
         error: s.error ? { ...s.error, position: s.error.position ?? null } : null,
       })),
     } as ExecResult
+  },
+  async explain(editorId, requestId, sql, opts) {
+    const p = await EditorService.Explain(editorId, requestId, sql, opts)
+    if (!p) throw new Error('empty response')
+    return toPlan(p)
   },
   async cancel(requestId) {
     return EditorService.Cancel(requestId)

@@ -1,0 +1,68 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Sort",
+      "Parallel Aware": false,
+      "Async Capable": false,
+      "Startup Cost": 26.86,
+      "Total Cost": 27.23,
+      "Plan Rows": 150,
+      "Plan Width": 6,
+      "Sort Key": ["n.label"],
+      "Plans": [
+        {
+          "Node Type": "Hash Join",
+          "Parent Relationship": "Outer",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Join Type": "Inner",
+          "Startup Cost": 1.07,
+          "Total Cost": 21.43,
+          "Plan Rows": 150,
+          "Plan Width": 6,
+          "Inner Unique": true,
+          "Hash Cond": "(n.grp = i.id)",
+          "Plans": [
+            {
+              "Node Type": "Seq Scan",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Relation Name": "numbers",
+              "Alias": "n",
+              "Startup Cost": 0.00,
+              "Total Cost": 18.50,
+              "Plan Rows": 499,
+              "Plan Width": 8,
+              "Filter": "(n < 500)"
+            },
+            {
+              "Node Type": "Hash",
+              "Parent Relationship": "Inner",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 1.03,
+              "Total Cost": 1.03,
+              "Plan Rows": 3,
+              "Plan Width": 6,
+              "Plans": [
+                {
+                  "Node Type": "Seq Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Relation Name": "items",
+                  "Alias": "i",
+                  "Startup Cost": 0.00,
+                  "Total Cost": 1.03,
+                  "Plan Rows": 3,
+                  "Plan Width": 6
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

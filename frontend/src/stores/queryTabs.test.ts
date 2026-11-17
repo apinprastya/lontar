@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceApi } from '../features/workspace/api'
-import { execResult, fakeEditorApi, resultSet, stmt } from '../test/fakeEditorApi'
+import { execResult, fakeEditorApi, resultSet, samplePlan, stmt } from '../test/fakeEditorApi'
 import { getUIState } from '../lib/uiState'
 import {
   HISTORY_OPEN_KEY,
   MESSAGES,
+  PLAN,
   activeResultView,
   draftKey,
   firstErrorPosition,
@@ -353,5 +354,122 @@ describe('query tabs in the workspace store', () => {
     expect((st().activeTab() as TabState).table).toBe('users')
     await st().selectDatabase('other') // the fake reports "shop" as current
     expect(st().activeTabId).toBe(id)
+  })
+})
+
+describe('explain in query tabs', () => {
+  let store: WorkspaceStore
+  let editor: ReturnType<typeof fakeEditorApi>
+  const st = () => store.getState()
+  const q = () => st().activeTab() as QueryTabState
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    editor = fakeEditorApi()
+    store = createWorkspaceStore({ id: 's1', kind: 'postgres', connectionId: 'c1' }, fakeApi(), editor)
+  })
+  afterEach(() => st().dispose())
+
+  it('explains the statement under the cursor and shows the Plan tab', async () => {
+    const id = st().newQueryTab('SELECT 1;\nSELECT 2')
+    st().setEditorSelection(id, 0, null)
+    editor.statementAt.mockResolvedValueOnce({ text: 'SELECT 2', start: 10, end: 18, delimEnd: 18 })
+    await st().explainQuery(id, false)
+    expect(editor.openEditor).toHaveBeenCalledWith('s1')
+    expect(editor.explain).toHaveBeenCalledWith('ed-1', expect.stringMatching(/^explain-/), 'SELECT 2', { analyze: false, baseOffset: 10 })
+    expect(q()).toMatchObject({ running: false, requestId: null, activeResult: PLAN, editorId: 'ed-1', ranSql: null })
+    expect(q().plan).toMatchObject({ analyze: false, sql: 'SELECT 2' })
+    expect(q().plan?.plan.sql).toBe('EXPLAIN SELECT 2')
+    expect(q().tx).toEqual({ state: 'idle', source: 'server' })
+
+    // Analyze of the selection reuses the editor.
+    st().setEditorSelection(id, 0, { from: 0, to: 8 })
+    await st().explainQuery(id, true)
+    expect(editor.openEditor).toHaveBeenCalledTimes(1)
+    expect(editor.explain).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1', { analyze: true, baseOffset: 0 })
+    expect(q().plan?.analyze).toBe(true)
+
+    // A run afterwards keeps the plan but shows its results.
+    editor.execute.mockResolvedValueOnce(execResult([stmt(0, 'SELECT 1', { resultSets: [resultSet('rs-1', 2, { truncated: true, canLoadMore: true })] })]))
+    await st().runQuery(id, 'current')
+    expect(q().plan).not.toBeNull()
+    expect(q().activeResult).toBe('rs-1')
+    // Explain closes the open cursor of a truncated result (same connection).
+    await st().explainQuery(id, false)
+    expect(q().result?.statements[0].resultSets[0]).toMatchObject({ truncated: true, canLoadMore: false })
+    st().setActiveResult(id, PLAN)
+    expect(q().activeResult).toBe(PLAN)
+  })
+
+  it('jumps to an error position', async () => {
+    const id = st().newQueryTab('  SELEC 1')
+    editor.statementAt.mockResolvedValueOnce({ text: 'SELEC 1', start: 2, end: 9, delimEnd: 9 })
+    editor.explain.mockResolvedValueOnce(samplePlan({ nodes: [], error: { message: 'syntax error', code: '42601', position: 2 } }))
+    await st().explainQuery(id, false)
+    expect(q().editorRequest).toMatchObject({ type: 'error', pos: 2, from: 2, to: 9 })
+    expect(q().plan?.plan.error?.message).toBe('syntax error')
+  })
+
+  it('does nothing without a statement, while running or for unknown tabs', async () => {
+    const id = st().newQueryTab('   ')
+    editor.statementAt.mockResolvedValueOnce(null)
+    await st().explainQuery(id, false)
+    st().setSql(id, '   ')
+    st().setEditorSelection(id, 0, { from: 0, to: 2 })
+    await st().explainQuery(id, false)
+    await st().explainQuery('nope', false)
+    expect(editor.explain).not.toHaveBeenCalled()
+    editor.statementAt.mockRejectedValueOnce(new Error('split failed'))
+    st().setSql(id, 'SELECT 1')
+    st().setEditorSelection(id, 0, null)
+    await st().explainQuery(id, false)
+    expect(q().error).toBe('split failed')
+  })
+
+  it('reports failures and reopens a lost editor next time', async () => {
+    const id = st().newQueryTab('UPDATE t SET a = 1')
+    editor.explain.mockRejectedValueOnce(new Error('Explain analyze runs the statement, so it only runs reads.'))
+    await st().explainQuery(id, true)
+    expect(q()).toMatchObject({ running: false, error: 'Explain analyze runs the statement, so it only runs reads.', editorId: 'ed-1', plan: null })
+    editor.explain.mockRejectedValueOnce(new Error('editor not found (it was closed)'))
+    await st().explainQuery(id, false)
+    expect(q()).toMatchObject({ editorId: null, tx: null })
+  })
+
+  it('can be cancelled and ignores late answers', async () => {
+    const id = st().newQueryTab('SELECT pg_sleep(10)')
+    let resolve: (p: ReturnType<typeof samplePlan>) => void = () => {}
+    editor.explain.mockImplementationOnce(() => new Promise((r) => (resolve = r)))
+    const running = st().explainQuery(id, true)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(q().running).toBe(true)
+    await st().explainQuery(id, false) // already running: ignored
+    st().cancelQuery(id)
+    expect(editor.cancel).toHaveBeenCalledWith(expect.stringMatching(/^explain-/))
+    resolve(samplePlan({ cancelled: true, nodes: [], error: { message: 'Query cancelled', code: '', position: null } }))
+    await running
+    expect(q().plan?.plan.cancelled).toBe(true)
+    expect(editor.explain).toHaveBeenCalledTimes(1)
+
+    // A disposed workspace ignores the answer.
+    editor.explain.mockImplementationOnce(() => new Promise((r) => (resolve = r)))
+    const late = st().explainQuery(id, false)
+    await new Promise((r) => setTimeout(r, 0))
+    st().dispose()
+    resolve(samplePlan())
+    await late
+    expect(q().running).toBe(true)
+  })
+
+  it('ignores a late failure after the workspace is gone', async () => {
+    const id = st().newQueryTab('SELECT 1')
+    let reject: (e: Error) => void = () => {}
+    editor.explain.mockImplementationOnce(() => new Promise((_r, j) => (reject = j)))
+    const late = st().explainQuery(id, false)
+    await new Promise((r) => setTimeout(r, 0))
+    st().dispose()
+    reject(new Error('boom'))
+    await late
+    expect(q().error).toBeNull()
   })
 })

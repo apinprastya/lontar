@@ -1,0 +1,79 @@
+{
+  "query_optimization": {
+    "r_total_time_ms": 0.199692941
+  },
+  "query_block": {
+    "select_id": 1,
+    "cost": 0.606694605,
+    "r_loops": 1,
+    "r_total_time_ms": 0.852275123,
+    "filesort": {
+      "sort_key": "n.label",
+      "r_loops": 1,
+      "r_total_time_ms": 0.0903447,
+      "r_used_priority_queue": false,
+      "r_output_rows": 150,
+      "r_buffer_size": "52KiB",
+      "r_sort_mode": "sort_key,rowid",
+      "temporary_table": {
+        "nested_loop": [
+          {
+            "table": {
+              "table_name": "n",
+              "access_type": "range",
+              "possible_keys": ["PRIMARY"],
+              "key": "PRIMARY",
+              "key_length": "4",
+              "used_key_parts": ["n"],
+              "loops": 1,
+              "r_loops": 1,
+              "rows": 499,
+              "r_rows": 499,
+              "cost": 0.10074457,
+              "r_table_time_ms": 0.158449932,
+              "r_other_time_ms": 0.134622648,
+              "r_engine_stats": {
+                "pages_accessed": 8
+              },
+              "filtered": 100,
+              "r_total_filtered": 100,
+              "attached_condition": "n.n < 500",
+              "r_filtered": 100
+            }
+          },
+          {
+            "block-nl-join": {
+              "table": {
+                "table_name": "i",
+                "access_type": "ALL",
+                "possible_keys": ["PRIMARY"],
+                "loops": 499,
+                "r_loops": 1,
+                "rows": 3,
+                "r_rows": 3,
+                "cost": 0.180736336,
+                "r_table_time_ms": 0.00829081,
+                "r_other_time_ms": 0.005406613,
+                "r_engine_stats": {
+                  "pages_accessed": 1
+                },
+                "filtered": 33.33333206,
+                "r_total_filtered": 100,
+                "r_filtered": 100
+              },
+              "buffer_type": "flat",
+              "buffer_size": "45KiB",
+              "join_type": "BNL",
+              "attached_condition": "i.`id` = n.grp",
+              "r_loops": 499,
+              "r_filtered": 10.02004008,
+              "r_unpack_time_ms": 0.153244309,
+              "r_other_time_ms": 0.277907936,
+              "r_effective_rows": 3
+            }
+          }
+        ]
+      }
+    }
+  }
+}

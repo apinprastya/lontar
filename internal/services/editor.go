@@ -164,6 +164,29 @@ func (s *EditorService) Execute(ctx context.Context, editorID, requestID, sql st
 	return res, nil
 }
 
+// Explain shows the query plan of the one statement in sql (see
+// query.Editors.Explain); requestID can be passed to Cancel. The generated
+// EXPLAIN statement is recorded in the query history.
+//
+// Safe mode: Explain is allowed in every mode. Plain Explain never runs
+// the statement, and Explain analyze is refused for statements that write
+// (query.IsWrite) before anything is sent, whatever the mode.
+func (s *EditorService) Explain(ctx context.Context, editorID, requestID, sql string, opts query.ExplainOptions) (*query.Plan, error) {
+	started := time.Now()
+	plan, err := s.editors.Explain(ctx, editorID, requestID, sql, opts)
+	if err != nil {
+		return nil, err
+	}
+	st := query.StatementResult{SQL: plan.SQL, Status: query.StatusOK, ResultSets: []query.ResultSet{}, Error: plan.Error}
+	if plan.Error != nil {
+		st.Status = query.StatusError
+	}
+	if !plan.Cancelled {
+		s.record(editorID, plan.SQL, started, &query.ExecResult{Statements: []query.StatementResult{st}, DurationMs: plan.DurationMs})
+	}
+	return plan, nil
+}
+
 // record adds a run to the history (errors are logged, never shown).
 func (s *EditorService) record(editorID, sql string, started time.Time, res *query.ExecResult) {
 	if s.history == nil || len(res.Statements) == 0 {

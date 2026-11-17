@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -337,6 +339,152 @@ func (e *Editors) execute(ctx context.Context, ed *Editor, sqlText string, opts 
 	res.DurationMs = durationMs(time.Since(start))
 	ed.touch(e.now())
 	return res, nil
+}
+
+// Explain shows the query plan of the one statement in sqlText, on the
+// editor's connection (so its search_path, temporary tables and open
+// transaction apply). With opts.Analyze the statement runs; that is only
+// allowed for reads. A statement that cannot be explained returns an
+// *ExplainError and nothing is sent. Database errors and cancels
+// (Cancel(requestID)) are reported in the returned plan.
+func (e *Editors) Explain(ctx context.Context, editorID, requestID, sqlText string, opts ExplainOptions) (*Plan, error) {
+	ed, err := e.lock(editorID)
+	if err != nil {
+		return nil, err
+	}
+	defer ed.run.Unlock()
+	st, err := prepareExplain(ed.kind, sqlText, opts)
+	if err != nil {
+		return nil, err
+	}
+	if requestID == "" {
+		requestID = e.newID()
+	}
+	ed.setRequest(requestID)
+	defer ed.setRequest("")
+
+	var plan *Plan
+	err = e.runner.Run(ctx, requestID, func(ctx context.Context) error {
+		var err error
+		plan, err = e.explain(ctx, ed, sqlText, st, opts)
+		return err
+	})
+	if plan == nil {
+		return nil, err
+	}
+	return plan, nil
+}
+
+func (e *Editors) explain(ctx context.Context, ed *Editor, sqlText string, st sqlsplit.Statement, opts ExplainOptions) (*Plan, error) {
+	start := time.Now()
+	db, kind, err := e.resolve(ed.sessionID)
+	if err != nil {
+		return nil, err
+	}
+	e.closeCursor(ed)
+	if ed.conn != nil && ed.db != db {
+		e.release(ed, msgSwitched, true)
+	}
+	if ed.conn == nil {
+		if err := e.pin(ctx, ed, db, kind); err != nil {
+			return nil, err
+		}
+	}
+	res := &ExecResult{}
+	e.reportLost(ed, res)
+
+	q, prefix := explainSQL(ed.kind, st.Text, opts)
+	plan := &Plan{Engine: string(ed.kind), Analyzed: opts.Analyze, SQL: q, Nodes: []PlanNode{}, Notices: []string{}}
+	raw, lite, err := e.readPlan(ctx, ed, q)
+	if err != nil && ctx.Err() == nil && (errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone)) {
+		// The connection died while idle: replace it and try once more.
+		e.drop(ed, msgReconnect)
+		if err = e.pin(ctx, ed, ed.db, ed.kind); err == nil {
+			e.reportLost(ed, res)
+			raw, lite, err = e.readPlan(ctx, ed, q)
+		}
+	}
+	switch {
+	case err == nil:
+		parsePlan(plan, ed.kind, opts.Analyze, raw, lite)
+	case ctx.Err() != nil:
+		plan.Cancelled = true
+		plan.Error = &ExecError{Message: "Query cancelled"}
+		e.checkAlive(ed, res, msgCancelled)
+	default:
+		om := sqlsplit.NewOffsetMap(sqlText, opts.BaseOffset)
+		plan.Error = toExecError(err, q, func(b int) int { return om.UTF16(st.Start + shiftPosition(b, prefix)) })
+		if isBadConn(err) {
+			e.checkAlive(ed, res, msgLost)
+		}
+	}
+	plan.Notices = append(res.Notices, plan.Notices...)
+	plan.SessionReset = res.SessionReset
+	e.refreshTx(ed)
+	plan.Tx = ed.txInfo()
+	plan.DurationMs = durationMs(time.Since(start))
+	ed.touch(e.now())
+	return plan, nil
+}
+
+// readPlan runs an EXPLAIN statement and returns its output: the text of
+// the first column of every row, or SQLite's query plan rows.
+func (e *Editors) readPlan(ctx context.Context, ed *Editor, q string) (string, []sqliteQPRow, error) {
+	if ed.conn == nil {
+		return "", nil, sql.ErrConnDone
+	}
+	rows, err := ed.conn.QueryContext(ctx, q, statementArgs(ed.kind)...)
+	if err != nil {
+		return "", nil, err
+	}
+	defer rows.Close()
+	var parts []string
+	var lite []sqliteQPRow
+	for rows.Next() {
+		if ed.kind == dbdriver.SQLite {
+			var r sqliteQPRow
+			var notused any
+			if err := rows.Scan(&r.ID, &r.Parent, &notused, &r.Detail); err != nil {
+				return "", nil, err
+			}
+			lite = append(lite, r)
+			continue
+		}
+		cols, err := rows.Columns()
+		if err != nil {
+			return "", nil, err
+		}
+		dest := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range dest {
+			ptrs[i] = &dest[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return "", nil, err
+		}
+		parts = append(parts, planText(dest[0]))
+	}
+	if err := rows.Err(); err != nil {
+		return "", nil, err
+	}
+	return strings.Join(parts, "\n"), lite, rows.Close()
+}
+
+// planText converts an EXPLAIN output value to text.
+func planText(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	case []byte:
+		return string(x)
+	}
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Sprint(v)
+	}
+	return string(b)
 }
 
 // reportLost moves a pending "session lost" message into res.

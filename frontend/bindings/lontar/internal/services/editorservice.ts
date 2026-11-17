@@ -70,6 +70,19 @@ export function Execute(editorID: string, requestID: string, sql: string, opts: 
 }
 
 /**
+ * Explain shows the query plan of the one statement in sql (see
+ * query.Editors.Explain); requestID can be passed to Cancel. The generated
+ * EXPLAIN statement is recorded in the query history.
+ * 
+ * Safe mode: Explain is allowed in every mode. Plain Explain never runs
+ * the statement, and Explain analyze is refused for statements that write
+ * (query.IsWrite) before anything is sent, whatever the mode.
+ */
+export function Explain(editorID: string, requestID: string, sql: string, opts: query$0.ExplainOptions): $CancellablePromise<query$0.Plan | null> {
+    return $Call.ByID(1485813667, editorID, requestID, sql, opts);
+}
+
+/**
  * FetchMore returns the next n rows of a truncated result that is still
  * open (ResultSet.CanLoadMore).
  */

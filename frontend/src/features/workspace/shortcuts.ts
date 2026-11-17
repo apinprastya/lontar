@@ -18,6 +18,7 @@ export function isTextTarget(target: EventTarget | null | undefined): boolean {
  *   Mod+R refresh · Mod+I row detail ·
  *   Mod+F filter bar (table tab) or search (SQL tab) ·
  *   Mod+Enter run statement/selection · Mod+Shift+Enter run all ·
+ *   Mod+Shift+E explain statement/selection ·
  *   Esc stop a running query ·
  *   table tabs and editable query results: Mod+S commit · Mod+Z /
  *   Mod+Shift+Z undo/redo staged edits ·
@@ -38,6 +39,10 @@ export function handleShortcut(e: ModifierEvent, platform: string | undefined, s
   if (key === 'enter') {
     if (tab?.kind !== 'query') return false
     void s.runQuery(tab.id, e.shiftKey ? 'all' : 'current')
+    return true
+  }
+  if (key === 'e' && e.shiftKey && tab?.kind === 'query') {
+    void s.explainQuery(tab.id, false)
     return true
   }
   if (tab?.kind === 'query' && tab.edit && resultEditView(tab, s.safeMode)?.editable) {

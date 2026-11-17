@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import type { EditorApi } from '../features/editor/api'
-import type { ExecResult, ResultSet, StatementResult } from '../features/editor/types'
+import type { ExecResult, Plan, PlanNode, ResultSet, StatementResult } from '../features/editor/types'
 
 export function resultSet(id: string, rows = 2, over: Partial<ResultSet> = {}): ResultSet {
   return {
@@ -38,12 +38,58 @@ export function execResult(statements: StatementResult[], over: Partial<ExecResu
   return { statements, durationMs: 3.25, tx: { state: 'idle', source: 'server' }, notices: [], sessionReset: false, cancelled: false, ...over }
 }
 
+export function planNode(op: string, over: Partial<PlanNode> = {}): PlanNode {
+  return { op, object: '', detail: '', estRows: null, actualRows: null, loops: null, cost: null, timeMs: null, props: [], children: [], ...over }
+}
+
+/**
+ * A PostgreSQL-like analyzed plan: Sort → Hash Join → (Seq Scan numbers,
+ * Hash → Seq Scan items). The numbers scan is hot and misestimated.
+ */
+export function samplePlan(over: Partial<Plan> = {}): Plan {
+  const items = planNode('Seq Scan', { object: 'items i', estRows: 3, actualRows: 3, loops: 1, cost: 1.03, timeMs: 0.01, props: [{ key: 'Node Type', value: 'Seq Scan' }] })
+  const hash = planNode('Hash', { estRows: 3, actualRows: 3, loops: 1, cost: 1.03, timeMs: 0.02, children: [items] })
+  const numbers = planNode('Seq Scan', {
+    object: 'numbers n',
+    detail: '(n < 500)',
+    estRows: 5,
+    actualRows: 499,
+    loops: 1,
+    cost: 18.5,
+    timeMs: 6,
+    props: [
+      { key: 'Node Type', value: 'Seq Scan' },
+      { key: 'Filter', value: '(n < 500)' },
+    ],
+  })
+  const join = planNode('Hash Join', { detail: '(n.grp = i.id)', estRows: 150, actualRows: 150, loops: 1, cost: 21.43, timeMs: 7, children: [numbers, hash] })
+  const sort = planNode('Sort', { detail: 'n.label', estRows: 150, actualRows: 150, loops: 1, cost: 27.23, timeMs: 10, children: [join], props: [{ key: 'Sort Key', value: 'n.label' }] })
+  return {
+    engine: 'postgres',
+    analyzed: true,
+    sql: 'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT 1',
+    planningMs: 0.5,
+    executionMs: 10,
+    nodes: [sort],
+    raw: '[{"Plan": {}}]',
+    rawFormat: 'json',
+    notices: [],
+    error: null,
+    cancelled: false,
+    sessionReset: false,
+    tx: { state: 'idle', source: 'server' },
+    durationMs: 12,
+    ...over,
+  }
+}
+
 /** A fake EditorApi with sensible defaults; every method is a vi.fn. */
 export function fakeEditorApi() {
   const api = {
     openEditor: vi.fn(async () => 'ed-1'),
     closeEditor: vi.fn(async () => {}),
     execute: vi.fn(async (_e: string, _r: string, sql: string) => execResult([stmt(0, sql, { resultSets: [resultSet('rs-1')] })])),
+    explain: vi.fn(async (_e: string, _r: string, sql: string, opts: { analyze: boolean }) => samplePlan({ analyzed: opts.analyze, sql: `EXPLAIN ${sql}` })),
     cancel: vi.fn(async () => true),
     fetchMore: vi.fn(async (_e: string, _r: string, id: string) => resultSet(id, 1)),
     statementAt: vi.fn(async (_k: string, sql: string) => (sql.trim() ? { text: sql.trim(), start: 0, end: sql.trimEnd().length, delimEnd: sql.length } : null)),

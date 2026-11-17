@@ -92,6 +92,23 @@ export interface ExecResult {
 }
 
 /**
+ * ExplainOptions controls Explain.
+ */
+export interface ExplainOptions {
+    /**
+     * Analyze runs the statement and reports actual rows and times (not
+     * on SQLite; refused for statements that write).
+     */
+    "analyze": boolean;
+
+    /**
+     * BaseOffset is the position of the SQL text inside the editor
+     * (UTF-16 code units); it is added to the reported error position.
+     */
+    "baseOffset": number;
+}
+
+/**
  * Filter is one condition. Value is the operand; Value2 is the upper bound
  * for between. For in/notIn, Value is a comma-separated list (items are
  * trimmed).
@@ -148,6 +165,65 @@ export interface Page {
      */
     "totalCount": number | null;
     "elapsedMs": number;
+}
+
+/**
+ * Plan is the result of Explain: the engine's plan parsed into one tree
+ * shape shared by every engine, plus the raw output.
+ */
+export interface Plan {
+    "engine": string;
+    "analyzed": boolean;
+
+    /**
+     * SQL is the EXPLAIN statement that was run.
+     */
+    "sql": string;
+    "planningMs": number | null;
+    "executionMs": number | null;
+    "nodes": PlanNode[] | null;
+
+    /**
+     * Raw is the engine's output (RawFormat "json" or "text").
+     */
+    "raw": string;
+    "rawFormat": string;
+    "notices": string[] | null;
+
+    /**
+     * Error is the database error, with its position in the editor.
+     */
+    "error": ExecError | null;
+    "cancelled": boolean;
+    "sessionReset": boolean;
+    "tx": TxInfo;
+    "durationMs": number;
+}
+
+/**
+ * PlanNode is one operation of a query plan. Numbers the engine does not
+ * report are null. Row counts are per loop (as the engines report them);
+ * TimeMs is the inclusive time of the node over all its loops.
+ */
+export interface PlanNode {
+    "op": string;
+    "object": string;
+    "detail": string;
+    "estRows": number | null;
+    "actualRows": number | null;
+    "loops": number | null;
+    "cost": number | null;
+    "timeMs": number | null;
+    "props": PlanProp[] | null;
+    "children": PlanNode[] | null;
+}
+
+/**
+ * PlanProp is one property of a plan node, in the engine's own words.
+ */
+export interface PlanProp {
+    "key": string;
+    "value": string;
 }
 
 /**

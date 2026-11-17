@@ -1,0 +1,94 @@
+{
+  "query_block": {
+    "union_result": {
+      "table_name": "<union1,4>",
+      "access_type": "ALL",
+      "query_specifications": [
+        {
+          "query_block": {
+            "select_id": 1,
+            "cost": 0.83171336,
+            "filesort": {
+              "sort_key": "numbers.grp",
+              "temporary_table": {
+                "nested_loop": [
+                  {
+                    "table": {
+                      "table_name": "numbers",
+                      "access_type": "ALL",
+                      "loops": 1,
+                      "rows": 1000,
+                      "cost": 0.177274,
+                      "filtered": 100,
+                      "attached_condition": "<in_optimizer>(numbers.n,numbers.n in (subquery#2)) or numbers.label = (subquery#3)"
+                    }
+                  }
+                ],
+                "subqueries": [
+                  {
+                    "query_block": {
+                      "select_id": 3,
+                      "cost": 0.0113438,
+                      "nested_loop": [
+                        {
+                          "table": {
+                            "table_name": "items",
+                            "access_type": "ALL",
+                            "loops": 1,
+                            "rows": 3,
+                            "cost": 0.0113438,
+                            "filtered": 100
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "materialization": {
+                      "query_block": {
+                        "select_id": 2,
+                        "cost": 0.00171364,
+                        "nested_loop": [
+                          {
+                            "table": {
+                              "table_name": "items",
+                              "access_type": "ALL",
+                              "possible_keys": ["PRIMARY"],
+                              "loops": 1,
+                              "rows": 3,
+                              "cost": 0.0113438,
+                              "filtered": 100
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "query_block": {
+            "select_id": 4,
+            "operation": "UNION",
+            "cost": 0.0113438,
+            "nested_loop": [
+              {
+                "table": {
+                  "table_name": "items",
+                  "access_type": "ALL",
+                  "loops": 1,
+                  "rows": 3,
+                  "cost": 0.0113438,
+                  "filtered": 100
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

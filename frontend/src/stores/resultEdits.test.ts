@@ -6,7 +6,7 @@ import { execResult, fakeEditorApi, resultSet, stmt } from '../test/fakeEditorAp
 import { makeDetail } from '../test/structure'
 import { handleShortcut } from '../features/workspace/shortcuts'
 import { commandAvailable } from '../features/palette/commands'
-import { MESSAGES, newResultEdit, resultEditView, sourceColumns, statementOf, type QueryTabState } from './queryTabs'
+import { MESSAGES, PLAN, newResultEdit, resultEditView, sourceColumns, statementOf, type QueryTabState } from './queryTabs'
 import { createWorkspaceStore, type WorkspaceStore } from './workspace'
 import { pendingCount } from './pending'
 
@@ -213,9 +213,14 @@ describe('editing query results in the workspace store', () => {
     expect(editor.execute).not.toHaveBeenCalled()
     await st().resolveGuard('cancel')
 
-    // Messages and back keeps the changes; another result set asks.
+    // Messages, Explain and the Plan tab keep the changes; another result set asks.
     st().setActiveResult(id, MESSAGES)
     expect(st().guard).toBeNull()
+    await st().explainQuery(id, false)
+    expect(q().activeResult).toBe(PLAN)
+    st().setActiveResult(id, PLAN)
+    expect(st().guard).toBeNull()
+    expect(pendingCount(q().edit!.pending)).toBeGreaterThan(0)
     st().setActiveResult(id, 'rs-1')
     st().setActiveResult(id, 'rs-9')
     expect(st().guard).not.toBeNull()
