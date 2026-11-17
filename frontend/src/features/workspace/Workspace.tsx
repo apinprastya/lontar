@@ -9,6 +9,8 @@ import { connectionSummary } from '../connections/types'
 import { commandAvailable, runCommand } from '../palette/commands'
 import { resultEditView } from '../../stores/queryTabs'
 import { editorApi, type EditorApi } from '../editor/api'
+import { sqlFileApi, type SqlFileApi } from '../editor/sqlFiles'
+import { onEvent } from '../../lib/events'
 import QueryTab from '../editor/QueryTab'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { usePanelLayout } from '../../lib/panelLayout'
@@ -22,6 +24,7 @@ import {
   FilterIcon,
   ImportIcon,
   NewQueryIcon,
+  OpenFileIcon,
   PanelRightIcon,
   RefreshIcon,
   RowPlusIcon,
@@ -49,7 +52,11 @@ export interface WorkspaceProps {
   api?: WorkspaceApi
   editor?: EditorApi
   edits?: EditApi
+  files?: SqlFileApi
 }
+
+/** Event (Go filedrop.go) with the paths of .sql files dropped on the workspace. */
+export const FILES_DROPPED = 'files:dropped'
 
 /** Safe mode badge next to the connection name. */
 /** Panel ids of the workspace Group, with and without the row detail (each keeps its layout). */
@@ -143,10 +150,13 @@ function WorkspaceView({
   const exportRequest = useWorkspace((s) => s.exportRequest)
   const importRequest = useWorkspace((s) => s.importRequest)
   const closeConfirm = useWorkspace((s) => s.closeConfirm)
+  const saveAsk = useWorkspace((s) => s.saveAsk)
+  const fileConflict = useWorkspace((s) => s.fileConflict)
+  const fileError = useWorkspace((s) => s.fileError)
   const [palette, setPalette] = useState<PaletteMode | null>(null)
   const paletteTables = usePaletteTables(store, api, palette === 'tables')
   // Overlays (palette, dialogs) own the keyboard while open.
-  const overlay = Boolean(palette || exportRequest || importRequest || closeConfirm || hostKey || closeSessionAsk)
+  const overlay = Boolean(palette || exportRequest || importRequest || closeConfirm || hostKey || closeSessionAsk || saveAsk || fileConflict)
   const overlayRef = useRef(overlay)
   overlayRef.current = overlay
   const openSwitcher = () => {
@@ -177,6 +187,9 @@ function WorkspaceView({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [platform, store])
+
+  // .sql files dropped on the window (Wails file drop, see filedrop.go).
+  useEffect(() => onEvent<string[] | null>(FILES_DROPPED, (paths) => void store.getState().openSqlFiles(paths ?? [])), [store])
 
   /**
    * Switches to another saved connection. Staged edits are committed or
@@ -244,6 +257,10 @@ function WorkspaceView({
       }, 0)
     : 0
   const tabIds = () => store.getState().tabs.map((t) => t.id)
+  const queryTitle = (id: string) => {
+    const t = tabs.find((x) => x.id === id)
+    return t?.kind === 'query' ? t.title : undefined
+  }
   const detailColumns = tab?.kind === 'table' ? tab.columns : (queryView?.columns ?? [])
   // The detail shows staged values (and staged inserts).
   const detailStates = tab?.kind === 'table' ? displayRows(tab.columns, tab.rows, tab.pending) : (queryView?.rows ?? [])
@@ -252,7 +269,7 @@ function WorkspaceView({
   const rowOffset = tab?.kind === 'table' ? tab.offset : 0
 
   return (
-    <section className="ws" aria-label="Workspace" style={color ? { borderTopColor: color } : undefined}>
+    <section className="ws" aria-label="Workspace" data-file-drop-target style={color ? { borderTopColor: color } : undefined}>
       <Group orientation="horizontal" className="ws-panels" {...layout}>
         <Panel id="sidebar" defaultSize={240} minSize={160} maxSize={480}>
           <Sidebar
@@ -285,6 +302,14 @@ function WorkspaceView({
                 </button>
               </div>
             )}
+            {fileError && (
+              <div className="banner error ws-banner" role="alert" data-testid="file-error">
+                <span className="selectable">{fileError}</span>
+                <button type="button" className="icon-button" aria-label="Dismiss" onClick={() => store.getState().dismissFileError()}>
+                  ×
+                </button>
+              </div>
+            )}
             <div className="toolbar ws-toolbar">
               <ToolButton label="Refresh" title={`Refresh (${shortcutLabel(platform, 'R')})`} icon={<RefreshIcon />} onClick={() => void refresh()} />
               <span className="toolbar-sep" aria-hidden />
@@ -293,6 +318,12 @@ function WorkspaceView({
                 title={`New SQL query (${shortcutLabel(platform, 'T')})`}
                 icon={<NewQueryIcon />}
                 onClick={() => store.getState().newQueryTab()}
+              />
+              <ToolButton
+                label="Open SQL file…"
+                title={`Open a .sql file (${shortcutLabel(platform, 'O', { shift: true })})`}
+                icon={<OpenFileIcon />}
+                onClick={() => void store.getState().openSqlFile()}
               />
               <ToolButton label="Open…" title={`Open a table or view (${shortcutLabel(platform, 'P')})`} icon={<SearchIcon />} onClick={() => setPalette('tables')} />
               <span className="toolbar-sep" aria-hidden />
@@ -440,6 +471,27 @@ function WorkspaceView({
           onImported={() => void store.getState().refresh()}
         />
       )}
+      {saveAsk && (
+        <ConfirmDialog
+          title={`Save changes to ${queryTitle(saveAsk) ?? 'this file'}?`}
+          message="The tab has changes that are not saved to its file. They are lost if you don't save them."
+          confirmLabel="Save"
+          altLabel="Don't save"
+          onAlt={() => void store.getState().resolveSaveAsk('discard')}
+          onConfirm={() => void store.getState().resolveSaveAsk('save')}
+          onCancel={() => void store.getState().resolveSaveAsk('cancel')}
+        />
+      )}
+      {fileConflict && (
+        <ConfirmDialog
+          title="File changed on disk"
+          message={`${queryTitle(fileConflict) ?? 'The file'} was changed by another program since it was opened or saved. Overwrite it with the text of this tab?`}
+          confirmLabel="Overwrite"
+          danger
+          onConfirm={() => void store.getState().resolveFileConflict(true)}
+          onCancel={() => void store.getState().resolveFileConflict(false)}
+        />
+      )}
       {closeConfirm && (
         <ConfirmDialog
           title="Close query tab?"
@@ -458,7 +510,7 @@ function WorkspaceView({
  * Workspace for the open session: sidebar | table tabs | optional row
  * detail, with a status bar. Each session gets its own workspace store.
  */
-export default function Workspace({ platform, api = workspaceApi, editor = editorApi, edits = editApi }: WorkspaceProps) {
+export default function Workspace({ platform, api = workspaceApi, editor = editorApi, edits = editApi, files = sqlFileApi }: WorkspaceProps) {
   const session = useConnections((s) => s.session)
   // One store per open session: switching keeps each session's tabs,
   // results and staged edits. A store is disposed when its session closes.
@@ -469,7 +521,7 @@ export default function Workspace({ platform, api = workspaceApi, editor = edito
     store = stores.current.get(session.id) ?? null
     if (!store) {
       const { id, kind, connectionId, safeMode } = session
-      store = createWorkspaceStore({ id, kind, connectionId, safeMode }, api, editor, edits)
+      store = createWorkspaceStore({ id, kind, connectionId, safeMode }, api, editor, edits, files)
       stores.current.set(id, store)
     }
   }

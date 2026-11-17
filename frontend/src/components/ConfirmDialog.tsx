@@ -5,12 +5,15 @@ export interface ConfirmDialogProps {
   message: string
   confirmLabel?: string
   danger?: boolean
+  /** An optional third choice, shown on the left (e.g. "Don't save"). */
+  altLabel?: string
+  onAlt?(): void
   onConfirm(): void
   onCancel(): void
 }
 
 /** Small modal confirmation (Escape cancels, Enter confirms). */
-export default function ConfirmDialog({ title, message, confirmLabel = 'OK', danger, onConfirm, onCancel }: ConfirmDialogProps) {
+export default function ConfirmDialog({ title, message, confirmLabel = 'OK', danger, altLabel, onAlt, onConfirm, onCancel }: ConfirmDialogProps) {
   const uid = useId()
   const confirmRef = useRef<HTMLButtonElement>(null)
 
@@ -36,6 +39,11 @@ export default function ConfirmDialog({ title, message, confirmLabel = 'OK', dan
         <h2 id={`${uid}-title`}>{title}</h2>
         <p id={`${uid}-msg`}>{message}</p>
         <div className="dialog-actions">
+          {altLabel && onAlt && (
+            <button type="button" className="danger" onClick={onAlt}>
+              {altLabel}
+            </button>
+          )}
           <span className="spacer" />
           <button type="button" onClick={onCancel}>
             Cancel

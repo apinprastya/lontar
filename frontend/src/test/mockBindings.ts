@@ -102,6 +102,12 @@ export const UpdateService = {
   OpenReleasePage: vi.fn<() => Promise<void>>(),
 }
 
+export const SQLFileService = {
+  OpenSQLFile: vi.fn<() => Promise<unknown>>(),
+  ReadSQLFile: vi.fn<(path: string) => Promise<unknown>>(),
+  SaveSQLFile: vi.fn<(path: string, name: string, text: string, eol: string, expectedModTime: number) => Promise<unknown>>(),
+}
+
 export const DRIVERS: DriverInfo[] = [
   { kind: 'postgres', displayName: 'PostgreSQL', defaultPort: 5432, fileBased: false },
   { kind: 'mysql', displayName: 'MySQL', defaultPort: 3306, fileBased: false },
@@ -153,6 +159,7 @@ export function resetBindings() {
     ...Object.values(ImportService),
     ...Object.values(SettingsService),
     ...Object.values(UpdateService),
+    ...Object.values(SQLFileService),
   ])
     fn.mockReset()
   AppService.Version.mockResolvedValue('0.0.1')
@@ -167,6 +174,8 @@ export function resetBindings() {
   ConnectionService.AcceptHostKey.mockResolvedValue(undefined)
   DialogService.OpenFile.mockResolvedValue('')
   DialogService.SaveFile.mockResolvedValue('')
+  SQLFileService.OpenSQLFile.mockResolvedValue(null)
+  SQLFileService.SaveSQLFile.mockResolvedValue(null)
   ExportService.Cancel.mockResolvedValue(true)
   ExportService.CheckQuery.mockResolvedValue(undefined)
   ImportService.Cancel.mockResolvedValue(true)

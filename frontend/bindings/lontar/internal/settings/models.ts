@@ -27,6 +27,21 @@ export interface CSV {
 }
 
 /**
+ * SQLFormat holds the options of the SQL editor's Format command.
+ */
+export interface SQLFormat {
+    /**
+     * KeywordCase is "upper", "lower" or "preserve".
+     */
+    "keywordCase": string;
+
+    /**
+     * Indent is the number of spaces per level: 2 or 4.
+     */
+    "indent": number;
+}
+
+/**
  * Settings are the application preferences.
  */
 export interface Settings {
@@ -50,6 +65,11 @@ export interface Settings {
      * changed since it last ran.
      */
     "confirmCloseDirtyQuery": boolean;
+
+    /**
+     * SQLFormat configures Format in the SQL editor.
+     */
+    "sqlFormat": SQLFormat;
 }
 
 /**

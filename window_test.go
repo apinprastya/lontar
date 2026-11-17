@@ -19,6 +19,9 @@ func TestMainWindowOptions(t *testing.T) {
 	if w.URL != "/" {
 		t.Fatalf("URL = %q, want /", w.URL)
 	}
+	if !w.EnableFileDrop {
+		t.Fatal("file drop (SQL files) is not enabled")
+	}
 	if w.Width < w.MinWidth || w.Height < w.MinHeight {
 		t.Fatalf("default size %dx%d is below the minimum %dx%d", w.Width, w.Height, w.MinWidth, w.MinHeight)
 	}

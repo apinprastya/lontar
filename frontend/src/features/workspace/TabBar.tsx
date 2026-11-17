@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useWorkspace, type Tab } from '../../stores/workspace'
 import { shortcutLabel } from '../../lib/mod'
 import { displayName } from '../structure/fk'
+import { fileDirty } from '../../stores/queryTabs'
 
 /** Tab title; tables of another schema (e.g. opened by a foreign key) are qualified. */
 function tabTitle(t: Tab, schema: string): string {
@@ -9,7 +10,8 @@ function tabTitle(t: Tab, schema: string): string {
 }
 
 function tabTooltip(t: Tab): string {
-  return t.kind === 'query' ? `${t.title} — double-click to rename` : `${t.schema}.${t.table}`
+  if (t.kind !== 'query') return `${t.schema}.${t.table}`
+  return t.filePath ? `${t.filePath}${fileDirty(t) ? ' (unsaved changes)' : ''}` : `${t.title} — double-click to rename`
 }
 
 /**
@@ -74,6 +76,11 @@ export default function TabBar({ platform }: { platform?: string }) {
             />
           ) : (
             <span className="tab-title">{tabTitle(t, schema)}</span>
+          )}
+          {t.kind === 'query' && fileDirty(t) && (
+            <span className="tab-dirty" role="img" aria-label="unsaved changes">
+              ●
+            </span>
           )}
           {t.kind === 'query' && t.running && <span className="tab-running" aria-label="running" />}
           <button

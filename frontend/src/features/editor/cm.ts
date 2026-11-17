@@ -91,6 +91,8 @@ export interface RunHandlers {
   run(mode: 'current' | 'all'): void
   /** Cancels a running query; false when nothing runs (Escape then does its usual job). */
   cancel(): boolean
+  /** Formats the selection or the whole script (Mod-Shift-F). */
+  format?(): void
 }
 
 /** The run keys, ahead of CodeMirror's own bindings (Mod-Enter inserts a line by default). */
@@ -100,6 +102,14 @@ export function runKeymap(h: () => RunHandlers): Extension {
       { key: 'Mod-Enter', run: () => (h().run('current'), true), preventDefault: true },
       { key: 'Mod-Shift-Enter', run: () => (h().run('all'), true), preventDefault: true },
       { key: 'Escape', run: () => h().cancel() },
+      {
+        key: 'Mod-Shift-f',
+        run: () => {
+          h().format?.()
+          return true
+        },
+        preventDefault: true,
+      },
     ]),
   )
 }

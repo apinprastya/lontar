@@ -41,6 +41,9 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setDraft((d) => ({ ...d, [k]: v }))
   const setCsv = <K extends keyof Settings['csvExport']>(k: K, v: Settings['csvExport'][K]) =>
     setDraft((d) => ({ ...d, csvExport: { ...d.csvExport, [k]: v } }))
+  const fmt = draft.sqlFormat ?? DEFAULT_SETTINGS.sqlFormat
+  const setFmt = <K extends keyof Settings['sqlFormat']>(k: K, v: Settings['sqlFormat'][K]) =>
+    setDraft((d) => ({ ...d, sqlFormat: { ...(d.sqlFormat ?? DEFAULT_SETTINGS.sqlFormat), [k]: v } }))
   const close = () => setOpen(false)
 
   async function submit() {
@@ -101,6 +104,20 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
             <input type="checkbox" checked={draft.confirmCloseDirtyQuery} onChange={(e) => set('confirmCloseDirtyQuery', e.target.checked)} /> Ask before closing
             a query tab with unrun changes
           </label>
+
+          <h3 className="form-section">SQL format</h3>
+          <label htmlFor={id('kwcase')}>Keyword case</label>
+          <select id={id('kwcase')} value={fmt.keywordCase} onChange={(e) => setFmt('keywordCase', e.target.value as Settings['sqlFormat']['keywordCase'])}>
+            <option value="upper">UPPER</option>
+            <option value="lower">lower</option>
+            <option value="preserve">Keep as typed</option>
+          </select>
+
+          <label htmlFor={id('indent')}>Indent</label>
+          <select id={id('indent')} value={fmt.indent} onChange={(e) => setFmt('indent', Number(e.target.value))}>
+            <option value={2}>2 spaces</option>
+            <option value={4}>4 spaces</option>
+          </select>
 
           <h3 className="form-section">CSV export defaults</h3>
           <label htmlFor={id('delim')}>Delimiter</label>

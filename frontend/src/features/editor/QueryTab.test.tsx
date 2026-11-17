@@ -71,6 +71,19 @@ describe('QueryTab', () => {
   })
   afterEach(() => store.getState().dispose())
 
+  it('formats from the toolbar or with Mod+Shift+F, replacing the text in the editor', async () => {
+    mount()
+    const editorBox = screen.getByRole('textbox', { name: 'SQL editor' })
+    act(() => {
+      editorBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'F', keyCode: 70, ctrlKey: true, shiftKey: true, bubbles: true }))
+    })
+    await waitFor(() => expect(tab().sql).toBe('SELECT\n  1;\n\nSELEC 2'))
+    act(() => store.getState().setSql(tab().id, 'select 3'))
+    fireEvent.click(screen.getByRole('button', { name: 'Format' }))
+    await waitFor(() => expect(tab().sql).toBe('SELECT\n  3'))
+    expect(screen.getByRole('textbox', { name: 'SQL editor' })).toHaveTextContent('SELECT')
+  })
+
   it('runs from the toolbar and shows results, banner and messages', async () => {
     editor.execute.mockResolvedValueOnce(
       execResult(

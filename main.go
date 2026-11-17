@@ -28,6 +28,9 @@ func main() {
 	saved, ok := b.state.Window()
 	win := app.Window.NewWithOptions(mainWindowOptions(saved, ok))
 	trackWindow(app, win, b.state, saved, ok)
+	win.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
+		emitDroppedSQLFiles(WailsEmitter{}, e.Context().DroppedFiles())
+	})
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

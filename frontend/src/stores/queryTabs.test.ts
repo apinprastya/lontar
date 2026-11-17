@@ -18,6 +18,8 @@ import {
 } from './queryTabs'
 import { createWorkspaceStore, type TabState, type WorkspaceStore } from './workspace'
 import { makeDetail } from '../test/structure'
+import { useSettings } from './settings'
+import { DEFAULT_SETTINGS } from '../features/settings/types'
 
 function fakeApi(): WorkspaceApi {
   return {
@@ -471,5 +473,61 @@ describe('explain in query tabs', () => {
     reject(new Error('boom'))
     await late
     expect(q().error).toBeNull()
+  })
+})
+
+describe('format in query tabs', () => {
+  let store: WorkspaceStore
+  const st = () => store.getState()
+  const q = () => st().activeTab() as QueryTabState
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    useSettings.setState({ settings: DEFAULT_SETTINGS })
+    store = createWorkspaceStore({ id: 's1', kind: 'mysql', connectionId: 'c1' }, fakeApi(), fakeEditorApi())
+  })
+  afterEach(() => {
+    st().dispose()
+    useSettings.setState({ settings: DEFAULT_SETTINGS })
+  })
+
+  it('formats the whole script, or the selection, with the settings', async () => {
+    const id = st().newQueryTab('select a from t\n')
+    await st().formatQuery(id)
+    expect(q().editorRequest).toMatchObject({ type: 'replace', from: 0, to: 16, expect: 'select a from t\n', text: 'SELECT\n  a\nFROM\n  t\n', select: false })
+    expect(q().error).toBeNull()
+
+    useSettings.setState({ settings: { ...DEFAULT_SETTINGS, sqlFormat: { keywordCase: 'lower', indent: 4 } } })
+    st().setSql(id, 'x; SELECT b FROM u; y')
+    st().setEditorSelection(id, 18, { from: 3, to: 18 })
+    await st().formatQuery(id)
+    expect(q().editorRequest).toMatchObject({ type: 'replace', from: 3, to: 18, text: 'select\n    b\nfrom\n    u', select: true })
+  })
+
+  it('uses the defaults for settings without format options', async () => {
+    const { sqlFormat: _omit, ...old } = DEFAULT_SETTINGS
+    useSettings.setState({ settings: old as typeof DEFAULT_SETTINGS })
+    const id = st().newQueryTab('select 1')
+    await st().formatQuery(id)
+    expect(q().editorRequest).toMatchObject({ text: 'SELECT\n  1' })
+  })
+
+  it('shows why formatting failed and leaves the text alone', async () => {
+    const id = st().newQueryTab('DELIMITER //\nselect 1//\n')
+    await st().formatQuery(id)
+    expect(q().error).toMatch(/DELIMITER/)
+    expect(q().editorRequest).toBeNull()
+    expect(q().sql).toBe('DELIMITER //\nselect 1//\n')
+  })
+
+  it('does nothing for formatted text, unknown or closed tabs', async () => {
+    const id = st().newQueryTab('SELECT\n  1')
+    await st().formatQuery(id)
+    expect(q().editorRequest).toBeNull()
+    await st().formatQuery('nope')
+    const p = st().formatQuery(id)
+    st().closeTabNow(id)
+    await p
+    expect(st().tabs).toHaveLength(0)
   })
 })

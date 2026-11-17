@@ -1,5 +1,6 @@
 import { vi } from 'vitest'
 import type { EditorApi } from '../features/editor/api'
+import type { SqlFile, SqlFileApi } from '../features/editor/sqlFiles'
 import type { ExecResult, Plan, PlanNode, ResultSet, StatementResult } from '../features/editor/types'
 
 export function resultSet(id: string, rows = 2, over: Partial<ResultSet> = {}): ResultSet {
@@ -105,5 +106,24 @@ export function fakeEditorApi() {
     historyDelete: vi.fn(async () => {}),
     historyClear: vi.fn(async () => 0),
   } satisfies EditorApi
+  return api
+}
+
+export function sqlFile(path: string, text: string, over: Partial<SqlFile> = {}): SqlFile {
+  return { path, name: path.split(/[\\/]/).pop() ?? path, text, modTime: 1000, eol: '\n', ...over }
+}
+
+/** A fake SqlFileApi: open/read return files, save echoes the text (Save as picks /tmp/<name>). */
+export function fakeSqlFileApi() {
+  let mod = 2000
+  const api = {
+    open: vi.fn<SqlFileApi['open']>(async () => null),
+    read: vi.fn<SqlFileApi['read']>(async (path: string) => sqlFile(path, `-- ${path}\n`)),
+    save: vi.fn<SqlFileApi['save']>(async (path, name, text, eol) => {
+      const p = path || `/tmp/${name.replace(/\.sql$/i, '')}.sql`
+      mod += 1
+      return sqlFile(p, text, { eol, modTime: mod })
+    }),
+  } satisfies SqlFileApi
   return api
 }

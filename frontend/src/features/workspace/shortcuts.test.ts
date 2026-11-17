@@ -56,6 +56,8 @@ describe('handleShortcut with SQL tabs', () => {
       newQueryTab: vi.fn(),
       runQuery: vi.fn(async () => {}),
       explainQuery: vi.fn(async () => {}),
+      openSqlFile: vi.fn(async () => {}),
+      saveSqlFile: vi.fn(async () => true),
       cancelQuery: vi.fn(),
       requestEditor: vi.fn(),
       toggleFilterBar: vi.fn(),
@@ -89,6 +91,22 @@ describe('handleShortcut with SQL tabs', () => {
     expect(conflicts()).toEqual([])
     expect(SHORTCUTS.find((x) => x.id === 'explain')).toMatchObject({ key: 'e', mod: true, shift: true, command: true })
     expect(SHORTCUTS.find((x) => x.id === 'explainAnalyze')).toMatchObject({ key: '', command: true })
+  })
+
+  it('opens with Mod+Shift+O anywhere and saves with Mod+Shift+S in SQL tabs', () => {
+    const s = queryState()
+    expect(handleShortcut(key('O', { shiftKey: true }), 'linux', s)).toBe(true)
+    expect(s.openSqlFile).toHaveBeenCalled()
+    expect(handleShortcut(key('S', { shiftKey: true }), 'linux', s, true)).toBe(true)
+    expect(s.saveSqlFile).toHaveBeenCalledWith('q1')
+    const none = { ...fakeState(false), openSqlFile: vi.fn(async () => {}) } as unknown as WorkspaceState & Record<string, ReturnType<typeof vi.fn>>
+    expect(handleShortcut(key('o', { shiftKey: true }), 'linux', none)).toBe(true)
+    expect(none.openSqlFile).toHaveBeenCalled()
+    expect(handleShortcut(key('s', { shiftKey: true }), 'linux', none)).toBe(false)
+    expect(SHORTCUTS.find((x) => x.id === 'openSqlFile')).toMatchObject({ key: 'o', mod: true, shift: true, scope: 'global', command: true })
+    expect(SHORTCUTS.find((x) => x.id === 'saveSqlFile')).toMatchObject({ key: 's', mod: true, shift: true, scope: 'global', command: true })
+    expect(SHORTCUTS.find((x) => x.id === 'formatSql')).toMatchObject({ key: 'f', mod: true, shift: true, scope: 'editor', command: true })
+    expect(conflicts()).toEqual([])
   })
 
   it('sends Mod+F to the editor search in SQL tabs (no filter bar)', () => {

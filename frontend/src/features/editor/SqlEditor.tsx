@@ -3,7 +3,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { keywordCompletionSource } from '@codemirror/lang-sql'
 import { LanguageSupport, bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/language'
 import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search'
-import { Compartment, EditorSelection, EditorState } from '@codemirror/state'
+import { Compartment, EditorSelection, EditorState, type SelectionRange } from '@codemirror/state'
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, tooltips } from '@codemirror/view'
 import { useEffect, useRef } from 'react'
 import type { Kind } from '../connections/types'
@@ -21,6 +21,7 @@ import {
 } from './cm'
 import type { CompletionSchema } from './types'
 import { completionSource } from './sqlComplete'
+import { mapCursor } from './sqlFormat'
 
 export interface SqlEditorProps {
   value: string
@@ -38,6 +39,8 @@ export interface SqlEditorProps {
   /** Cancels a running query; returns false when nothing runs. */
   onCancel(): boolean
   onNeedColumns(table: string): void
+  /** Mod-Shift-F: format the selection or the whole script. */
+  onFormat?(): void
 }
 
 /**
@@ -68,6 +71,30 @@ export function applyRequest(view: EditorView, req: EditorRequest) {
     case 'search':
       openSearchPanel(view)
       return
+    case 'replace': {
+      // The text changed since the request was made: drop it.
+      if (req.to > len || view.state.doc.sliceString(req.from, req.to) !== req.expect) return
+      const head = view.state.selection.main.head
+      // Replace only the part that differs, so marks and history stay small.
+      let pre = 0
+      const max = Math.min(req.expect.length, req.text.length)
+      while (pre < max && req.expect[pre] === req.text[pre]) pre++
+      let suf = 0
+      while (suf < max - pre && req.expect[req.expect.length - 1 - suf] === req.text[req.text.length - 1 - suf]) suf++
+      const end = req.from + req.text.length
+      let selection: SelectionRange
+      if (req.select) selection = EditorSelection.range(req.from, end)
+      else if (head < req.from) selection = EditorSelection.cursor(head)
+      else if (head > req.to) selection = EditorSelection.cursor(head + req.text.length - req.expect.length)
+      else selection = EditorSelection.cursor(req.from + mapCursor(req.expect, req.text, head - req.from))
+      view.dispatch({
+        changes: { from: req.from + pre, to: req.to - suf, insert: req.text.slice(pre, req.text.length - suf) },
+        selection,
+        scrollIntoView: true,
+        userEvent: 'input.format',
+      })
+      break
+    }
   }
   view.focus()
 }
@@ -85,7 +112,11 @@ export default function SqlEditor(props: SqlEditorProps) {
 
   useEffect(() => {
     const p = latest.current
-    const handlers = (): RunHandlers => ({ run: (mode) => latest.current.onRun(mode), cancel: () => latest.current.onCancel() })
+    const handlers = (): RunHandlers => ({
+      run: (mode) => latest.current.onRun(mode),
+      cancel: () => latest.current.onCancel(),
+      format: () => latest.current.onFormat?.(),
+    })
     const getCs = () => latest.current.completion
     const need = (t: string) => latest.current.onNeedColumns(t)
     const state = EditorState.create({

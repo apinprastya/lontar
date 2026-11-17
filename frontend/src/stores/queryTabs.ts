@@ -6,6 +6,8 @@ import { DEFAULT_MAX_ROWS, type CompletionSchema, type ExecResult, type Plan, ty
 import type { Cell, ResultColumn, SortSpec } from '../features/workspace/types'
 import type { PreviewStatement, ResultSource, SafeMode } from '../features/edits/types'
 import { errorMessage } from '../lib/errors'
+import { formatSql } from '../features/editor/sqlFormat'
+import { fileErrorCode, type SqlFile, type SqlFileApi } from '../features/editor/sqlFiles'
 import { setUIJSON } from '../lib/uiState'
 import { displayRows, emptyPending, type DisplayRow, type Pending } from './pending'
 
@@ -36,6 +38,12 @@ export type EditorRequest = { seq: number } & (
   | { type: 'error'; pos: number; from: number; to: number }
   | { type: 'insert'; text: string }
   | { type: 'search' }
+  /**
+   * Replaces from..to (which held expect) with text in one undoable
+   * transaction (Format). select: select the new text, else keep the
+   * cursor at the matching place.
+   */
+  | { type: 'replace'; from: number; to: number; expect: string; text: string; select: boolean }
 )
 
 /** State of one SQL editor tab. */
@@ -78,6 +86,19 @@ export interface QueryTabState {
   edit: ResultEdit | null
   /** The database changed since the results were fetched (no editing). */
   resultsStale?: boolean
+  /** The .sql file the tab was opened from or saved to (null: none). */
+  filePath: string | null
+  /** The text as last read from or written to the file. */
+  savedSql: string | null
+  /** The file's modification time then (Unix ms; 0: unknown). */
+  fileModTime: number
+  /** The file's line ending ("\n" or "\r\n"), kept on save. */
+  eol: string
+}
+
+/** A query tab with changes not saved to its file. */
+export function fileDirty(tab: Pick<QueryTabState, 'filePath' | 'savedSql' | 'sql'>): boolean {
+  return Boolean(tab.filePath) && tab.sql !== tab.savedSql
 }
 
 /**
@@ -156,6 +177,10 @@ export interface QueryState {
   historyOpen: boolean
   completion: CompletionSchema | null
   completionLoading: boolean
+  /** A query tab whose save found its file changed on disk (Overwrite / Cancel). */
+  fileConflict: string | null
+  /** Why opening or saving a file failed (workspace banner). */
+  fileError: string | null
 
   newQueryTab(sql?: string): string
   renameTab(id: string, title: string): void
@@ -165,6 +190,27 @@ export interface QueryState {
   runQuery(id: string, mode: RunMode): Promise<void>
   /** Shows the plan of the selection or the statement under the cursor. */
   explainQuery(id: string, analyze: boolean): Promise<void>
+  /**
+   * Formats the selection, or the whole script without one (settings:
+   * keyword case, indent). A failure is shown in the tab's error banner and
+   * leaves the text unchanged.
+   */
+  formatQuery(id: string): Promise<void>
+  /**
+   * Opens a .sql file (dialog): an open tab of that file is activated; the
+   * file goes into the active tab when that is empty and untitled, else into
+   * a new tab.
+   */
+  openSqlFile(): Promise<void>
+  /** Opens .sql files by path (dropped files), each like openSqlFile. */
+  openSqlFiles(paths: string[]): Promise<void>
+  /** Saves to the tab's file (Save as without one); true when saved. */
+  saveSqlFile(id: string): Promise<boolean>
+  /** Asks for a file and saves the tab there; true when saved. */
+  saveSqlFileAs(id: string): Promise<boolean>
+  /** A save found the file changed on disk: Overwrite (true) or Cancel. */
+  resolveFileConflict(overwrite: boolean): Promise<void>
+  dismissFileError(): void
   /** Runs the run waiting for confirmation (confirm safe mode). */
   confirmRun(id: string): Promise<void>
   cancelConfirm(id: string): void
@@ -191,6 +237,9 @@ export interface QueryState {
 }
 
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never
+
+/** The state fields of QueryState (the rest are actions). */
+export type QueryFields = 'historyOpen' | 'completion' | 'completionLoading' | 'fileConflict' | 'fileError'
 
 /** What the query actions need from the workspace store. */
 export interface QueryHost {
@@ -251,6 +300,10 @@ export function newQueryTabState(title: string, sql = ''): QueryTabState {
     confirm: null,
     ranSql: null,
     edit: null,
+    filePath: null,
+    savedSql: null,
+    fileModTime: 0,
+    eol: '\n',
   }
 }
 
@@ -281,6 +334,35 @@ export const HISTORY_OPEN_KEY = 'query.historyOpen'
 export interface Draft {
   title: string
   sql: string
+  /** Tabs of a .sql file (absent in drafts of older versions). */
+  filePath?: string
+  savedSql?: string
+  fileModTime?: number
+  eol?: string
+}
+
+/** The draft's file fields, if they are valid. */
+function draftFile(d: Record<string, unknown>): Partial<Draft> {
+  if (typeof d.filePath !== 'string' || !d.filePath) return {}
+  return {
+    filePath: d.filePath,
+    savedSql: typeof d.savedSql === 'string' ? d.savedSql : '',
+    fileModTime: typeof d.fileModTime === 'number' ? d.fileModTime : 0,
+    eol: d.eol === '\r\n' ? '\r\n' : '\n',
+  }
+}
+
+/** The tab state restored from a draft. */
+export function tabFromDraft(d: Draft): QueryTabState {
+  const tab = { ...newQueryTabState(d.title, d.sql), cursor: 0 }
+  if (!d.filePath) return tab
+  return { ...tab, filePath: d.filePath, savedSql: d.savedSql ?? '', fileModTime: d.fileModTime ?? 0, eol: d.eol ?? '\n' }
+}
+
+function toDraft(t: QueryTabState): Draft {
+  const d: Draft = { title: t.title, sql: t.sql }
+  if (t.filePath) Object.assign(d, { filePath: t.filePath, savedSql: t.savedSql ?? '', fileModTime: t.fileModTime, eol: t.eol })
+  return d
 }
 
 export function draftKey(connectionId: string): string {
@@ -298,6 +380,7 @@ export function loadDrafts(connectionId: string): Draft[] {
     return parsed
       .filter((d): d is Draft => typeof d === 'object' && d !== null && typeof d.title === 'string' && typeof d.sql === 'string')
       .slice(0, 50)
+      .map((d) => ({ title: d.title, sql: d.sql, ...draftFile(d as unknown as Record<string, unknown>) }))
   } catch {
     return []
   }
@@ -327,7 +410,8 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
   get: () => S,
   api: EditorApi,
   isDisposed: () => boolean,
-): Omit<QueryState, 'historyOpen' | 'completion' | 'completionLoading'> {
+  files: SqlFileApi,
+): Omit<QueryState, QueryFields> {
   const queryTabs = () => get().tabs.filter((t): t is QueryTabState => t.kind === 'query')
   const findQuery = (id: string) => queryTabs().find((t) => t.id === id)
   const patch = (id: string, p: Partial<QueryTabState> | ((t: QueryTabState) => Partial<QueryTabState>)) => {
@@ -338,7 +422,62 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
         }) as Partial<S>,
     )
   }
-  const persist = () => saveDrafts(get().connectionId, queryTabs().map((t) => ({ title: t.title, sql: t.sql })))
+  const persist = () => saveDrafts(get().connectionId, queryTabs().map(toDraft))
+
+  /** The tab state of a file that was just read or written. */
+  const fileState = (f: SqlFile, text: string): Partial<QueryTabState> => ({
+    title: f.name,
+    filePath: f.path,
+    savedSql: text,
+    fileModTime: f.modTime,
+    eol: f.eol === '\r\n' ? '\r\n' : '\n',
+  })
+
+  /** Shows a file in a tab: the tab of that file, the empty active tab, or a new one. */
+  const showFile = (f: SqlFile) => {
+    const open = queryTabs().find((t) => t.filePath === f.path)
+    if (open) {
+      set({ activeTabId: open.id } as Partial<S>)
+      return
+    }
+    const { activeTabId } = get()
+    const active = activeTabId ? findQuery(activeTabId) : undefined
+    const reuse = active && !active.filePath && active.sql === '' && /^Query \d+$/.test(active.title) && !active.running
+    const content = { ...fileState(f, f.text), sql: f.text, cursor: 0, selection: null, current: null, ranSql: null }
+    if (reuse) patch(active.id, content)
+    else {
+      const tab = { ...newQueryTabState(f.name, f.text), ...content }
+      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }) as Partial<S>)
+    }
+    persist()
+  }
+
+  /** A failed file operation: shown in the workspace banner. */
+  const fileFailed = (err: unknown) => {
+    if (!isDisposed()) set({ fileError: errorMessage(err) } as Partial<S>)
+  }
+
+  /** Saves a tab (path '' = Save as); true when written. */
+  const save = async (id: string, path: string, expectedModTime: number): Promise<boolean> => {
+    const tab = findQuery(id)
+    if (!tab) return false
+    const text = tab.sql
+    try {
+      const f = await files.save(path, tab.title.replace(/\.sql$/i, ''), text, tab.eol, expectedModTime)
+      if (!f || isDisposed() || !findQuery(id)) return false
+      patch(id, fileState(f, text))
+      set({ fileError: null } as Partial<S>)
+      persist()
+      return true
+    } catch (err) {
+      if (fileErrorCode(err) === 'changed_on_disk') {
+        if (!isDisposed()) set({ fileConflict: id } as Partial<S>)
+        return false
+      }
+      fileFailed(err)
+      return false
+    }
+  }
 
   /** The tab's backend editor, opened on first use. */
   const ensureEditor = async (id: string, tab: QueryTabState) => {
@@ -421,7 +560,7 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
     }
   }
 
-  const actions: Omit<QueryState, 'historyOpen' | 'completion' | 'completionLoading'> = {
+  const actions: Omit<QueryState, QueryFields> = {
     newQueryTab(sql = '') {
       const tab = newQueryTabState(nextQueryTitle(queryTabs().map((t) => t.title)), sql)
       set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }) as Partial<S>)
@@ -500,6 +639,70 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
         if (isDisposed() || findQuery(id)?.requestId !== requestId) return
         runFailed(id, err)
       }
+    },
+
+    async formatQuery(id) {
+      const tab = findQuery(id)
+      if (!tab) return
+      const sel = tab.selection
+      const from = sel ? sel.from : 0
+      const to = sel ? sel.to : tab.sql.length
+      const original = tab.sql.slice(from, to)
+      const { sqlFormat } = useSettings.getState().settings
+      const res = await formatSql(
+        original,
+        get().kind,
+        { keywordCase: sqlFormat?.keywordCase ?? 'upper', tabWidth: sqlFormat?.indent ?? 2 },
+      )
+      if (isDisposed() || !findQuery(id)) return
+      if (!res.ok) {
+        patch(id, { error: res.reason })
+        return
+      }
+      if (res.text === original) return
+      patch(id, { error: null, editorRequest: { seq: nextSeq(), type: 'replace', from, to, expect: original, text: res.text, select: Boolean(sel) } })
+    },
+
+    async openSqlFile() {
+      try {
+        const f = await files.open()
+        if (f && !isDisposed()) showFile(f)
+      } catch (err) {
+        fileFailed(err)
+      }
+    },
+
+    async openSqlFiles(paths) {
+      for (const p of paths) {
+        try {
+          const f = await files.read(p)
+          if (isDisposed()) return
+          showFile(f)
+        } catch (err) {
+          fileFailed(err)
+        }
+      }
+    },
+
+    async saveSqlFile(id) {
+      const tab = findQuery(id)
+      if (!tab) return false
+      return save(id, tab.filePath ?? '', tab.filePath ? tab.fileModTime : 0)
+    },
+
+    async saveSqlFileAs(id) {
+      return save(id, '', 0)
+    },
+
+    async resolveFileConflict(overwrite) {
+      const id = get().fileConflict
+      set({ fileConflict: null } as Partial<S>)
+      const tab = id ? findQuery(id) : undefined
+      if (overwrite && tab?.filePath) await save(tab.id, tab.filePath, 0)
+    },
+
+    dismissFileError() {
+      set({ fileError: null } as Partial<S>)
     },
 
     async confirmRun(id) {

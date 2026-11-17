@@ -13,6 +13,13 @@ export interface CsvDefaults {
   bom: boolean
 }
 
+/** Options of the SQL editor's Format command. */
+export interface SqlFormatSettings {
+  keywordCase: 'upper' | 'lower' | 'preserve'
+  /** Spaces per indent level: 2 or 4. */
+  indent: number
+}
+
 export interface Settings {
   version: number
   theme: ThemeSetting
@@ -21,6 +28,7 @@ export interface Settings {
   editorMaxRows: number
   csvExport: CsvDefaults
   confirmCloseDirtyQuery: boolean
+  sqlFormat: SqlFormatSettings
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   editorMaxRows: 1000,
   csvExport: { delimiter: ',', header: true, quote: '"', null: 'empty', nullText: '', crlf: false, bom: false },
   confirmCloseDirtyQuery: false,
+  sqlFormat: { keywordCase: 'upper', indent: 2 },
 }
 
 export const LIMITS = {

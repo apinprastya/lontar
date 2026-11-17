@@ -24,7 +24,8 @@ const FileName = "settings.json"
 // CurrentVersion is the version written to settings.json.
 //
 //	1: M6 (theme, editor font size, grid page size, editor max rows, CSV
-//	   export defaults, confirm closing dirty query tabs)
+//	   export defaults, confirm closing dirty query tabs); later SQL format
+//	   options (missing in older files: defaults)
 const CurrentVersion = 1
 
 // ErrNewerVersion is returned for a settings file written by a newer Lontar.
@@ -61,6 +62,21 @@ type CSV struct {
 	BOM bool `json:"bom"`
 }
 
+// SQL format keyword cases.
+const (
+	KeywordUpper    = "upper"
+	KeywordLower    = "lower"
+	KeywordPreserve = "preserve"
+)
+
+// SQLFormat holds the options of the SQL editor's Format command.
+type SQLFormat struct {
+	// KeywordCase is "upper", "lower" or "preserve".
+	KeywordCase string `json:"keywordCase"`
+	// Indent is the number of spaces per level: 2 or 4.
+	Indent int `json:"indent"`
+}
+
 // Settings are the application preferences.
 type Settings struct {
 	Version        int   `json:"version"`
@@ -74,6 +90,8 @@ type Settings struct {
 	// ConfirmCloseDirtyQuery asks before closing a query tab whose SQL
 	// changed since it last ran.
 	ConfirmCloseDirtyQuery bool `json:"confirmCloseDirtyQuery"`
+	// SQLFormat configures Format in the SQL editor.
+	SQLFormat SQLFormat `json:"sqlFormat"`
 }
 
 // Limits.
@@ -92,6 +110,7 @@ func Defaults() Settings {
 		GridPageSize:   300,
 		EditorMaxRows:  1000,
 		CSV:            CSV{Delimiter: ",", Header: true, Quote: `"`, Null: NullEmpty},
+		SQLFormat:      SQLFormat{KeywordCase: KeywordUpper, Indent: 2},
 	}
 }
 
@@ -132,6 +151,14 @@ func (s *Settings) Normalize() {
 	case NullEmpty, NullBackN, NullCustom:
 	default:
 		s.CSV.Null = d.CSV.Null
+	}
+	switch s.SQLFormat.KeywordCase {
+	case KeywordUpper, KeywordLower, KeywordPreserve:
+	default:
+		s.SQLFormat.KeywordCase = d.SQLFormat.KeywordCase
+	}
+	if s.SQLFormat.Indent != 2 && s.SQLFormat.Indent != 4 {
+		s.SQLFormat.Indent = d.SQLFormat.Indent
 	}
 }
 

@@ -4,10 +4,11 @@ vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/m
 
 import { DEFAULT_SETTINGS } from '../settings/types'
 import { useSettings } from '../../stores/settings'
+import type { QueryTabState } from '../../stores/queryTabs'
 import { createWorkspaceStore, type WorkspaceStore } from '../../stores/workspace'
 import { SettingsService, UpdateService, resetBindings } from '../../test/mockBindings'
 import { useUpdate } from '../../stores/update'
-import { fakeEditorApi } from '../../test/fakeEditorApi'
+import { fakeEditorApi, fakeSqlFileApi, sqlFile } from '../../test/fakeEditorApi'
 import { makeDetail } from '../../test/structure'
 import type { WorkspaceApi } from '../workspace/api'
 import { commands, conflicts, SHORTCUTS, shortcutEvent, shortcutText } from '../workspace/keymap'
@@ -140,6 +141,38 @@ describe('palette commands', () => {
     expect(runCommand('explainAnalyze', { ...ctx, store: lite })).toBe(true)
     await flush()
     expect(editor.explain).toHaveBeenCalledTimes(2)
+  })
+
+  it('formats the active query tab from the palette', async () => {
+    for (const t of store.getState().tabs) store.getState().closeTabNow(t.id)
+    expect(commandAvailable('formatSql', store.getState())).toBe(false)
+    expect(runCommand('formatSql', ctx)).toBe(true)
+    store.getState().newQueryTab('select 1')
+    expect(commandAvailable('formatSql', store.getState())).toBe(true)
+    expect(runCommand('formatSql', ctx)).toBe(true)
+    await vi.waitFor(() => expect((store.getState().activeTab() as QueryTabState).editorRequest).toMatchObject({ type: 'replace', text: 'SELECT\n  1' }))
+  })
+
+  it('opens and saves SQL files from the palette', async () => {
+    for (const t of store.getState().tabs) store.getState().closeTabNow(t.id)
+    const files = fakeSqlFileApi()
+    files.open.mockResolvedValueOnce(sqlFile('/w/a.sql', 'SELECT 1'))
+    store = createWorkspaceStore({ id: 's1', kind: 'postgres', connectionId: 'c9', safeMode: 'off' }, fakeApi(), fakeEditorApi(), undefined, files)
+    ctx = { ...ctx, store }
+    expect(commandAvailable('openSqlFile', store.getState())).toBe(true)
+    expect(commandAvailable('saveSqlFile', store.getState())).toBe(false)
+    expect(commandAvailable('saveSqlFileAs', store.getState())).toBe(false)
+    expect(runCommand('saveSqlFileAs', ctx)).toBe(true)
+    expect(files.save).not.toHaveBeenCalled()
+    expect(runCommand('openSqlFile', ctx)).toBe(true)
+    await vi.waitFor(() => expect(store.getState().tabs).toHaveLength(1))
+    expect(commandAvailable('saveSqlFile', store.getState())).toBe(true)
+    expect(runCommand('saveSqlFile', ctx)).toBe(true)
+    await flush()
+    expect(files.save).toHaveBeenLastCalledWith('/w/a.sql', 'a', 'SELECT 1', '\n', 1000)
+    expect(runCommand('saveSqlFileAs', ctx)).toBe(true)
+    await flush()
+    expect(files.save).toHaveBeenLastCalledWith('', 'a', 'SELECT 1', '\n', 0)
   })
 
   it('exports the active query result with its statement', async () => {

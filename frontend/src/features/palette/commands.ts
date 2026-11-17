@@ -59,6 +59,16 @@ const ACTIONS: Record<string, (ctx: CommandContext) => void> = {
   },
   disconnect: (ctx) => ctx.disconnect(),
   checkUpdates: () => void useUpdate.getState().check(),
+  saveSqlFileAs: (ctx) => {
+    const s = ctx.store.getState()
+    const tab = s.activeTab()
+    if (tab?.kind === 'query') void s.saveSqlFileAs(tab.id)
+  },
+  formatSql: (ctx) => {
+    const s = ctx.store.getState()
+    const tab = s.activeTab()
+    if (tab?.kind === 'query') void s.formatQuery(tab.id)
+  },
   explainAnalyze: (ctx) => {
     const s = ctx.store.getState()
     const tab = s.activeTab()
@@ -88,7 +98,7 @@ export function runCommand(id: string, ctx: CommandContext): boolean {
 const TABLE_COMMANDS = new Set(['commit', 'undo', 'redo', 'toggleStructure', 'filter'])
 /** Commands an editable query result supports too. */
 const EDIT_COMMANDS = new Set(['commit', 'undo', 'redo', 'insertRow'])
-const QUERY_COMMANDS = new Set(['runCurrent', 'runAll', 'explain'])
+const QUERY_COMMANDS = new Set(['runCurrent', 'runAll', 'explain', 'formatSql', 'saveSqlFile', 'saveSqlFileAs'])
 
 /** Whether a command can do something in the current state (palette greys it out otherwise). */
 export function commandAvailable(id: string, s: WorkspaceState): boolean {

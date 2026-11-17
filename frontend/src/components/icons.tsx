@@ -240,6 +240,35 @@ export function ExplainAnalyzeIcon(p: IconProps) {
   )
 }
 
+/** Format SQL: lines with stepped indentation. */
+export function FormatIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M2 3h12M5 6.3h9M5 9.6h7M2 13h10" {...stroke} />
+    </Svg>
+  )
+}
+
+/** Open a file: an open folder. */
+export function OpenFileIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M1.5 12.5V3.5h4.2l1.5 1.5h5.3v2" {...stroke} />
+      <path d="M1.5 12.5l2-5h11l-2 5z" {...stroke} />
+    </Svg>
+  )
+}
+
+/** Save a file: a floppy disk. */
+export function SaveFileIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M2.5 2.5h9l2 2v9h-11z" {...stroke} />
+      <path d="M5 2.5v3.5h5V2.5M5 13.5v-4h6v4" {...stroke} />
+    </Svg>
+  )
+}
+
 /** A disclosure caret pointing right (rotate it to point down). */
 export function CaretIcon(p: IconProps) {
   return (

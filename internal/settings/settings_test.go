@@ -14,7 +14,8 @@ func TestDefaultsAndRoundTrip(t *testing.T) {
 	if err != nil || got != Defaults() {
 		t.Fatalf("load missing = %+v, %v", got, err)
 	}
-	if d := Defaults(); d.GridPageSize != 300 || d.Theme != ThemeSystem || d.CSV.Delimiter != "," || !d.CSV.Header || d.CSV.CRLF {
+	if d := Defaults(); d.GridPageSize != 300 || d.Theme != ThemeSystem || d.CSV.Delimiter != "," || !d.CSV.Header || d.CSV.CRLF ||
+		d.SQLFormat != (SQLFormat{KeywordCase: KeywordUpper, Indent: 2}) {
 		t.Fatalf("defaults = %+v", d)
 	}
 	v := Defaults()
@@ -23,6 +24,7 @@ func TestDefaultsAndRoundTrip(t *testing.T) {
 	v.GridPageSize = 500
 	v.EditorMaxRows = 2000
 	v.ConfirmCloseDirtyQuery = true
+	v.SQLFormat = SQLFormat{KeywordCase: KeywordLower, Indent: 4}
 	v.CSV = CSV{Delimiter: ";", Header: false, Quote: "'", Null: NullCustom, NullText: "NULL", CRLF: true, BOM: true}
 	saved, err := s.Save(v)
 	if err != nil || saved != v {
@@ -40,8 +42,11 @@ func TestDefaultsAndRoundTrip(t *testing.T) {
 
 func TestNormalize(t *testing.T) {
 	v := Settings{Theme: "neon", EditorFontSize: 2, GridPageSize: 999999, EditorMaxRows: -5,
-		CSV: CSV{Delimiter: "ab", Quote: "", Null: "?"}}
+		CSV: CSV{Delimiter: "ab", Quote: "", Null: "?"}, SQLFormat: SQLFormat{KeywordCase: "title", Indent: 3}}
 	v.Normalize()
+	if v.SQLFormat != Defaults().SQLFormat {
+		t.Fatalf("sql format = %+v", v.SQLFormat)
+	}
 	if v.Theme != ThemeSystem || v.EditorFontSize != MinFontSize || v.GridPageSize != MaxPageSize || v.EditorMaxRows != MinMaxRows ||
 		v.CSV.Delimiter != "," || v.CSV.Quote != `"` || v.CSV.Null != NullEmpty || v.Version != CurrentVersion {
 		t.Fatalf("normalized = %+v", v)
@@ -71,7 +76,8 @@ func TestVersionsAndErrors(t *testing.T) {
 	// Missing fields take defaults; out-of-range values are clamped.
 	write(`{"version":1,"theme":"dark","gridPageSize":5}`)
 	got, err := s.Load()
-	if err != nil || got.Theme != ThemeDark || got.GridPageSize != MinPageSize || got.EditorMaxRows != 1000 || !got.CSV.Header {
+	if err != nil || got.Theme != ThemeDark || got.GridPageSize != MinPageSize || got.EditorMaxRows != 1000 || !got.CSV.Header ||
+		got.SQLFormat != Defaults().SQLFormat {
 		t.Fatalf("partial = %+v, %v", got, err)
 	}
 	write(`{"version":2}`)

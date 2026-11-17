@@ -10,6 +10,7 @@ import * as EditorService from "./editorservice.js";
 import * as ExportService from "./exportservice.js";
 import * as HistoryService from "./historyservice.js";
 import * as ImportService from "./importservice.js";
+import * as SQLFileService from "./sqlfileservice.js";
 import * as SchemaService from "./schemaservice.js";
 import * as SettingsService from "./settingsservice.js";
 import * as UIStateService from "./uistateservice.js";
@@ -24,6 +25,7 @@ export {
     ExportService,
     HistoryService,
     ImportService,
+    SQLFileService,
     SchemaService,
     SettingsService,
     UIStateService,

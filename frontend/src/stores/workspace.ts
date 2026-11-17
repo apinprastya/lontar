@@ -27,8 +27,9 @@ import {
   MESSAGES,
   PLAN,
   createQueryActions,
+  fileDirty,
   loadDrafts,
-  newQueryTabState,
+  tabFromDraft,
   newResultEdit,
   resultSets,
   sourceColumns,
@@ -40,6 +41,7 @@ import {
 import { useSettings } from './settings'
 import type { ExportSource } from '../features/export/ExportDialog'
 import { editApi as defaultEditApi, type EditApi } from '../features/edits/api'
+import { sqlFileApi as defaultSqlFileApi, type SqlFileApi } from '../features/editor/sqlFiles'
 import type { EditValue, PreviewStatement, SafeMode } from '../features/edits/types'
 import {
   buildChangeSet,
@@ -259,10 +261,15 @@ export interface WorkspaceState extends QueryState {
   /** Closes a tab; force skips the unrun-changes question. */
   closeTabNow(id: string): void
   resolveCloseConfirm(close: boolean): void
+  /** A query tab with unsaved file changes waiting for Save / Don't save / Cancel. */
+  saveAsk: string | null
+  /** Save closes the tab once saved; Don't save closes it now. */
+  resolveSaveAsk(choice: 'save' | 'discard' | 'cancel'): Promise<void>
 }
 
-/** A query tab whose SQL changed since it last ran. */
+/** A query tab whose SQL changed since it last ran (text saved in its file is kept, not lost). */
 export function queryDirty(tab: QueryTabState): boolean {
+  if (tab.filePath && tab.sql === tab.savedSql) return false
   return tab.sql.trim() !== '' && tab.sql !== (tab.ranSql ?? '')
 }
 
@@ -386,13 +393,14 @@ export function createWorkspaceStore(
   api: WorkspaceApi,
   editor: EditorApi = defaultEditorApi,
   edits: EditApi = defaultEditApi,
+  files: SqlFileApi = defaultSqlFileApi,
 ): WorkspaceStore {
   let disposed = false
   const connectionId = session.connectionId ?? ''
   // Query tabs of this connection from the previous visit.
   const restored = (() => {
     const tabs: QueryTabState[] = []
-    for (const d of loadDrafts(connectionId)) tabs.push({ ...newQueryTabState(d.title, d.sql), cursor: 0 })
+    for (const d of loadDrafts(connectionId)) tabs.push(tabFromDraft(d))
     return tabs
   })()
 
@@ -555,7 +563,7 @@ export function createWorkspaceStore(
       t.patch({ pending, failed: null }, true)
     }
 
-    const queryActions = createQueryActions<WorkspaceState>(set, get, editor, () => disposed)
+    const queryActions = createQueryActions<WorkspaceState>(set, get, editor, () => disposed, files)
 
     return {
       ...queryActions,
@@ -730,6 +738,9 @@ export function createWorkspaceStore(
       historyOpen: getUIJSON(HISTORY_OPEN_KEY, false, isBoolean),
       completion: null,
       completionLoading: false,
+      fileConflict: null,
+      fileError: null,
+      saveAsk: null,
       sessionId: session.id,
       kind: session.kind,
       connectionId,
@@ -934,6 +945,10 @@ export function createWorkspaceStore(
           return
         }
         const tab = findTab(id) ?? get().tabs.find((t) => t.id === id)
+        if (tab?.kind === 'query' && fileDirty(tab)) {
+          set({ saveAsk: id })
+          return
+        }
         if (tab?.kind === 'query' && useSettings.getState().settings.confirmCloseDirtyQuery && queryDirty(tab)) {
           set({ closeConfirm: id })
           return
@@ -952,6 +967,14 @@ export function createWorkspaceStore(
         set({ tabs: rest, activeTabId: active })
         if (tab.kind === 'table') cancelRequests(tab)
         else get().releaseQueryTab(tab)
+      },
+
+      async resolveSaveAsk(choice) {
+        const id = get().saveAsk
+        set({ saveAsk: null })
+        if (!id || choice === 'cancel') return
+        if (choice === 'save' && !(await get().saveSqlFile(id))) return
+        get().closeTabNow(id)
       },
 
       resolveCloseConfirm(close) {
