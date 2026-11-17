@@ -2,7 +2,7 @@ import type { Kind } from '../features/connections/types'
 import type { EditorApi } from '../features/editor/api'
 import { cycleSort, sortOrder, sortRows } from '../features/grid/sort'
 import { useSettings } from './settings'
-import { DEFAULT_MAX_ROWS, type CompletionSchema, type ExecResult, type ResultSet, type TxInfo } from '../features/editor/types'
+import { DEFAULT_MAX_ROWS, type CompletionSchema, type ExecResult, type Plan, type ResultSet, type TxInfo } from '../features/editor/types'
 import type { Cell, ResultColumn, SortSpec } from '../features/workspace/types'
 import type { PreviewStatement, ResultSource, SafeMode } from '../features/edits/types'
 import { errorMessage } from '../lib/errors'
@@ -11,6 +11,16 @@ import { displayRows, emptyPending, type DisplayRow, type Pending } from './pend
 
 /** Key of the Messages tab in the results panel. */
 export const MESSAGES = 'messages'
+/** Key of the Plan tab in the results panel. */
+export const PLAN = 'plan'
+
+/** The last query plan of a tab. */
+export interface PlanState {
+  plan: Plan
+  analyze: boolean
+  /** The statement that was explained. */
+  sql: string
+}
 
 export interface Range {
   from: number
@@ -46,7 +56,9 @@ export interface QueryTabState {
   running: boolean
   requestId: string | null
   result: ExecResult | null
-  /** Result set ID or MESSAGES. */
+  /** The last Explain (shown in the Plan tab). */
+  plan: PlanState | null
+  /** Result set ID, MESSAGES or PLAN. */
   activeResult: string
   /** Client-side sort per result set. */
   sorts: Record<string, SortSpec[]>
@@ -151,6 +163,8 @@ export interface QueryState {
   setEditorSelection(id: string, cursor: number, selection: Range | null): void
   updateCurrentStatement(id: string): Promise<void>
   runQuery(id: string, mode: RunMode): Promise<void>
+  /** Shows the plan of the selection or the statement under the cursor. */
+  explainQuery(id: string, analyze: boolean): Promise<void>
   /** Runs the run waiting for confirmation (confirm safe mode). */
   confirmRun(id: string): Promise<void>
   cancelConfirm(id: string): void
@@ -224,6 +238,7 @@ export function newQueryTabState(title: string, sql = ''): QueryTabState {
     running: false,
     requestId: null,
     result: null,
+    plan: null,
     activeResult: MESSAGES,
     sorts: {},
     selectedRow: null,
@@ -325,6 +340,49 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
   }
   const persist = () => saveDrafts(get().connectionId, queryTabs().map((t) => ({ title: t.title, sql: t.sql })))
 
+  /** The tab's backend editor, opened on first use. */
+  const ensureEditor = async (id: string, tab: QueryTabState) => {
+    if (tab.editorId) return tab.editorId
+    const editorId = await api.openEditor(get().sessionId)
+    patch(id, { editorId })
+    return editorId
+  }
+
+  /** A failed run: show the message; a lost backend editor is reopened next time. */
+  const runFailed = (id: string, err: unknown) => {
+    const message = errorMessage(err)
+    const lost = /editor not found/i.test(message)
+    patch(id, { running: false, requestId: null, error: message, ...(lost ? { editorId: null, tx: null } : {}) })
+  }
+
+  /**
+   * The text a run works on: everything (mode "all"), the selection, or the
+   * statement under the cursor; base is its offset in the editor. Null when
+   * there is nothing to run (a failed lookup sets the tab's error).
+   */
+  const targetText = async (id: string, tab: QueryTabState, mode: RunMode): Promise<{ text: string; base: number } | null> => {
+    let text = tab.sql
+    let base = 0
+    if (mode === 'current') {
+      if (tab.selection) {
+        base = tab.selection.from
+        text = tab.sql.slice(tab.selection.from, tab.selection.to)
+      } else {
+        let st
+        try {
+          st = await api.statementAt(get().kind, tab.sql, tab.cursor)
+        } catch (err) {
+          patch(id, { error: errorMessage(err) })
+          return null
+        }
+        if (!st) return null
+        base = st.start
+        text = tab.sql.slice(st.start, st.end)
+      }
+    }
+    return text.trim() ? { text, base } : null
+  }
+
   /** Runs text (base = its offset in the editor); confirmed answers confirm safe mode. */
   const execute = async (id: string, text: string, base: number, confirmed: boolean) => {
     const tab = findQuery(id)
@@ -332,11 +390,7 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
     const requestId = `run-${Date.now().toString(36)}-${nextSeq()}`
     patch(id, { running: true, requestId, error: null, confirm: null })
     try {
-      let editorId = tab.editorId
-      if (!editorId) {
-        editorId = await api.openEditor(get().sessionId)
-        patch(id, { editorId })
-      }
+      const editorId = await ensureEditor(id, tab)
       const result = await api.execute(editorId, requestId, text, {
         maxRows: tab.maxRows,
         continueOnError: tab.continueOnError,
@@ -363,10 +417,7 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
       })
     } catch (err) {
       if (isDisposed() || findQuery(id)?.requestId !== requestId) return
-      const message = errorMessage(err)
-      // The backend editor is gone (e.g. closed): open a new one next time.
-      const lost = /editor not found/i.test(message)
-      patch(id, { running: false, requestId: null, error: message, ...(lost ? { editorId: null, tx: null } : {}) })
+      runFailed(id, err)
     }
   }
 
@@ -413,27 +464,42 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
       const tab = findQuery(id)
       if (!tab || tab.running) return
       patch(id, { ranSql: tab.sql })
-      let text = tab.sql
-      let base = 0
-      if (mode === 'current') {
-        if (tab.selection) {
-          base = tab.selection.from
-          text = tab.sql.slice(tab.selection.from, tab.selection.to)
-        } else {
-          let st
-          try {
-            st = await api.statementAt(get().kind, tab.sql, tab.cursor)
-          } catch (err) {
-            patch(id, { error: errorMessage(err) })
-            return
-          }
-          if (!st) return
-          base = st.start
-          text = tab.sql.slice(st.start, st.end)
-        }
+      const target = await targetText(id, tab, mode)
+      if (target) await execute(id, target.text, target.base, false)
+    },
+
+    async explainQuery(id, analyze) {
+      const tab = findQuery(id)
+      if (!tab || tab.running) return
+      const target = await targetText(id, tab, 'current')
+      if (!target) return
+      const { text, base } = target
+      const requestId = `explain-${Date.now().toString(36)}-${nextSeq()}`
+      patch(id, { running: true, requestId, error: null, confirm: null })
+      try {
+        const editorId = await ensureEditor(id, tab)
+        const plan = await api.explain(editorId, requestId, text, { analyze, baseOffset: base })
+        if (isDisposed() || findQuery(id)?.requestId !== requestId) return
+        const pos = plan.error?.position ?? null
+        patch(id, (t) => ({
+          running: false,
+          requestId: null,
+          // Explain runs on the tab's connection, which closes an open cursor.
+          result: t.result && {
+            ...t.result,
+            statements: t.result.statements.map((s) => ({ ...s, resultSets: s.resultSets.map((rs) => ({ ...rs, canLoadMore: false })) })),
+          },
+          plan: { plan, analyze, sql: text },
+          activeResult: PLAN,
+          selectedRow: null,
+          tx: plan.tx,
+          editorRequest:
+            pos !== null ? { seq: nextSeq(), type: 'error', pos, from: base, to: base + text.length } : t.editorRequest,
+        }))
+      } catch (err) {
+        if (isDisposed() || findQuery(id)?.requestId !== requestId) return
+        runFailed(id, err)
       }
-      if (!text.trim()) return
-      await execute(id, text, base, false)
     },
 
     async confirmRun(id) {

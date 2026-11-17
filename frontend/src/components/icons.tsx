@@ -215,3 +215,36 @@ export function HistoryIcon(p: IconProps) {
     </Svg>
   )
 }
+
+/** Explain: a plan tree (a root with two branches). */
+export function ExplainIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="1.5" y="2" width="5" height="3" rx="0.8" {...stroke} />
+      <path d="M4 5v6.5h3.5M4 7.5h3.5" {...stroke} />
+      <rect x="7.5" y="6" width="7" height="3" rx="0.8" {...stroke} />
+      <rect x="7.5" y="10" width="7" height="3" rx="0.8" {...stroke} />
+    </Svg>
+  )
+}
+
+/** Explain analyze: a plan tree with a stopwatch. */
+export function ExplainAnalyzeIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="1.5" y="2" width="5" height="3" rx="0.8" {...stroke} />
+      <path d="M4 5v6.5h2.5" {...stroke} />
+      <circle cx="11" cy="10" r="3.5" {...stroke} />
+      <path d="M11 8.2V10l1.2 0.8M10.2 5.3h1.6" {...stroke} />
+    </Svg>
+  )
+}
+
+/** A disclosure caret pointing right (rotate it to point down). */
+export function CaretIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M6 3.5l4.5 4.5L6 12.5" {...stroke} />
+    </Svg>
+  )
+}

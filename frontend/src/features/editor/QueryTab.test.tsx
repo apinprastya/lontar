@@ -23,7 +23,7 @@ vi.mock('../grid/DataGrid', () => ({
 
 import { WorkspaceContext, createWorkspaceStore, type WorkspaceStore } from '../../stores/workspace'
 import type { QueryTabState } from '../../stores/queryTabs'
-import { execResult, fakeEditorApi, resultSet, stmt } from '../../test/fakeEditorApi'
+import { execResult, fakeEditorApi, resultSet, samplePlan, stmt } from '../../test/fakeEditorApi'
 import type { WorkspaceApi } from '../workspace/api'
 import QueryTab, { HIGHLIGHT_DELAY } from './QueryTab'
 import { makeDetail } from '../../test/structure'
@@ -235,5 +235,44 @@ describe('QueryTab', () => {
     // Nothing waiting: confirmRun is a no-op.
     await store.getState().confirmRun(tab().id)
     expect(editor.execute).toHaveBeenCalledTimes(3)
+  })
+
+  it('explains from the toolbar and shows the Plan tab next to the results', async () => {
+    mount()
+    expect(screen.getByText(/Explain it with Ctrl\+Shift\+E/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Explain' })).toHaveAttribute('title', expect.stringContaining('Ctrl+Shift+E'))
+    fireEvent.click(screen.getByRole('button', { name: 'Explain' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Plan' })).toHaveAttribute('aria-selected', 'true'))
+    expect(editor.explain).toHaveBeenCalledWith('ed-1', expect.any(String), 'SELECT 1;\nSELEC 2', { analyze: false, baseOffset: 0 })
+    expect(screen.getByRole('treegrid', { name: 'Query plan' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /Messages/ })).not.toBeInTheDocument()
+
+    // A run adds its result tabs; the plan stays one click away.
+    fireEvent.click(screen.getByRole('button', { name: 'Run all' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Result 1/ })).toHaveAttribute('aria-selected', 'true'))
+    expect(screen.getByRole('tab', { name: 'Plan' })).toHaveAttribute('aria-selected', 'false')
+    fireEvent.click(screen.getByRole('tab', { name: /Messages/ }))
+    expect(screen.getByRole('tab', { name: /Messages/ })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(screen.getByRole('tab', { name: 'Plan' }))
+    expect(screen.getByRole('treegrid')).toBeInTheDocument()
+
+    // Explain analyze; a plan with an error is marked on its tab.
+    editor.explain.mockResolvedValueOnce(samplePlan({ nodes: [], error: { message: 'boom', code: 'x', position: null } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Explain analyze' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Plan/ })).toHaveTextContent('Plan ✗'))
+    expect(editor.explain).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1;\nSELEC 2', { analyze: true, baseOffset: 0 })
+    expect(screen.getByRole('alert')).toHaveTextContent('boom')
+  })
+
+  it('disables Explain analyze on SQLite', async () => {
+    store.getState().dispose()
+    store = createWorkspaceStore({ id: 's1', kind: 'sqlite', connectionId: 'c1' }, wsApi, editor)
+    await store.getState().init()
+    store.getState().newQueryTab('SELECT 1')
+    mount()
+    const analyze = screen.getByRole('button', { name: 'Explain analyze' })
+    expect(analyze).toBeDisabled()
+    expect(analyze).toHaveAttribute('title', 'SQLite has no EXPLAIN ANALYZE')
+    expect(screen.getByRole('button', { name: 'Explain' })).toBeEnabled()
   })
 })

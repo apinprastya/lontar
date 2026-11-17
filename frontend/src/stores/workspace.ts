@@ -25,6 +25,7 @@ import type { ForeignKey, StructureSection, TableDetail } from '../features/stru
 import {
   HISTORY_OPEN_KEY,
   MESSAGES,
+  PLAN,
   createQueryActions,
   loadDrafts,
   newQueryTabState,
@@ -567,7 +568,7 @@ export function createWorkspaceStore(
 
       setActiveResult(id, key) {
         const e = findQuery(id)?.edit
-        if (key !== MESSAGES && e && key !== e.resultId && dirtyTabs([id]).length > 0) {
+        if (key !== MESSAGES && key !== PLAN && e && key !== e.resultId && dirtyTabs([id]).length > 0) {
           get().guarded([id], () => queryActions.setActiveResult(id, key))
         } else queryActions.setActiveResult(id, key)
       },

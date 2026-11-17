@@ -1,0 +1,45 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost": 0.606694605,
+    "filesort": {
+      "sort_key": "n.label",
+      "temporary_table": {
+        "nested_loop": [
+          {
+            "table": {
+              "table_name": "n",
+              "access_type": "range",
+              "possible_keys": ["PRIMARY"],
+              "key": "PRIMARY",
+              "key_length": "4",
+              "used_key_parts": ["n"],
+              "loops": 1,
+              "rows": 499,
+              "cost": 0.10074457,
+              "filtered": 100,
+              "attached_condition": "n.n < 500"
+            }
+          },
+          {
+            "block-nl-join": {
+              "table": {
+                "table_name": "i",
+                "access_type": "ALL",
+                "possible_keys": ["PRIMARY"],
+                "loops": 499,
+                "rows": 3,
+                "cost": 0.180736336,
+                "filtered": 33.33333206
+              },
+              "buffer_type": "flat",
+              "buffer_size": "45KiB",
+              "join_type": "BNL",
+              "attached_condition": "i.`id` = n.grp"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

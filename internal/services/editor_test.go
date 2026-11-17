@@ -14,6 +14,7 @@ import (
 	"lontar/internal/driver/all"
 	"lontar/internal/history"
 	"lontar/internal/query"
+	"lontar/internal/store"
 )
 
 func newEditorService(t *testing.T) (*EditorService, *conn.Manager, string, *history.Store) {
@@ -285,4 +286,79 @@ func (f failingCompletion) Columns(ctx context.Context, db *sql.DB, schema, tabl
 		return nil, errors.New("boom")
 	}
 	return f.Driver.Columns(ctx, db, schema, table)
+}
+
+func TestEditorServiceExplain(t *testing.T) {
+	ctx := context.Background()
+	svc, m, sid, hist := newEditorService(t)
+	sess, _ := m.Get(sid)
+	eid, err := svc.OpenEditor(sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := svc.Explain(ctx, eid, "x1", "SELECT * FROM t WHERE id = 1", query.ExplainOptions{})
+	if err != nil || plan.Error != nil || len(plan.Nodes) != 1 || plan.SQL != "EXPLAIN QUERY PLAN SELECT * FROM t WHERE id = 1" {
+		t.Fatalf("plan = %+v, %v", plan, err)
+	}
+	// One statement only; nothing is recorded for refused statements.
+	var ee *query.ExplainError
+	if _, err := svc.Explain(ctx, eid, "x2", "SELECT 1; SELECT 2", query.ExplainOptions{}); !errors.As(err, &ee) || ee.Code != query.ExplainOneStatement {
+		t.Fatalf("two statements = %v", err)
+	}
+	// A database error is in the plan and recorded as an error.
+	plan, err = svc.Explain(ctx, eid, "x3", "SELECT nope FROM t", query.ExplainOptions{})
+	if err != nil || plan.Error == nil {
+		t.Fatalf("error plan = %+v, %v", plan, err)
+	}
+	entries, err := NewHistoryService(hist).List(ctx, sess.ConnectionID, "", 10, 0)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("history = %+v, %v", entries, err)
+	}
+	if !entries[0].IsError || entries[0].SQL != "EXPLAIN QUERY PLAN SELECT nope FROM t" || entries[1].IsError || entries[1].SQL != "EXPLAIN QUERY PLAN SELECT * FROM t WHERE id = 1" {
+		t.Fatalf("entries = %+v", entries)
+	}
+	// A cancelled explain is not recorded.
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if p, err := svc.Explain(cctx, eid, "x4", "SELECT 1", query.ExplainOptions{}); err == nil && !p.Cancelled {
+		t.Fatalf("cancelled = %+v", p)
+	}
+	if entries, _ := NewHistoryService(hist).List(ctx, sess.ConnectionID, "", 10, 0); len(entries) != 2 {
+		t.Fatalf("history after cancel = %d", len(entries))
+	}
+	if _, err := svc.Explain(ctx, "nope", "x5", "SELECT 1", query.ExplainOptions{}); !errors.Is(err, query.ErrEditorNotFound) {
+		t.Fatalf("unknown editor = %v", err)
+	}
+}
+
+func TestEditorServiceExplainSafeModes(t *testing.T) {
+	ctx := context.Background()
+	for _, mode := range []store.SafeMode{store.SafeReadOnly, store.SafeConfirm} {
+		t.Run(string(mode), func(t *testing.T) {
+			m, sid := openSQLiteSessionMode(t, mode)
+			svc := NewEditorService(m, all.Registry(), nil)
+			t.Cleanup(func() { _ = svc.ServiceShutdown() })
+			eid, _ := svc.OpenEditor(sid)
+			// Explain of a write runs (it only shows the plan) without confirmation.
+			plan, err := svc.Explain(ctx, eid, "", "UPDATE t SET name = 'x' WHERE id = 1", query.ExplainOptions{})
+			if err != nil || plan.Error != nil || len(plan.Nodes) == 0 {
+				t.Fatalf("explain update = %+v, %v", plan, err)
+			}
+			res, err := svc.Execute(ctx, eid, "", "SELECT name FROM t WHERE id = 1", query.ExecOptions{})
+			if err != nil || res.Statements[0].ResultSets[0].Rows[0][0].V != "a" {
+				t.Fatalf("row changed: %+v %v", res, err)
+			}
+		})
+	}
+}
+
+func TestEditorServiceExplainAnalyzeWriteRefused(t *testing.T) {
+	// Analyze of a write is refused in every mode, before anything runs;
+	// the check is engine independent (SQLite refuses Analyze altogether).
+	svc, _, sid, _ := newEditorService(t)
+	eid, _ := svc.OpenEditor(sid)
+	var ee *query.ExplainError
+	if _, err := svc.Explain(context.Background(), eid, "", "DELETE FROM t", query.ExplainOptions{Analyze: true}); !errors.As(err, &ee) || ee.Kind != "explain" {
+		t.Fatalf("analyze delete = %v", err)
+	}
 }

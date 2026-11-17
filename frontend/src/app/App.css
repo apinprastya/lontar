@@ -49,6 +49,10 @@
   --kind-view: #7c3aed;
   --kind-mview: #0e7c86;
   --key-icon: #9a6700;
+  --plan-hot-bg: rgba(196, 55, 47, 0.08);
+  --plan-bar: rgba(13, 134, 112, 0.55);
+  --plan-bar-hot: #c4372f;
+  --plan-bar-track: rgba(23, 32, 28, 0.08);
   color-scheme: light;
 }
 
@@ -58,6 +62,10 @@
     --kind-view: #a371f7;
     --kind-mview: #39c5cf;
     --key-icon: #d29922;
+    --plan-hot-bg: rgba(255, 107, 107, 0.1);
+    --plan-bar: rgba(60, 194, 166, 0.6);
+    --plan-bar-hot: #ff6b6b;
+    --plan-bar-track: rgba(227, 232, 234, 0.08);
     --bg: #15181b;
     --bg-sidebar: #1a1e22;
     --bg-status: #1a1e22;
@@ -2702,4 +2710,282 @@ textarea.cell-editor-input {
 .update-progress progress {
   width: 100%;
   accent-color: var(--accent);
+}
+
+/* ---- Query plan (Plan result tab) ---------------------------------------- */
+
+.plan-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.plan-toolbar {
+  gap: 6px;
+  padding: 6px 8px;
+  flex-wrap: wrap;
+}
+
+.plan-engine {
+  font-weight: 600;
+}
+
+.plan-badge {
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.plan-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sidebar);
+}
+
+.plan-switch button {
+  border: 1px solid transparent;
+  background: none;
+  padding: 1px 10px;
+  color: var(--muted);
+}
+
+.plan-switch button[aria-pressed='true'] {
+  background: var(--bg-raised);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.split-button {
+  position: relative;
+  display: inline-flex;
+}
+
+.split-button > button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.split-button-menu {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-width: 0;
+  padding: 0 4px;
+}
+
+.split-button-menu .icon {
+  transform: rotate(90deg);
+}
+
+.split-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+}
+
+.plan-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.plan-tree-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.plan-empty {
+  padding: 8px 12px;
+}
+
+.plan-tree {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  outline: none;
+}
+
+.plan-tree th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.plan-tree td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.plan-tree .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-tree tbody tr {
+  cursor: default;
+}
+
+.plan-tree tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.plan-tree tr.hot {
+  background: var(--plan-hot-bg);
+}
+
+.plan-tree tr[aria-selected='true'] {
+  background: var(--bg-selected);
+}
+
+.plan-tree:focus-visible tr[aria-selected='true'] {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.plan-op {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.plan-op-name {
+  font-weight: 500;
+}
+
+.plan-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 48ch;
+}
+
+.plan-toggle,
+.plan-toggle-space {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.plan-toggle {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--muted);
+}
+
+.plan-toggle .icon {
+  transition: transform 120ms var(--ease);
+}
+
+.plan-toggle.open .icon {
+  transform: rotate(90deg);
+}
+
+.plan-warn {
+  color: var(--warning);
+  cursor: help;
+}
+
+.plan-self {
+  min-width: 110px;
+}
+
+.plan-bar {
+  display: inline-block;
+  vertical-align: middle;
+  width: 60px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 3px;
+  background: var(--plan-bar-track);
+  overflow: hidden;
+}
+
+.plan-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--plan-bar);
+}
+
+.plan-tree tr.hot .plan-bar > span {
+  background: var(--plan-bar-hot);
+}
+
+.plan-pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.plan-props {
+  width: 300px;
+  flex: none;
+  overflow: auto;
+  padding: 8px 10px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-sidebar);
+}
+
+.plan-props h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.plan-props dl {
+  margin: 0;
+  font-size: 12px;
+}
+
+.plan-props dl > div {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-props dt {
+  color: var(--muted);
+}
+
+.plan-props dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.plan-raw {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.plan-raw-toolbar {
+  padding: 4px 8px;
+}
+
+.plan-raw pre {
+  flex: 1;
+  margin: 0;
+  padding: 8px 12px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
 }

@@ -128,6 +128,7 @@ statements you run, so it is marked "(guess)".
 |---|---|
 | Mod+Enter | Run the selection, or the statement under the cursor (highlighted) |
 | Mod+Shift+Enter | Run the whole script |
+| Mod+Shift+E | Explain the selection, or the statement under the cursor (query plan) |
 | Esc | Stop the running query |
 | Mod+F | Search in the editor (in a table tab it opens the filter bar) |
 | Ctrl+Space / typing | Autocomplete tables, columns, `alias.column` and keywords (see below) |
@@ -163,6 +164,43 @@ duration, rows and errors, but never passwords) is stored in `history.db`
 next to `connections.json`, with the newest 10,000 runs kept per connection. Open
 it with **History**: click an entry to insert it, double-click to open it in a
 new tab.
+
+### Query plans
+
+**Explain** (Mod+Shift+E, or the toolbar) shows the query plan of the
+selection or the statement under the cursor in a **Plan** tab next to the
+results. It works on one `SELECT`, `WITH`, `TABLE`, `VALUES`, `INSERT`,
+`UPDATE`, `DELETE`, `REPLACE` or `MERGE` statement and never runs it. It uses
+the tab's connection, so temporary tables, `search_path` and an open
+transaction apply. **Explain analyze** (toolbar or command palette) runs the
+statement and adds the actual rows, loops and times. Because it runs the
+statement, it only accepts reads: it is refused for anything that writes
+(including `WITH … DELETE` and `SELECT … INTO`), in every safe mode. Explain
+itself is allowed in every safe mode.
+
+Each engine's plan is shown as the same collapsible tree: operation, object,
+estimated rows, actual rows × loops, cost, time and each node's share of the
+total time. Nodes that take at least 20% of the time are tinted, and ⚠ marks
+row estimates that are 10× or more off. Click a node to see all its
+properties; **Raw** shows the engine's own output.
+
+| Engine | Explain | Explain analyze |
+|---|---|---|
+| PostgreSQL | `EXPLAIN (FORMAT JSON)` | `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` |
+| MySQL | `EXPLAIN FORMAT=JSON` | `EXPLAIN ANALYZE` (TREE output, MySQL 8.0.18 or later) |
+| MariaDB | `EXPLAIN FORMAT=JSON` | `ANALYZE FORMAT=JSON` |
+| SQLite | `EXPLAIN QUERY PLAN` (the steps only: no row counts, costs or times) | Not available |
+
+Copying is one click: **Copy** puts the plan on the clipboard as indented
+text (one `-> Operation on object (est=…, actual=… × loops, cost=…, time=…)`
+line per node, then the planning and execution times), ready for a chat,
+issue or pull request. Its menu also has **Copy raw** (the engine's JSON or
+text, for tools such as explain.dalibo.com), **Copy as Markdown table** and
+**Copy query with EXPLAIN**. In the tree, Mod+C copies the selected node and
+its subtree; right-click a node for **Copy node**, **Copy subtree** and
+**Copy properties** (tab-separated). The arrow keys move through the tree and
+expand or collapse nodes. Each Explain is recorded in the query history as
+the EXPLAIN statement that ran.
 
 ## Editing data
 

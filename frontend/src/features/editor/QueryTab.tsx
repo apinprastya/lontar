@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import ToolButton from '../../components/ToolButton'
-import { HistoryIcon, PlayAllIcon, PlayIcon, StopIcon } from '../../components/icons'
+import { ExplainAnalyzeIcon, ExplainIcon, HistoryIcon, PlayAllIcon, PlayIcon, StopIcon } from '../../components/icons'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { usePanelLayout } from '../../lib/panelLayout'
 import { shortcutLabel } from '../../lib/mod'
@@ -42,6 +42,7 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
 
   const run = shortcutLabel(platform, 'Enter')
   const runAll = shortcutLabel(platform, 'Enter', { shift: true })
+  const explain = shortcutLabel(platform, 'E', { shift: true })
 
   const editorAndResults = (
     <Group orientation="vertical" className="query-split" {...splitLayout}>
@@ -84,6 +85,24 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
           onClick={() => void s.runQuery(tab.id, 'current')}
         />
         <ToolButton label="Run all" title={`Run every statement (${runAll})`} icon={<PlayAllIcon />} disabled={tab.running} onClick={() => void s.runQuery(tab.id, 'all')} />
+        <ToolButton
+          label="Explain"
+          title={`Show the query plan of the selection or the statement under the cursor (${explain})`}
+          icon={<ExplainIcon />}
+          disabled={tab.running}
+          onClick={() => void s.explainQuery(tab.id, false)}
+        />
+        <ToolButton
+          label="Explain analyze"
+          title={
+            kind === 'sqlite'
+              ? 'SQLite has no EXPLAIN ANALYZE'
+              : 'Run the statement and show its plan with actual rows and times (reads only)'
+          }
+          icon={<ExplainAnalyzeIcon />}
+          disabled={tab.running || kind === 'sqlite'}
+          onClick={() => void s.explainQuery(tab.id, true)}
+        />
         <ToolButton label="Stop" title="Stop the running query (Esc)" icon={<StopIcon />} disabled={!tab.running} onClick={() => s.cancelQuery(tab.id)} />
         <span className="toolbar-sep" aria-hidden />
         <label className="toolbar-check" title="Run the remaining statements after one fails">

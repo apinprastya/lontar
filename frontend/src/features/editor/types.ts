@@ -68,6 +68,50 @@ export interface ExecOptions {
   confirmed: boolean
 }
 
+export interface ExplainOptions {
+  /** Run the statement and report actual rows and times (reads only; not SQLite). */
+  analyze: boolean
+  baseOffset: number
+}
+
+export interface PlanProp {
+  key: string
+  value: string
+}
+
+/** One operation of a query plan. Rows are per loop; timeMs is inclusive over all loops. */
+export interface PlanNode {
+  op: string
+  object: string
+  detail: string
+  estRows: number | null
+  actualRows: number | null
+  loops: number | null
+  cost: number | null
+  timeMs: number | null
+  props: PlanProp[]
+  children: PlanNode[]
+}
+
+/** A query plan (Go query.Plan). */
+export interface Plan {
+  engine: string
+  analyzed: boolean
+  /** The EXPLAIN statement that ran. */
+  sql: string
+  planningMs: number | null
+  executionMs: number | null
+  nodes: PlanNode[]
+  raw: string
+  rawFormat: 'json' | 'text'
+  notices: string[]
+  error: ExecError | null
+  cancelled: boolean
+  sessionReset: boolean
+  tx: TxInfo
+  durationMs: number
+}
+
 export interface Statement {
   text: string
   start: number

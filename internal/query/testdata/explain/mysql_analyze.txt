@@ -1,0 +1,8 @@
+-> Sort: n.label  (actual time=0.475..0.484 rows=150 loops=1)
+    -> Stream results  (cost=166 rows=15) (actual time=0.0595..0.404 rows=150 loops=1)
+        -> Inner hash join (n.grp = i.id)  (cost=166 rows=15) (actual time=0.0563..0.361 rows=150 loops=1)
+            -> Filter: (n.n < 500)  (cost=52 rows=49.9) (actual time=0.0218..0.255 rows=499 loops=1)
+                -> Index range scan on n using PRIMARY over (n < 500)  (cost=52 rows=499) (actual time=0.0207..0.201 rows=499 loops=1)
+            -> Hash
+                -> Table scan on i  (cost=0.55 rows=3) (actual time=0.0197..0.0234 rows=3 loops=1)
+

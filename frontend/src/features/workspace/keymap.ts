@@ -39,6 +39,8 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'toggleStructure', key: 'e', mod: true, scope: 'global', description: 'Switch between data and structure', command: true },
   { id: 'runCurrent', key: 'enter', mod: true, scope: 'global', description: 'Run statement', command: true },
   { id: 'runAll', key: 'enter', mod: true, shift: true, scope: 'global', description: 'Run all', command: true },
+  { id: 'explain', key: 'e', mod: true, shift: true, scope: 'global', description: 'Explain statement (query plan)', command: true },
+  { id: 'explainAnalyze', key: '', mod: false, scope: 'global', description: 'Explain analyze (run it and show the plan)', command: true },
   { id: 'stop', key: 'escape', mod: false, scope: 'global', description: 'Stop the running query', command: true },
   { id: 'exportData', key: '', mod: false, scope: 'global', description: 'Export…', command: true },
   { id: 'importCsv', key: '', mod: false, scope: 'global', description: 'Import CSV into this table…', command: true },

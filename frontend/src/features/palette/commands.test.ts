@@ -116,6 +116,32 @@ describe('palette commands', () => {
     expect(SettingsService.Save).toHaveBeenCalledWith(expect.objectContaining({ theme: 'light' }))
   })
 
+  it('explains from the palette; Explain analyze is not offered on SQLite', async () => {
+    expect(commandAvailable('explain', store.getState())).toBe(false)
+    expect(commandAvailable('explainAnalyze', store.getState())).toBe(false)
+    const editor = fakeEditorApi()
+    store = createWorkspaceStore({ id: 's1', kind: 'postgres', connectionId: 'c1', safeMode: 'off' }, fakeApi(), editor)
+    await store.getState().init()
+    ctx = { ...ctx, store }
+    store.getState().newQueryTab('SELECT 1')
+    expect(commandAvailable('explain', store.getState())).toBe(true)
+    expect(commandAvailable('explainAnalyze', store.getState())).toBe(true)
+    expect(runCommand('explain', ctx)).toBe(true)
+    await flush()
+    expect(editor.explain).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1', { analyze: false, baseOffset: 0 })
+    expect(runCommand('explainAnalyze', ctx)).toBe(true)
+    await flush()
+    expect(editor.explain).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT 1', { analyze: true, baseOffset: 0 })
+
+    const lite = createWorkspaceStore({ id: 's2', kind: 'sqlite', connectionId: 'c2', safeMode: 'off' }, fakeApi(), editor)
+    await lite.getState().init()
+    lite.getState().newQueryTab('SELECT 1')
+    expect(commandAvailable('explainAnalyze', lite.getState())).toBe(false)
+    expect(runCommand('explainAnalyze', { ...ctx, store: lite })).toBe(true)
+    await flush()
+    expect(editor.explain).toHaveBeenCalledTimes(2)
+  })
+
   it('exports the active query result with its statement', async () => {
     store.getState().newQueryTab()
     const id = store.getState().activeTabId!

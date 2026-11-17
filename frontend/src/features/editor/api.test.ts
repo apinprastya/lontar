@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../bindings/lontar/internal/services', () => import('../../test/mockBindings'))
 
 import { EditorService, HistoryService, resetBindings } from '../../test/mockBindings'
-import { editorApi, toResultSet } from './api'
+import { editorApi, toPlan, toResultSet } from './api'
 
 describe('editorApi', () => {
   beforeEach(resetBindings)
@@ -31,6 +31,37 @@ describe('editorApi', () => {
     expect((await editorApi.execute('e', 'r', '', { maxRows: 1, continueOnError: false, baseOffset: 0, confirmed: false })).statements).toEqual([])
     EditorService.Execute.mockResolvedValue(null)
     await expect(editorApi.execute('e', 'r', '', { maxRows: 1, continueOnError: false, baseOffset: 0, confirmed: false })).rejects.toThrow('empty response')
+  })
+
+  it('normalises plans', async () => {
+    EditorService.Explain.mockResolvedValue({
+      engine: 'postgres',
+      analyzed: false,
+      sql: 'EXPLAIN x',
+      planningMs: undefined,
+      executionMs: 2,
+      nodes: [{ op: 'Sort', object: '', detail: '', estRows: 1, props: null, children: [{ op: 'Scan', object: 't', detail: '', props: [{ key: 'k', value: 'v' }], children: null }] }],
+      raw: '[]',
+      rawFormat: 'json',
+      notices: null,
+      error: { message: 'm', code: 'c' },
+      cancelled: false,
+      sessionReset: false,
+      tx: { state: 'idle', source: 'server' },
+      durationMs: 1,
+    })
+    const p = await editorApi.explain('e', 'r', 'x', { analyze: false, baseOffset: 3 })
+    expect(EditorService.Explain).toHaveBeenCalledWith('e', 'r', 'x', { analyze: false, baseOffset: 3 })
+    expect(p).toMatchObject({ planningMs: null, executionMs: 2, notices: [], rawFormat: 'json', error: { message: 'm', code: 'c', position: null } })
+    expect(p.nodes[0]).toEqual({
+      op: 'Sort', object: '', detail: '', estRows: 1, actualRows: null, loops: null, cost: null, timeMs: null, props: [],
+      children: [{ op: 'Scan', object: 't', detail: '', estRows: null, actualRows: null, loops: null, cost: null, timeMs: null, props: [{ key: 'k', value: 'v' }], children: [] }],
+    })
+    EditorService.Explain.mockResolvedValue({ nodes: null, rawFormat: 'text', error: null })
+    expect(await editorApi.explain('e', 'r', 'x', { analyze: true, baseOffset: 0 })).toMatchObject({ nodes: [], rawFormat: 'text', error: null })
+    expect(toPlan({ rawFormat: 'other' } as never).rawFormat).toBe('json')
+    EditorService.Explain.mockResolvedValue(null)
+    await expect(editorApi.explain('e', 'r', 'x', { analyze: false, baseOffset: 0 })).rejects.toThrow('empty response')
   })
 
   it('wraps the other editor calls', async () => {

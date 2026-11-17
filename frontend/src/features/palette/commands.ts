@@ -59,6 +59,11 @@ const ACTIONS: Record<string, (ctx: CommandContext) => void> = {
   },
   disconnect: (ctx) => ctx.disconnect(),
   checkUpdates: () => void useUpdate.getState().check(),
+  explainAnalyze: (ctx) => {
+    const s = ctx.store.getState()
+    const tab = s.activeTab()
+    if (tab?.kind === 'query' && s.kind !== 'sqlite') void s.explainQuery(tab.id, true)
+  },
 }
 
 /** IDs with their own action (the rest run exactly like their shortcut). */
@@ -83,7 +88,7 @@ export function runCommand(id: string, ctx: CommandContext): boolean {
 const TABLE_COMMANDS = new Set(['commit', 'undo', 'redo', 'toggleStructure', 'filter'])
 /** Commands an editable query result supports too. */
 const EDIT_COMMANDS = new Set(['commit', 'undo', 'redo', 'insertRow'])
-const QUERY_COMMANDS = new Set(['runCurrent', 'runAll'])
+const QUERY_COMMANDS = new Set(['runCurrent', 'runAll', 'explain'])
 
 /** Whether a command can do something in the current state (palette greys it out otherwise). */
 export function commandAvailable(id: string, s: WorkspaceState): boolean {
@@ -92,6 +97,8 @@ export function commandAvailable(id: string, s: WorkspaceState): boolean {
   if (TABLE_COMMANDS.has(id)) return tab?.kind === 'table' || (id === 'filter' && tab?.kind === 'query')
   if (QUERY_COMMANDS.has(id)) return tab?.kind === 'query'
   switch (id) {
+    case 'explainAnalyze':
+      return tab?.kind === 'query' && s.kind !== 'sqlite'
     case 'stop':
       return tab?.kind === 'query' && tab.running
     case 'insertRow':
