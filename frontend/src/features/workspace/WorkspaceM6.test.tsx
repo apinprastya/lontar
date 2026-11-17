@@ -88,6 +88,8 @@ function fakeApi() {
     cancel: vi.fn(async () => true),
     tableInfo: vi.fn(async (_s: string, schema: string, table: string) => makeDetail({ schema, name: table })),
     tableDDL: vi.fn(async () => ''),
+    listObjects: vi.fn(async () => []),
+    objectDDL: vi.fn(async () => ''),
   } satisfies WorkspaceApi
 }
 
@@ -110,6 +112,26 @@ describe('Workspace M6: palette, export, import, settings', () => {
     useConnections.setState({ ...initialConnectionsState, session: makeSession({ tunneled: true }), connections: [makeConnection({ id: 'c1' })] })
   })
   afterEach(cleanup)
+
+  it('opens objects from quick open and the sidebar in an object tab', async () => {
+    const user = userEvent.setup()
+    api.listObjects.mockResolvedValue([
+      { schema: 'public', kind: 'sequence', name: 'ticket_seq', signature: '', detail: 'bigint', table: '', id: '9', properties: [{ key: 'Increment', value: '5' }] },
+    ] as never)
+    api.objectDDL.mockResolvedValue('CREATE SEQUENCE public.ticket_seq;')
+    render(<Workspace api={api} platform="linux" editor={fakeEditorApi()} />)
+    expect(await screen.findByRole('button', { name: 'ticket_seq' })).toBeInTheDocument()
+    key('p')
+    await user.keyboard('ticket{Enter}')
+    expect(await screen.findByTestId('object-view')).toHaveTextContent('ticket_seq')
+    expect(api.objectDDL).toHaveBeenCalledWith('s1', 'public', { kind: 'sequence', name: 'ticket_seq', signature: '', table: '', id: '9' })
+    expect(screen.getByRole('tab', { name: /ticket_seq/ })).toHaveAttribute('aria-selected', 'true')
+    // Mod+R refreshes the objects and the DDL.
+    const calls = api.listObjects.mock.calls.length
+    key('r')
+    await waitFor(() => expect(api.listObjects.mock.calls.length).toBeGreaterThan(calls))
+    await waitFor(() => expect(api.objectDDL).toHaveBeenCalledTimes(2))
+  })
 
   it('opens tables with Mod+P (data and structure) and blocks print', async () => {
     const user = userEvent.setup()

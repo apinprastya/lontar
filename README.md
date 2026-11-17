@@ -86,12 +86,18 @@ add `testutil.SeedStructure`: composite and self-referencing foreign keys, a
 cross-schema key (PostgreSQL), partial, expression and GIN indexes, checks,
 generated and identity columns, comments, triggers and views. On PostgreSQL,
 the reconstructed DDL is executed in a fresh schema and must give the same
-structure back.
+structure back. The sidebar object tests add `testutil.SeedObjects`: a
+function (overloaded), procedure, aggregate, owned sequence, enum,
+composite, domain and trigger on PostgreSQL; a function, procedure, trigger
+and event on MySQL/MariaDB, plus a sequence on MariaDB; a trigger on SQLite.
+Every object must be listed with its kind and detail and have a DDL, forged
+references must be refused, and on PostgreSQL the DDL of every object is run
+in a fresh schema and must list and print the same way.
 
 ## Browsing tables
 
 After connecting, the sidebar lists the tables and views of the current
-schema. Switch databases (PostgreSQL, MySQL/MariaDB) or schemas
+schema, then its other objects (see below). Switch databases (PostgreSQL, MySQL/MariaDB) or schemas
 (PostgreSQL, attached SQLite databases) at the top. A single click previews
 a table in a reusable tab, and a double click keeps it open. Rows load in
 pages of 300. The status bar shows the server's row estimate until the
@@ -99,7 +105,7 @@ exact count is known.
 
 | Shortcut | Action |
 |---|---|
-| Mod+R | Refresh the table list and the current tab |
+| Mod+R | Refresh the table and object lists and the current tab |
 | Mod+F | Toggle the filter bar (Enter applies) |
 | Mod+I / Space | Toggle the row detail panel |
 | Mod+C | Copy the selected cells as TSV |
@@ -111,6 +117,43 @@ Click a column header to sort it (ascending, then descending, then off).
 Shift-click adds a secondary sort. Filter values are always sent as bound
 parameters. The filter bar's **Raw SQL** mode instead takes a WHERE
 condition you type, and uses it verbatim against your database.
+
+### Functions, sequences, types, triggers and events
+
+Below **Tables** and **Views**, the sidebar lists the schema's other
+objects in collapsible groups. A group is hidden when it is empty, shows its
+count, and stays collapsed across restarts. The search box filters every
+group (triggers also match by their table name).
+
+| Group | PostgreSQL | MySQL | MariaDB | SQLite |
+|---|---|---|---|---|
+| **Functions** | functions and aggregates | stored functions | stored functions | — |
+| **Procedures** | procedures | procedures | procedures | — |
+| **Sequences** | sequences (with current value and owning column) | — | sequences (10.3+) | — |
+| **Types** | enum, composite and domain types | — | — | — |
+| **Triggers** | all triggers of the schema's tables | triggers | triggers | triggers |
+| **Events** | — | scheduled events | scheduled events | — |
+
+Materialized views stay in **Views**. On PostgreSQL, objects created by an
+extension and the sequences behind identity columns are not listed.
+
+Click an object to open it in a read-only **object tab**: its details (for
+example arguments, return type, language and volatility of a function; the
+range, increment and current value of a sequence; the values of an enum; the
+timing and events of a trigger) and its DDL, with **Copy DDL** and **Open in
+new query tab**. A trigger's table name opens that table. Mod+R reloads the
+objects and the open object's DDL. Right-click an object for **Copy name**,
+**Copy DDL** and **Open in new query tab**.
+
+The DDL comes from `SHOW CREATE FUNCTION|PROCEDURE|TRIGGER|EVENT|SEQUENCE`
+on MySQL/MariaDB and from `sqlite_master` on SQLite. On PostgreSQL,
+functions and procedures use `pg_get_functiondef` and triggers
+`pg_get_triggerdef`. Aggregates (without moving-aggregate and serialization
+functions), sequences (with `OWNED BY`) and types are rebuilt from the
+catalog. Comments are included. On MySQL/MariaDB a routine you may run but
+not read (you are not its definer and lack `SHOW_ROUTINE`) shows a note
+instead of its body. The object a tab shows is always looked up again in the
+catalog before its DDL is read.
 
 ## SQL editor
 
@@ -468,7 +511,7 @@ Read-only safe mode does not allow importing, and Confirm mode asks first.
 
 | Shortcut | Action |
 |---|---|
-| Mod+P | Open a table or view: fuzzy search over the current schema, then the other schemas. Enter opens the data, Mod+Enter the structure. Type `>` for commands. |
+| Mod+P | Open a table, view or object: fuzzy search over the current schema's tables, views and objects (functions, sequences, types, triggers, events), then the other schemas' tables and views. Enter opens the data (or the object tab), Mod+Enter the structure. Type `>` for commands. |
 | Mod+Shift+P | Every command with its shortcut (generated from the shortcut list) |
 | Mod+K | Switch connection: search the saved connections, Enter switches (open connections stay connected) |
 | Mod+, | Settings |
@@ -520,7 +563,8 @@ Lontar remembers how you left it, in `state.json` next to `settings.json`:
 - **Panel sizes:** the sidebar, the row detail panel, the SQL editor/results
   split and the query history panel. Only sizes you drag are saved, not
   sizes that change because the window was resized.
-- **Panel toggles:** whether the row detail and query history panels are open.
+- **Panel toggles:** whether the row detail and query history panels are open,
+  and which sidebar groups are collapsed.
 - **Table column widths**, per saved connection and table. Column widths in
   SQL editor results are not kept.
 

@@ -37,6 +37,8 @@ export const SchemaService = {
   Columns: vi.fn<(sessionId: string, schema: string, table: string) => Promise<unknown[] | null>>(),
   TableInfo: vi.fn<(sessionId: string, schema: string, table: string) => Promise<unknown>>(),
   TableDDL: vi.fn<(sessionId: string, schema: string, table: string) => Promise<string>>(),
+  ListObjects: vi.fn<(sessionId: string, schema: string) => Promise<unknown[] | null>>(),
+  ObjectDDL: vi.fn<(sessionId: string, schema: string, ref: unknown) => Promise<string>>(),
 }
 
 export const BrowseService = {
@@ -170,6 +172,7 @@ export function resetBindings() {
   SchemaService.ListDatabases.mockResolvedValue(['shop'])
   SchemaService.ListSchemas.mockResolvedValue(['public'])
   SchemaService.ListTables.mockResolvedValue([])
+  SchemaService.ListObjects.mockResolvedValue([])
   BrowseService.CancelFetch.mockResolvedValue(true)
   ConnectionService.AcceptHostKey.mockResolvedValue(undefined)
   DialogService.OpenFile.mockResolvedValue('')

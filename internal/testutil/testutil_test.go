@@ -149,8 +149,11 @@ type fakeTB struct {
 	testing.TB
 	skipped string
 	fatal   string
+	failed  bool
 	cleanup []func()
 }
+
+func (f *fakeTB) Errorf(string, ...any) { f.failed = true }
 
 func (f *fakeTB) Helper()                        {}
 func (f *fakeTB) Skip(args ...any)               { f.skipped = fmt.Sprint(args...) }

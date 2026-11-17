@@ -42,6 +42,15 @@ export function ListDatabases(sessionID: string, includeSystem: boolean): $Cance
 }
 
 /**
+ * ListObjects lists the functions, procedures, sequences, types, triggers
+ * and events of a schema (what the engine has). Engines without them
+ * return an empty slice.
+ */
+export function ListObjects(sessionID: string, schema: string): $CancellablePromise<driver$0.$Object[] | null> {
+    return $Call.ByID(3015397506, sessionID, schema);
+}
+
+/**
  * ListSchemas lists the schemas of the current database.
  */
 export function ListSchemas(sessionID: string, includeSystem: boolean): $CancellablePromise<string[] | null> {
@@ -53,6 +62,15 @@ export function ListSchemas(sessionID: string, includeSystem: boolean): $Cancell
  */
 export function ListTables(sessionID: string, schema: string): $CancellablePromise<driver$0.Table[] | null> {
     return $Call.ByID(3085386859, sessionID, schema);
+}
+
+/**
+ * ObjectDDL returns the CREATE statement of an object listed by
+ * ListObjects. The ref is matched against a fresh listing first; anything
+ * else is refused with driver.ErrObjectNotFound.
+ */
+export function ObjectDDL(sessionID: string, schema: string, ref: driver$0.ObjectRef): $CancellablePromise<string> {
+    return $Call.ByID(3482513911, sessionID, schema, ref);
 }
 
 /**

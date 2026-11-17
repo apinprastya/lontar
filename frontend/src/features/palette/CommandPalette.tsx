@@ -5,6 +5,8 @@ import { EngineBadge } from '../../components/EngineLogo'
 import type { Kind } from '../connections/types'
 import { commands, shortcutText, type Shortcut } from '../workspace/keymap'
 import type { TableType } from '../workspace/types'
+import ObjectIcon from '../objects/ObjectIcon'
+import { OBJECT_KIND_LABELS, objectKey, objectLabel, type DbObject } from '../objects/types'
 
 export type PaletteMode = 'tables' | 'commands' | 'connections'
 
@@ -40,6 +42,9 @@ export interface CommandPaletteProps {
   /** Commands that cannot run now (e.g. Commit without a table tab). */
   disabled?: (id: string) => boolean
   onOpenTable(t: PaletteTable, view: 'data' | 'structure'): void
+  /** Functions, sequences, types, triggers and events of the current schema (quick open). */
+  objects?: DbObject[]
+  onOpenObject?(o: DbObject): void
   onCommand(id: string): void
   onModeChange(mode: PaletteMode): void
   onClose(): void
@@ -57,7 +62,7 @@ export interface CommandPaletteProps {
 }
 
 const PLACEHOLDERS: Record<PaletteMode, string> = {
-  tables: 'Open a table or view… (type > for commands)',
+  tables: 'Open a table, view or object… (type > for commands)',
   commands: 'Run a command…',
   connections: 'Switch to a connection…',
 }
@@ -68,7 +73,7 @@ function rank(c: PaletteConnection): number {
 
 const LABELS: Record<PaletteMode, string> = { tables: 'Open table', commands: 'Commands', connections: 'Switch connection' }
 const EMPTY: Record<PaletteMode, string> = {
-  tables: 'No matching table or view.',
+  tables: 'No matching table, view or object.',
   commands: 'No matching command.',
   connections: 'No matching connection.',
 }
@@ -78,9 +83,14 @@ export function tableValue(t: Pick<PaletteTable, 'schema' | 'name'>): string {
   return `table:${t.schema}\u0000${t.name}`
 }
 
+/** cmdk value of an object item. */
+export function objectValue(o: DbObject): string {
+  return `object:${objectKey(o)}`
+}
+
 /**
- * Quick open (Mod+P): fuzzy-find tables and views; Enter opens the data,
- * Mod+Enter the structure. Commands (Mod+Shift+P, or ">" in quick open):
+ * Quick open (Mod+P): fuzzy-find tables, views and the current schema's
+ * objects; Enter opens the data (or the object), Mod+Enter the structure. Commands (Mod+Shift+P, or ">" in quick open):
  * every command of the keymap registry with its shortcut. Connections
  * (Mod+K): the saved connections; Enter switches to one.
  */
@@ -91,6 +101,8 @@ export default function CommandPalette({
   loading,
   disabled,
   onOpenTable,
+  objects = [],
+  onOpenObject,
   onCommand,
   onModeChange,
   onClose,
@@ -105,6 +117,7 @@ export default function CommandPalette({
   const [value, setValue] = useState('')
   const cmds = useMemo(() => commands(list), [list])
   const byValue = useMemo(() => new Map(tables.map((t) => [tableValue(t), t])), [tables])
+  const objectByValue = useMemo(() => new Map(objects.map((o) => [objectValue(o), o])), [objects])
 
   useEffect(() => setSearch(''), [mode])
 
@@ -131,6 +144,8 @@ export default function CommandPalette({
       e.preventDefault()
       const t = byValue.get(value)
       if (t) onOpenTable(t, 'structure')
+      const o = objectByValue.get(value)
+      if (o) onOpenObject?.(o)
     }
   }
 
@@ -212,6 +227,17 @@ export default function CommandPalette({
           ) : mode === 'tables' ? (
             <>
               {current.length > 0 && <Command.Group heading="This schema">{current.map(tableItem)}</Command.Group>}
+              {objects.length > 0 && (
+                <Command.Group heading="Objects">
+                  {objects.map((o) => (
+                    <Command.Item key={objectValue(o)} value={objectValue(o)} keywords={[o.name, o.table, o.kind]} onSelect={() => onOpenObject?.(o)}>
+                      <ObjectIcon kind={o.kind} className={`icon palette-object-icon object-icon-${o.kind}`} />
+                      <span className="palette-name">{objectLabel(o)}</span>
+                      <span className="palette-meta">{o.kind === 'trigger' ? `trigger on ${o.table}` : OBJECT_KIND_LABELS[o.kind]}</span>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+              )}
               {other.length > 0 && <Command.Group heading="Other schemas">{other.map(tableItem)}</Command.Group>}
               {loading && <Command.Loading>Loading other schemas…</Command.Loading>}
             </>

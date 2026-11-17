@@ -49,6 +49,8 @@ function api(over: Partial<WorkspaceApi> = {}): WorkspaceApi {
     cancel: vi.fn(async () => true),
     tableInfo: vi.fn(async () => detail),
     tableDDL: vi.fn(async () => 'CREATE TABLE public.orders (\n    id bigint\n);\n'),
+    listObjects: vi.fn(async () => []),
+    objectDDL: vi.fn(async () => ''),
     ...over,
   }
 }

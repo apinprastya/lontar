@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"lontar/internal/conn"
 	"lontar/internal/driver"
@@ -139,4 +140,34 @@ func (s *SchemaService) TableDDL(ctx context.Context, sessionID, schema, table s
 		return "", err
 	}
 	return d.TableDDL(ctx, db, schema, table)
+}
+
+// ListObjects lists the functions, procedures, sequences, types, triggers
+// and events of a schema (what the engine has). Engines without them
+// return an empty slice.
+func (s *SchemaService) ListObjects(ctx context.Context, sessionID, schema string) ([]driver.Object, error) {
+	db, d, err := s.resolve(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	l, ok := d.(driver.ObjectLister)
+	if !ok {
+		return []driver.Object{}, nil
+	}
+	return l.ListObjects(ctx, db, schema)
+}
+
+// ObjectDDL returns the CREATE statement of an object listed by
+// ListObjects. The ref is matched against a fresh listing first; anything
+// else is refused with driver.ErrObjectNotFound.
+func (s *SchemaService) ObjectDDL(ctx context.Context, sessionID, schema string, ref driver.ObjectRef) (string, error) {
+	db, d, err := s.resolve(sessionID)
+	if err != nil {
+		return "", err
+	}
+	l, ok := d.(driver.ObjectLister)
+	if !ok {
+		return "", fmt.Errorf("%w: this engine lists no objects", driver.ErrObjectNotFound)
+	}
+	return l.ObjectDDL(ctx, db, schema, ref)
 }

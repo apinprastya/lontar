@@ -94,6 +94,8 @@ function fakeApi() {
     cancel: vi.fn(async () => true),
     tableInfo: vi.fn(async (_s: string, schema: string, table: string) => makeDetail({ schema, name: table })),
     tableDDL: vi.fn(async (_s: string, _schema: string, table: string) => `CREATE TABLE ${table} ();`),
+    listObjects: vi.fn(async () => []),
+    objectDDL: vi.fn(async () => ''),
   } satisfies WorkspaceApi
 }
 

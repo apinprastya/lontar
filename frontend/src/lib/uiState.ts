@@ -93,6 +93,11 @@ export function isBoolean(v: unknown): v is boolean {
   return typeof v === 'boolean'
 }
 
+/** An array of strings (e.g. the collapsed sidebar groups). */
+export function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string')
+}
+
 /** A map of column name to a positive width in pixels. */
 export function isWidthMap(v: unknown): v is Record<string, number> {
   return (

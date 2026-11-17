@@ -48,6 +48,11 @@
   --kind-table: #2d5bb8;
   --kind-view: #7c3aed;
   --kind-mview: #0e7c86;
+  --kind-function: #9a5b00;
+  --kind-sequence: #1a7f37;
+  --kind-type: #b3365b;
+  --kind-trigger: #b35900;
+  --kind-event: #4f5bd5;
   --key-icon: #9a6700;
   --plan-hot-bg: rgba(196, 55, 47, 0.08);
   --plan-bar: rgba(13, 134, 112, 0.55);
@@ -61,6 +66,11 @@
     --kind-table: #4c82f0;
     --kind-view: #a371f7;
     --kind-mview: #39c5cf;
+    --kind-function: #e3b341;
+    --kind-sequence: #56d364;
+    --kind-type: #f778ba;
+    --kind-trigger: #f0883e;
+    --kind-event: #8b9cf7;
     --key-icon: #d29922;
     --plan-hot-bg: rgba(255, 107, 107, 0.1);
     --plan-bar: rgba(60, 194, 166, 0.6);
@@ -1047,6 +1057,64 @@ button.ws-conn-card:hover:not(:disabled) {
   color: var(--kind-mview);
 }
 
+/* Collapsible sidebar groups (tables, views, functions, ...) */
+.table-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.table-group-toggle:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
+}
+
+.table-group-toggle .caret {
+  transition: transform 0.12s;
+  transform: rotate(90deg);
+}
+
+.table-group-toggle[aria-expanded='false'] .caret {
+  transform: none;
+}
+
+.object-extra {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.object-icon-function,
+.object-icon-procedure,
+.object-icon-aggregate {
+  color: var(--kind-function);
+}
+.object-icon-sequence {
+  color: var(--kind-sequence);
+}
+.object-icon-enum,
+.object-icon-composite,
+.object-icon-domain {
+  color: var(--kind-type);
+}
+.object-icon-trigger {
+  color: var(--kind-trigger);
+}
+.object-icon-event {
+  color: var(--kind-event);
+}
+
 /* Main area */
 
 .ws-main {
@@ -2017,6 +2085,41 @@ textarea.cell-editor-input {
   padding: 12px;
 }
 
+/* Object tab: details, then the DDL */
+.object-view .structure-header {
+  align-items: center;
+}
+
+.object-props {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 4px 12px 8px;
+}
+
+.object-prop {
+  display: contents;
+}
+
+.object-prop dt {
+  color: var(--muted);
+}
+
+.object-prop dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.object-ddl-title {
+  margin: 8px 12px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .structure-table {
   border-collapse: collapse;
   font-size: 12px;
@@ -2441,6 +2544,11 @@ textarea.cell-editor-input {
 .palette-view,
 .palette-materialized-view {
   color: var(--kind-view);
+}
+
+.palette-object-icon {
+  flex: none;
+  width: 18px;
 }
 
 .palette-meta {

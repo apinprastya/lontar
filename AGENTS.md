@@ -19,7 +19,7 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `internal/services/` | Wails-bound services (the only Go API the frontend sees). Keep them thin; logic lives in the packages below |
 | `internal/conn/` | Session manager: open/close sessions, pools, TLS. Several sessions can be open at once |
 | `internal/sshtunnel/` | Connecting through an SSH bastion (host keys checked against the user's `known_hosts`, read-only, and Lontar's own) |
-| `internal/driver/` (`postgres/`, `mysql/`, `sqlite/`, `all/`) | Per-engine dialect (quoting, placeholders) and introspection (tables, columns, structure, DDL) |
+| `internal/driver/` (`postgres/`, `mysql/`, `sqlite/`, `all/`) | Per-engine dialect (quoting, placeholders) and introspection (tables, columns, structure, DDL). `objects.go`: the optional `ObjectLister` (functions, procedures, sequences, types, triggers, events for the sidebar); `ObjectDDL` must resolve the UI's `ObjectRef` with `FindObject` before touching SQL |
 | `internal/query/` | Table browsing (`browse.go`), the SQL editor runtime (`editor.go`, `execute.go`), statement classification, single-table SELECT parsing (`source.go`) |
 | `internal/edits/` | Staged grid edits: validates a structured `ChangeSet` against introspected metadata and applies it in one transaction; `source.go` maps query results onto a table |
 | `internal/sqlsplit/` | Client-side script splitting (quotes, comments, `$$`, `DELIMITER`, triggers) |
@@ -34,8 +34,8 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `website/` | Marketing site (Astro, static): home and download pages. A **separate npm project**; download links come from the GitHub Releases API at runtime (`src/lib/releases.ts`, `src/scripts/download.ts`) with fallback links to the latest release |
 | `build/` | Packaging per platform (nfpm, NSIS, plists, icons) |
 | `frontend/bindings/` | **Generated** Wails bindings — never edit by hand |
-| `frontend/src/features/<area>/` | UI by feature (connections, workspace, grid, editor, edits, structure, palette, …) with their tests |
-| `frontend/src/stores/` | zustand stores: `connections.ts` (saved connections, open sessions), `workspace.ts` (one store per session: tabs, staging, commit), `queryTabs.ts`, `pending.ts` (pure staged-edit model) |
+| `frontend/src/features/<area>/` | UI by feature (connections, workspace, grid, editor, edits, structure, objects, palette, …) with their tests. `objects/` is the read-only object tab; `structure/DdlSection.tsx` is the DDL block it shares with the structure view |
+| `frontend/src/stores/` | zustand stores: `connections.ts` (saved connections, open sessions), `workspace.ts` (one store per session: table, query and object tabs, sidebar objects, staging, commit), `queryTabs.ts`, `pending.ts` (pure staged-edit model) |
 | `frontend/src/components/` | Shared components (`icons.tsx`, `ToolButton`, `EngineLogo`, `ConfirmDialog`) |
 | `frontend/src/test/` | Test fakes (`mockBindings`, `fakeEditorApi`, structure fixtures) |
 
@@ -123,7 +123,8 @@ A change is finished when all of these hold (CI enforces them):
   `SharedMySQL(t)`, `SharedMariaDB(t)` (testcontainers, once per package via
   `testutil.Main` in `TestMain`) and `SQLiteTemp(t)`. They skip with `-short`
   or without Docker. Cover every engine; shared fixtures are
-  `testutil.SeedBrowse` and `testutil.SeedStructure`.
+  `testutil.SeedBrowse`, `testutil.SeedStructure` and `testutil.SeedObjects`
+  (checked with `CheckObjects`).
 - With rootless Podman: `systemctl --user start podman.socket` and
   `export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock`.
 - Errors meant for the UI are structured (e.g. `edits.ChangeError`,

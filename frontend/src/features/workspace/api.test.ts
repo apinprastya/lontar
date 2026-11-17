@@ -61,4 +61,16 @@ describe('workspaceApi', () => {
     SchemaService.TableDDL.mockResolvedValue('CREATE TABLE t ();')
     expect(await workspaceApi.tableDDL('s1', 's', 't')).toBe('CREATE TABLE t ();')
   })
+
+  it('wraps the object calls', async () => {
+    SchemaService.ListObjects.mockResolvedValue(null)
+    expect(await workspaceApi.listObjects('s1', 'p')).toEqual([])
+    SchemaService.ListObjects.mockResolvedValue([{ schema: 'p', kind: 'sequence', name: 'q', signature: '', detail: '', table: '', id: '1', properties: null }])
+    expect((await workspaceApi.listObjects('s1', 'p'))[0].properties).toEqual([])
+    expect(SchemaService.ListObjects).toHaveBeenCalledWith('s1', 'p')
+    SchemaService.ObjectDDL.mockResolvedValue('CREATE SEQUENCE q;')
+    const ref = { kind: 'sequence' as const, name: 'q', signature: '', table: '', id: '1' }
+    expect(await workspaceApi.objectDDL('s1', 'p', ref)).toBe('CREATE SEQUENCE q;')
+    expect(SchemaService.ObjectDDL).toHaveBeenCalledWith('s1', 'p', ref)
+  })
 })

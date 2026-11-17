@@ -277,3 +277,55 @@ export function CaretIcon(p: IconProps) {
     </Svg>
   )
 }
+
+/** ƒ(x): functions, procedures and aggregates. */
+export function FunctionIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        d="M9.5 2.5c-1.6-.4-2.6.4-2.9 2L5.4 11c-.3 1.6-1.3 2.4-2.9 2M3.5 6.5h5M10 7.5l3.5 4.5M13.5 7.5 10 12"
+        {...stroke}
+      />
+    </Svg>
+  )
+}
+
+/** 1-2-3 steps: sequences. */
+export function SequenceIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M2.5 13.5h3v-3h3v-3h3v-3h2" {...stroke} />
+    </Svg>
+  )
+}
+
+/** Braces: enum, composite and domain types. */
+export function TypeIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        d="M5.5 2.5c-1.5 0-2 .7-2 2v1.5c0 1-.5 2-1.5 2 1 0 1.5 1 1.5 2v1.5c0 1.3.5 2 2 2M10.5 2.5c1.5 0 2 .7 2 2v1.5c0 1 .5 2 1.5 2-1 0-1.5 1-1.5 2v1.5c0 1.3-.5 2-2 2"
+        {...stroke}
+      />
+    </Svg>
+  )
+}
+
+/** Lightning bolt: triggers. */
+export function TriggerIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M9.5 1.5 3.5 9h4l-1 5.5 6-7.5h-4z" {...stroke} />
+    </Svg>
+  )
+}
+
+/** Clock: scheduled events. */
+export function EventIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="8" cy="8" r="6" {...stroke} />
+      <path d="M8 4.5V8l2.5 1.5" {...stroke} />
+    </Svg>
+  )
+}

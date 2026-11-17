@@ -92,6 +92,8 @@ function fakeApi() {
     cancel: vi.fn(async () => true),
     tableInfo: vi.fn(async (_s: string, schema: string, table: string) => makeDetail({ schema, name: table })),
     tableDDL: vi.fn(async (_s: string, _schema: string, table: string) => `CREATE TABLE ${table} ();`),
+    listObjects: vi.fn(async () => []),
+    objectDDL: vi.fn(async () => ''),
   } satisfies WorkspaceApi
 }
 
@@ -132,7 +134,7 @@ describe('Workspace', () => {
     fireEvent.change(screen.getByLabelText('Search tables'), { target: { value: 'user' } })
     expect(within(sidebar).getAllByRole('heading', { level: 3 }).map((g) => g.textContent)).toEqual(['Tables 1', 'Views 1'])
     fireEvent.change(screen.getByLabelText('Search tables'), { target: { value: 'zzz' } })
-    expect(sidebar).toHaveTextContent('No tables match')
+    expect(sidebar).toHaveTextContent('Nothing matches')
 
     await user.selectOptions(screen.getByLabelText('Schema'), 'audit')
     expect(api.listTables).toHaveBeenLastCalledWith('s1', 'audit')

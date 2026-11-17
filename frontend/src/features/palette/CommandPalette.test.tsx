@@ -2,7 +2,8 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { commands, SHORTCUTS, shortcutText } from '../workspace/keymap'
-import CommandPalette, { tableValue, type CommandPaletteProps, type PaletteTable } from './CommandPalette'
+import CommandPalette, { objectValue, tableValue, type CommandPaletteProps, type PaletteTable } from './CommandPalette'
+import { makeObject } from '../../test/objects'
 
 const tables: PaletteTable[] = [
   { schema: 'public', name: 'users', type: 'table', current: true },
@@ -48,7 +49,7 @@ describe('CommandPalette', () => {
     expect(props.onOpenTable).toHaveBeenLastCalledWith(tables[1], 'structure')
     await user.clear(screen.getByRole('combobox'))
     await user.keyboard('zzzz')
-    expect(screen.getByText('No matching table or view.')).toBeInTheDocument()
+    expect(screen.getByText('No matching table, view or object.')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(props.onClose).toHaveBeenCalled()
   })
@@ -84,5 +85,29 @@ describe('CommandPalette', () => {
     setup({ mode: 'commands', platform: 'darwin', list: SHORTCUTS.filter((s) => s.id === 'runAll') })
     expect(screen.getByText('⇧⌘Enter')).toBeInTheDocument()
     expect(tableValue({ schema: 's', name: 'n' })).toBe('table:s\u0000n')
+  })
+
+  it('lists the objects of the schema and opens them', async () => {
+    const objects = [
+      makeObject({ name: 'add_one', signature: 'x integer' }),
+      makeObject({ kind: 'trigger', name: 'users_touch', table: 'users', id: '2' }),
+      makeObject({ kind: 'enum', name: 'mood', id: '3' }),
+    ]
+    const onOpenObject = vi.fn()
+    const { props, user } = setup({ objects, onOpenObject })
+    expect(screen.getByRole('group', { name: 'Objects' })).toBeInTheDocument()
+    expect(items()).toContain('add_one(x integer)function')
+    expect(items()).toContain('users_touchtrigger on users')
+    expect(items()).toContain('moodenum type')
+    await user.keyboard('touch')
+    expect(items()[0]).toBe('users_touchtrigger on users')
+    await user.keyboard('{Enter}')
+    expect(onOpenObject).toHaveBeenCalledWith(objects[1])
+    await user.clear(screen.getByRole('combobox'))
+    await user.keyboard('mood')
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    expect(onOpenObject).toHaveBeenLastCalledWith(objects[2])
+    expect(props.onOpenTable).not.toHaveBeenCalled()
+    expect(objectValue(objects[0])).toBe('object:["public","function","add_one","x integer",""]')
   })
 })

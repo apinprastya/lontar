@@ -47,6 +47,8 @@ function fakeApi() {
       makeDetail({ schema, name: table, foreignKeys: table === 'orders' ? [orderFK, compFK] : [] }),
     ),
     tableDDL: vi.fn(async (_s: string, _schema: string, table: string) => `CREATE TABLE ${table} ();`),
+    listObjects: vi.fn(async () => []),
+    objectDDL: vi.fn(async () => ''),
   } satisfies WorkspaceApi
 }
 

@@ -1,10 +1,7 @@
-import { useState } from 'react'
 import { KeyIcon, LinkIcon } from '../../components/icons'
-import { copyText } from '../../lib/clipboard'
-import { errorMessage } from '../../lib/errors'
 import { useWorkspace, type TabState } from '../../stores/workspace'
 import { formatEstimate } from '../sidebar/tableList'
-import DdlView from './DdlView'
+import DdlSection from './DdlSection'
 import { displayName } from './fk'
 import { columnExtra, formatBytes, type ForeignKey, type StructureSection, type TableDetail } from './types'
 
@@ -195,45 +192,8 @@ function Triggers({ d }: { d: TableDetail }) {
 }
 
 function Ddl({ tab }: { tab: TabState }) {
-  const s = useWorkspace((st) => st)
-  const [copied, setCopied] = useState<string | null>(null)
-  if (tab.ddlError)
-    return (
-      <div className="banner error" role="alert">
-        <span className="selectable">{tab.ddlError}</span>
-        <button type="button" onClick={() => void s.loadDDL(tab.id)}>
-          Retry
-        </button>
-      </div>
-    )
-  if (tab.ddl === null) return <Empty>Loading DDL…</Empty>
-  const ddl = tab.ddl
-  const copy = async () => {
-    try {
-      await copyText(ddl)
-      setCopied('Copied')
-    } catch (err) {
-      setCopied(`Copy failed: ${errorMessage(err)}`)
-    }
-  }
-  return (
-    <div className="ddl-section">
-      <div className="toolbar ddl-toolbar">
-        <button type="button" onClick={() => void copy()}>
-          Copy
-        </button>
-        <button type="button" onClick={() => s.newQueryTab(ddl)}>
-          Open in new query tab
-        </button>
-        {copied && (
-          <span className="muted" role="status">
-            {copied}
-          </span>
-        )}
-      </div>
-      <DdlView text={ddl} kind={s.kind} />
-    </div>
-  )
+  const loadDDL = useWorkspace((st) => st.loadDDL)
+  return <DdlSection ddl={tab.ddl} error={tab.ddlError} onRetry={() => void loadDDL(tab.id)} />
 }
 
 /** Read-only structure of a table tab: metadata header and sections. */
