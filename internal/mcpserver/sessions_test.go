@@ -122,8 +122,12 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Create the file.
-	if _, err := sessions.Connect(context.Background(), c.ID); err != nil {
+	// Create the file, then close the handle (Windows can't remove an open file).
+	setup, err := sessions.Connect(context.Background(), c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sessions.Disconnect(setup); err != nil {
 		t.Fatal(err)
 	}
 
