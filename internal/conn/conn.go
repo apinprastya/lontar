@@ -370,6 +370,18 @@ func (m *Manager) secrets(c store.Connection) (Secrets, error) {
 // Connect opens the saved connection connectionID and returns the new
 // session's ID.
 func (m *Manager) Connect(ctx context.Context, connectionID string) (string, error) {
+	return m.connect(ctx, connectionID, false)
+}
+
+// ConnectReadOnly is Connect with the session forced into
+// store.SafeReadOnly, whatever the saved safe mode: the pool is opened
+// read-only at the database level (driver.Config.ReadOnly). The MCP server
+// runs AI queries on such sessions.
+func (m *Manager) ConnectReadOnly(ctx context.Context, connectionID string) (string, error) {
+	return m.connect(ctx, connectionID, true)
+}
+
+func (m *Manager) connect(ctx context.Context, connectionID string, readOnly bool) (string, error) {
 	if m.isClosed() {
 		return "", ErrClosed
 	}
@@ -378,6 +390,9 @@ func (m *Manager) Connect(ctx context.Context, connectionID string) (string, err
 		return "", err
 	}
 	c.Normalize()
+	if readOnly {
+		c.SafeMode = store.SafeReadOnly
+	}
 	sec, err := m.secrets(c)
 	if err != nil {
 		return "", err

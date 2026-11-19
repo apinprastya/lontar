@@ -51,7 +51,16 @@ type Entry struct {
 	Error        string `json:"error"`
 	// Truncated reports that SQL was cut to MaxSQLBytes.
 	Truncated bool `json:"truncated"`
+	// Source is who ran the script: SourceEditor ("", the SQL editor) or
+	// SourceMCP (an AI assistant through `lontar mcp`).
+	Source string `json:"source"`
 }
+
+// Entry sources.
+const (
+	SourceEditor = ""
+	SourceMCP    = "mcp"
+)
 
 // Store is the history database. It opens lazily on first use and is safe
 // for concurrent use.
@@ -88,7 +97,8 @@ CREATE TABLE IF NOT EXISTS history (
 	rows_affected INTEGER,
 	is_error      INTEGER NOT NULL DEFAULT 0,
 	error         TEXT    NOT NULL DEFAULT '',
-	truncated     INTEGER NOT NULL DEFAULT 0
+	truncated     INTEGER NOT NULL DEFAULT 0,
+	source        TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS history_conn ON history (connection_id, id DESC);
 `
@@ -143,7 +153,29 @@ func (s *Store) openDB() (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("history: create schema: %w", err)
 	}
+	if err := addSourceColumn(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("history: upgrade schema: %w", err)
+	}
 	return db, nil
+}
+
+// addSourceColumn adds the source column to a history.db created before it
+// existed. Two processes (the app and `lontar mcp`) may race here; losing
+// the race shows up as a duplicate column, which is fine.
+func addSourceColumn(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('history') WHERE name = 'source'`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`ALTER TABLE history ADD COLUMN source TEXT NOT NULL DEFAULT ''`)
+	if err != nil && strings.Contains(err.Error(), "duplicate column") {
+		return nil
+	}
+	return err
 }
 
 // Close closes the database (it reopens on the next call).
@@ -185,9 +217,9 @@ func (s *Store) Add(ctx context.Context, e Entry) (int64, error) {
 		e.StartedAt = time.Now()
 	}
 	res, err := db.ExecContext(ctx,
-		`INSERT INTO history (connection_id, database, sql, started_at, duration_ms, row_count, rows_affected, is_error, error, truncated)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		e.ConnectionID, e.Database, text, e.StartedAt.UnixMilli(), e.DurationMs, e.RowCount, e.RowsAffected, e.IsError, e.Error, truncated || e.Truncated)
+		`INSERT INTO history (connection_id, database, sql, started_at, duration_ms, row_count, rows_affected, is_error, error, truncated, source)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.ConnectionID, e.Database, text, e.StartedAt.UnixMilli(), e.DurationMs, e.RowCount, e.RowsAffected, e.IsError, e.Error, truncated || e.Truncated, e.Source)
 	if err != nil {
 		return 0, fmt.Errorf("history: add: %w", err)
 	}
@@ -222,7 +254,7 @@ func (s *Store) List(ctx context.Context, connectionID, search string, limit, of
 	}
 	offset = max(offset, 0)
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, connection_id, database, sql, started_at, duration_ms, row_count, rows_affected, is_error, error, truncated
+		`SELECT id, connection_id, database, sql, started_at, duration_ms, row_count, rows_affected, is_error, error, truncated, source
 		 FROM history
 		 WHERE (? = '' OR connection_id = ?) AND (? = '' OR sql LIKE ? ESCAPE '!')
 		 ORDER BY id DESC LIMIT ? OFFSET ?`,
@@ -238,7 +270,7 @@ func (s *Store) List(ctx context.Context, connectionID, search string, limit, of
 			startedMs int64
 		)
 		if err := rows.Scan(&e.ID, &e.ConnectionID, &e.Database, &e.SQL, &startedMs, &e.DurationMs,
-			&e.RowCount, &e.RowsAffected, &e.IsError, &e.Error, &e.Truncated); err != nil {
+			&e.RowCount, &e.RowsAffected, &e.IsError, &e.Error, &e.Truncated, &e.Source); err != nil {
 			return nil, fmt.Errorf("history: list: %w", err)
 		}
 		e.StartedAt = time.UnixMilli(startedMs)

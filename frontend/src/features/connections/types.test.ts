@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeConnection } from '../../test/mockBindings'
-import { connectionColor, connectionSummary, isFileBased, sshBadgeTitle, sshChain } from './types'
+import { connectionColor, connectionSummary, effectiveAIAccess, isFileBased, sshBadgeTitle, sshChain } from './types'
 
 describe('connection helpers', () => {
   it('summarises server and file connections', () => {
@@ -15,6 +15,16 @@ describe('connection helpers', () => {
     expect(connectionColor({ color: '#123456', tag: 'prod' })).toBe('#123456')
     expect(connectionColor({ tag: 'prod' })).toBe('#f85149')
     expect(connectionColor({ tag: 'none' })).toBe('')
+  })
+
+  it('caps AI write access on read-only connections', () => {
+    expect(effectiveAIAccess({ kind: 'postgres' })).toBe('off')
+    expect(effectiveAIAccess({ kind: 'postgres', aiAccess: 'bogus' as never })).toBe('off')
+    expect(effectiveAIAccess({ kind: 'postgres', aiAccess: 'read' })).toBe('read')
+    expect(effectiveAIAccess({ kind: 'postgres', aiAccess: 'write', safeMode: 'confirm' })).toBe('write')
+    expect(effectiveAIAccess({ kind: 'postgres', aiAccess: 'write', safeMode: 'readonly' })).toBe('read')
+    expect(effectiveAIAccess({ kind: 'sqlite', aiAccess: 'write', readOnly: true })).toBe('read')
+    expect(effectiveAIAccess({ kind: 'mysql', aiAccess: 'write', readOnly: true })).toBe('write')
   })
 
   it('knows file-based kinds', () => {

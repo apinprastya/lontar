@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"lontar/internal/appstate"
 	"lontar/internal/migrate"
@@ -22,6 +25,15 @@ func main() {
 	dir, err := configDir(os.UserConfigDir, migrate.Options{})
 	if err != nil {
 		log.Fatal(err)
+	}
+	if isMCP(os.Args[1:]) {
+		// `lontar mcp`: the MCP server for AI assistants, on stdio.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := runMCP(ctx, dir, os.Stdin, os.Stdout, os.Stderr); err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 	b := newBackend(dir)
 	app := application.New(appOptions(assets, b))

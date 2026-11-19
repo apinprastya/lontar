@@ -209,7 +209,8 @@ comes back the next time you open that connection. Query history (every run, wit
 duration, rows and errors, but never passwords) is stored in `history.db`
 next to `connections.json`, with the newest 10,000 runs kept per connection. Open
 it with **History**: click an entry to insert it, double-click to open it in a
-new tab.
+new tab. Queries run by an AI assistant (see "AI assistants (MCP)") are
+marked **AI**.
 
 ### Formatting
 
@@ -388,6 +389,70 @@ treats anything not clearly a read as a write, including `SET`. A `SELECT`
 that calls a function with side effects is not detected. Read-only mode is a
 guard against accidents, not a permission system: use database privileges
 for that.
+
+## AI assistants (MCP)
+
+Lontar includes a [Model Context Protocol](https://modelcontextprotocol.io)
+server, so Claude (Claude Code, Claude Desktop or any MCP client) can list,
+explore and query the connections you choose. It is the same `lontar`
+binary, started with `lontar mcp` by the client over stdio. It opens no
+window and works whether or not the app is running. **Settings → AI
+assistants (MCP)** shows the command for your installation, for example:
+
+```sh
+claude mcp add lontar -- /usr/bin/lontar mcp
+```
+
+For Claude Desktop, add the `mcpServers` entry shown there to
+`claude_desktop_config.json`. On macOS the command is inside the bundle
+(`/Applications/Lontar.app/Contents/MacOS/Lontar`); for an AppImage it is
+the AppImage file.
+
+Every connection starts with **AI access (MCP)** set to **Off** and is then
+invisible to the assistant. Set it in the connection form:
+
+| AI access | Claude can |
+|---|---|
+| Off | Nothing; the connection is not listed |
+| Read | List databases, schemas, tables and objects, describe tables, get DDL, run read-only queries and explain them |
+| Read and write | Also change data with `INSERT`, `UPDATE`, `DELETE`, `MERGE` or `REPLACE`, each change approved by you first |
+
+The tools are `list_connections`, `list_databases`, `list_schemas`,
+`list_tables`, `describe_table`, `list_objects`, `get_ddl`, `run_query`,
+`explain_query` and `execute_write`. A resource,
+`lontar://{connection}/schema`, gives Claude every table and column of a
+connection's current schema in one document.
+
+How it is kept safe:
+
+- **Reads cannot write.** Claude's queries run on a separate session opened
+  read-only in the database itself (as in read-only safe mode). Each
+  statement runs in its own `READ ONLY` transaction, which is always rolled
+  back. Statements that write, transaction control, `USE` and functions with
+  effects outside the transaction (`pg_terminate_backend`, `set_config`,
+  `nextval`, `dblink`, `lo_import`, `load_file`, `load_extension`, …) are
+  refused before they reach the database.
+- **Every write is shown to you first.** `execute_write` sends the exact SQL
+  to your MCP client as an approval prompt. Nothing runs unless you approve
+  it, and the approval only covers that SQL. Approved statements run in one
+  transaction, and a failure rolls all of them back. DDL is never allowed. A
+  client without approval prompts (MCP elicitation) cannot write. Read-only
+  safe mode, and a read-only SQLite file, limit a connection to Read.
+- **Limits:** 200 rows per statement by default (up to 1,000), at most 64 KB
+  of output per call (long values are cut at 2,000 bytes), 60 seconds per
+  call, and at most 8 KB of SQL per write. Sessions close after 10 minutes
+  without use.
+- **Nothing secret leaves Lontar.** Passwords, hosts, users and SSH settings
+  are never shown to the assistant; it sees the connection's name, engine,
+  default database, tag and access level. Query results do go to the AI
+  provider, so only enable connections whose data you may share with it.
+- **Everything is recorded.** Every query and change Claude runs goes into the
+  connection's query history, marked **AI**.
+
+Changes to a connection (including its AI access) apply to the next tool
+call. An SSH host key that Lontar has not seen yet must be accepted once in
+the app. Connections tagged Production are not treated differently, but
+Claude is told their tag.
 
 ## SSH tunnels
 
@@ -635,6 +700,9 @@ versioned. You can set:
   saved in its `.sql` file is not asked about.
 - **SQL format:** keyword case (UPPER, lower or as typed) and indent (2 or 4
   spaces) of **Format** in the SQL editor.
+
+The dialog also shows how to connect Claude to Lontar (see "AI assistants
+(MCP)").
 
 The **Check for updates…** button in the dialog is described in "Updates".
 

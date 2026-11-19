@@ -55,6 +55,19 @@ describe('ConnectionList', () => {
     expect(screen.getByPlaceholderText('Search connections (Ctrl+F)')).toBeInTheDocument()
   })
 
+  it('marks connections open to AI assistants', () => {
+    const list = [
+      makeConnection({ id: 'r', name: 'Reader', aiAccess: 'read' }),
+      makeConnection({ id: 'w', name: 'Writer', aiAccess: 'write' }),
+      makeConnection({ id: 'o', name: 'Off' }),
+    ]
+    render(<Harness list={list} />)
+    const items = screen.getAllByRole('option')
+    expect(within(items[0]).getByText('AI')).toHaveAttribute('title', 'AI assistants can read this database')
+    expect(within(items[1]).getByText('AI')).toHaveAttribute('title', expect.stringContaining('change data'))
+    expect(within(items[2]).queryByText('AI')).toBeNull()
+  })
+
   it('filters by name, host, kind and tag', async () => {
     const user = userEvent.setup()
     render(<Harness />)

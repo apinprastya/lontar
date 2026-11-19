@@ -138,6 +138,36 @@ export interface Location {
 }
 
 /**
+ * MCPSetup tells the user how to connect an AI assistant to Lontar's MCP
+ * server (`lontar mcp`, see internal/mcpserver).
+ */
+export interface MCPSetup {
+    /**
+     * Command is the Lontar executable that serves MCP with Args.
+     */
+    "command": string;
+    "args": string[] | null;
+
+    /**
+     * ClaudeCode is the shell command that registers the server with
+     * Claude Code.
+     */
+    "claudeCode": string;
+
+    /**
+     * ClaudeDesktop is the "mcpServers" entry for Claude Desktop's
+     * claude_desktop_config.json.
+     */
+    "claudeDesktop": string;
+
+    /**
+     * Error explains why the executable could not be found ("" when
+     * Command is set).
+     */
+    "error": string;
+}
+
+/**
  * SQLRunResult is the outcome of RunFile: either NeedsConfirm (nothing
  * ran) or Result.
  */

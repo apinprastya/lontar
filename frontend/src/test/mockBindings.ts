@@ -13,6 +13,7 @@ import { DEFAULT_SETTINGS } from '../features/settings/types'
 export const AppService = {
   Version: vi.fn<() => Promise<string>>(),
   Platform: vi.fn<() => Promise<string>>(),
+  MCPSetup: vi.fn<() => Promise<unknown>>(),
 }
 
 export const ConnectionService = {
@@ -174,6 +175,13 @@ export function resetBindings() {
     fn.mockReset()
   AppService.Version.mockResolvedValue('0.0.1')
   AppService.Platform.mockResolvedValue('linux')
+  AppService.MCPSetup.mockResolvedValue({
+    command: '/usr/bin/lontar',
+    args: ['mcp'],
+    claudeCode: 'claude mcp add lontar -- /usr/bin/lontar mcp',
+    claudeDesktop: '{"mcpServers":{"lontar":{"command":"/usr/bin/lontar","args":["mcp"]}}}',
+    error: '',
+  })
   ConnectionService.Drivers.mockResolvedValue(DRIVERS)
   ConnectionService.List.mockResolvedValue([])
   SchemaService.Current.mockResolvedValue({ database: 'shop', schema: 'public' })

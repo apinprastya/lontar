@@ -118,7 +118,7 @@ describe('ConnectionForm', () => {
   })
 
   it('validateDraft covers SQLite and port edge cases', () => {
-    const base = { name: 'n', kind: 'postgres' as const, host: 'h', port: '1', user: '', database: '', filePath: '', readOnly: false, createIfMissing: false, tag: 'none' as const, color: '', safeMode: 'off' as const,
+    const base = { name: 'n', kind: 'postgres' as const, host: 'h', port: '1', user: '', database: '', filePath: '', readOnly: false, createIfMissing: false, tag: 'none' as const, color: '', safeMode: 'off' as const, aiAccess: 'off' as const,
       sshEnabled: false, sshHost: '', sshPort: '22', sshUser: '', sshAuth: 'password' as const, sshKeyPath: '', sshJumps: [], sslMode: '' as const, sslCA: '', sslCert: '', sslKey: '', options: [] }
     expect(validateDraft(base)).toEqual({})
     expect(validateDraft({ ...base, port: '65535' })).toEqual({})
@@ -258,6 +258,27 @@ describe('ConnectionForm', () => {
     expect(field('Safe mode').value).toBe('readonly')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ tag: 'dev', safeMode: 'readonly' }), NO_SECRETS)
+  })
+
+  it('sets AI access, off by default, and notes when read-only caps it', async () => {
+    const { props, user } = setup()
+    await user.type(field('Name'), 'Shop')
+    expect(field('AI access (MCP)').value).toBe('off')
+    expect(screen.getByText('Not visible to AI assistants')).toBeInTheDocument()
+    await user.selectOptions(field('AI access (MCP)'), 'write')
+    expect(screen.getByText(/each change approved by you first/)).toBeInTheDocument()
+    expect(screen.queryByText(/gets read access only/)).not.toBeInTheDocument()
+    await user.selectOptions(field('Safe mode'), 'readonly')
+    expect(screen.getByText(/gets read access only/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ aiAccess: 'write', safeMode: 'readonly' }), NO_SECRETS)
+  })
+
+  it('keeps a saved AI access when editing', async () => {
+    const { props, user } = setup({ initial: makeConnection({ aiAccess: 'read' }) })
+    expect(field('AI access (MCP)').value).toBe('read')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ aiAccess: 'read' }), NO_SECRETS)
   })
 
   it('keeps a saved safe mode when editing', async () => {

@@ -151,6 +151,8 @@ export interface HistoryEntry {
   isError: boolean
   error: string
   truncated: boolean
+  /** Who ran it: '' for the SQL editor, 'mcp' for an AI assistant (lontar mcp). */
+  source?: string
 }
 
 export const MAX_ROWS_OPTIONS = [100, 500, 1000, 5000, 10000, 50000]

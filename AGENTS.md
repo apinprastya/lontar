@@ -26,6 +26,7 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `internal/export/`, `internal/importer/` | CSV/JSON/SQL export; CSV, JSON and NDJSON import (formats share one `source` pipeline) |
 | `internal/sqlfile/` | Run SQL file: streams a script or dump (pg_dump with COPY, mysqldump, sqlite3 .dump) on one dedicated connection, with safe-mode pre-scan, single-transaction / continue-on-error, progress and cancel |
 | `internal/textfile/` | The SQL editor's `.sql` files: read (UTF-8, size limit, EOL), atomic save with a changed-on-disk check (`SQLFileService`) |
+| `internal/mcpserver/`, `mcp.go` | MCP server for AI assistants (`lontar mcp`, stdio, no window): tools over connections with `AIAccess` read/write. Reads run on a `ConnectReadOnly` session in READ ONLY transactions that are rolled back; writes are DML only and need the user's approval (MCP multi round-trip input request, HMAC-bound to the SQL). Records history with source `mcp` |
 | `internal/store/`, `internal/settings/`, `internal/history/`, `internal/migrate/` | Saved connections + secrets, settings, query history, data migration from the old `dbedit` name |
 | `internal/appstate/`, `window.go` | `state.json`: main window bounds (tracked in `window.go`, wired in `main.go`) and UI values the frontend keeps via `UIStateService` (`frontend/src/lib/uiState.ts`, `panelLayout.ts`) |
 | `internal/update/` | On-demand self-update from GitHub Releases: ed25519-signed `SHA256SUMS`, per-install replacement (AppImage, exe, .app) |
