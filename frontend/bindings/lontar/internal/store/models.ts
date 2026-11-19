@@ -6,6 +6,39 @@
 import * as driver$0 from "../driver/models.js";
 
 /**
+ * AIAccess is what an AI assistant connected through Lontar's MCP server
+ * (`lontar mcp`) may do with a connection. It is "off" unless the user
+ * enables it for the connection; a missing value (connections saved before
+ * it existed) means off.
+ */
+export enum AIAccess {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * AI access levels.
+     *
+     * AIOff: the connection is invisible to the MCP server.
+     */
+    AIOff = "off",
+
+    /**
+     * AIRead: schema introspection and read-only queries, on a pool that
+     * the database itself keeps read-only.
+     */
+    AIRead = "read",
+
+    /**
+     * AIWrite: AIRead plus data changes (INSERT/UPDATE/DELETE/MERGE), each
+     * approved by the user in the MCP client. A read-only safe mode or a
+     * read-only SQLite file caps it at AIRead.
+     */
+    AIWrite = "write",
+};
+
+/**
  * Connection is a saved connection. It never contains a password;
  * HasPassword reports whether one is kept in the SecretStore.
  */
@@ -33,6 +66,12 @@ export interface Connection {
      * SafeConfirm for production-tagged connections.
      */
     "safeMode": SafeMode;
+
+    /**
+     * AIAccess is what the MCP server may do with the connection
+     * (defaults to AIOff, see Normalize and EffectiveAIAccess).
+     */
+    "aiAccess": AIAccess;
 
     /**
      * Optional, added in later milestones; nil means "not configured".

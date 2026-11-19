@@ -1,7 +1,7 @@
 import type React from 'react'
 import { KeyboardEvent, RefObject, useMemo } from 'react'
 import { EngineBadge } from '../../components/EngineLogo'
-import { Connection, KIND_LABELS, TAGS, connectionColor, connectionSummary } from './types'
+import { Connection, KIND_LABELS, TAGS, connectionColor, connectionSummary, effectiveAIAccess } from './types'
 
 export interface ConnectionListProps {
   connections: Connection[]
@@ -119,6 +119,14 @@ export default function ConnectionList({
                   <span className="connection-name">{c.name}</span>
                   <span className="connection-summary mono">{connectionSummary(c)}</span>
                 </span>
+                {effectiveAIAccess(c) !== 'off' && (
+                  <span
+                    className="ai-badge"
+                    title={effectiveAIAccess(c) === 'write' ? 'AI assistants can read and (with your approval) change data' : 'AI assistants can read this database'}
+                  >
+                    AI
+                  </span>
+                )}
                 {c.tag !== 'none' && tag && (
                   <span className="tag-label" style={{ '--tag': tag.color } as React.CSSProperties}>
                     {tag.label}

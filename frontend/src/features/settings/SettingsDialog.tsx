@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { shortcutLabel } from '../../lib/mod'
 import { useSettings } from '../../stores/settings'
 import { useUpdate } from '../../stores/update'
+import McpSetupSection from './McpSetup'
 import { DEFAULT_SETTINGS, LIMITS, type Settings, type ThemeSetting } from './types'
 
 export interface SettingsDialogProps {
@@ -153,6 +154,9 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
               <input type="checkbox" checked={draft.csvExport.bom} onChange={(e) => setCsv('bom', e.target.checked)} /> UTF-8 BOM (Excel)
             </label>
           </div>
+
+          <h3 className="form-section">AI assistants (MCP)</h3>
+          <McpSetupSection />
         </div>
         {error && (
           <p className="error" role="alert">

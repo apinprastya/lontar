@@ -66,6 +66,44 @@ func (m SafeMode) Valid() bool {
 	return false
 }
 
+// AIAccess is what an AI assistant connected through Lontar's MCP server
+// (`lontar mcp`) may do with a connection. It is "off" unless the user
+// enables it for the connection; a missing value (connections saved before
+// it existed) means off.
+type AIAccess string
+
+// AI access levels.
+const (
+	// AIOff: the connection is invisible to the MCP server.
+	AIOff AIAccess = "off"
+	// AIRead: schema introspection and read-only queries, on a pool that
+	// the database itself keeps read-only.
+	AIRead AIAccess = "read"
+	// AIWrite: AIRead plus data changes (INSERT/UPDATE/DELETE/MERGE), each
+	// approved by the user in the MCP client. A read-only safe mode or a
+	// read-only SQLite file caps it at AIRead.
+	AIWrite AIAccess = "write"
+)
+
+// AIAccessLevels lists the valid levels in display order.
+var AIAccessLevels = []AIAccess{AIOff, AIRead, AIWrite}
+
+// Valid reports whether a is a known level.
+func (a AIAccess) Valid() bool { return slices.Contains(AIAccessLevels, a) }
+
+// EffectiveAIAccess is the access the MCP server grants: AIAccess, capped
+// at AIRead when the connection itself is read-only.
+func (c Connection) EffectiveAIAccess() AIAccess {
+	a := c.AIAccess
+	if !a.Valid() {
+		return AIOff
+	}
+	if a == AIWrite && (c.SafeMode == SafeReadOnly || (c.Kind.IsFileBased() && c.ReadOnly)) {
+		return AIRead
+	}
+	return a
+}
+
 // SSH authentication methods (SSHConfig.AuthMethod).
 const (
 	SSHAuthPassword = "password"
@@ -159,6 +197,9 @@ type Connection struct {
 	// SafeMode defaults to SafeOff (Normalize). The UI suggests
 	// SafeConfirm for production-tagged connections.
 	SafeMode SafeMode `json:"safeMode"`
+	// AIAccess is what the MCP server may do with the connection
+	// (defaults to AIOff, see Normalize and EffectiveAIAccess).
+	AIAccess AIAccess `json:"aiAccess"`
 
 	// Optional, added in later milestones; nil means "not configured".
 	SSH *SSHConfig `json:"ssh,omitempty"`
@@ -237,6 +278,9 @@ func (c *Connection) Normalize() {
 	if c.SafeMode == "" {
 		c.SafeMode = SafeOff
 	}
+	if c.AIAccess == "" {
+		c.AIAccess = AIOff
+	}
 	if c.Kind.IsFileBased() {
 		c.Host, c.Port, c.User, c.Database = "", 0, "", ""
 		// No network: SSH and SSL do not apply.
@@ -301,6 +345,8 @@ func (c *Connection) Validate() error {
 		return invalid("tag", "unknown tag %q", c.Tag)
 	case !c.SafeMode.Valid():
 		return invalid("safeMode", "unknown safe mode %q", c.SafeMode)
+	case !c.AIAccess.Valid():
+		return invalid("aiAccess", "unknown AI access level %q", c.AIAccess)
 	case c.Color != "" && !colorRe.MatchString(c.Color):
 		return invalid("color", "colour must look like #rrggbb")
 	}

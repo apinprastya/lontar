@@ -10,6 +10,17 @@
 // @ts-ignore: Unused imports
 import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
+/**
+ * MCPSetup returns the commands that connect Claude to this installation.
+ */
+export function MCPSetup(): $CancellablePromise<$models.MCPSetup> {
+    return $Call.ByID(3634904239);
+}
+
 /**
  * Platform returns the operating system the app is running on
  * ("linux", "windows" or "darwin").

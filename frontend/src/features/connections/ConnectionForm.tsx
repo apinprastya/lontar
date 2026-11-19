@@ -8,6 +8,7 @@ import HostKeyDialog from './HostKeyDialog'
 import JumpHosts, { afterSave, hopSecrets, toHopDrafts, toHops, validateHops, type HopDraft, type HopErrors } from './JumpHosts'
 import { dialogApi, type FileFilter } from './dialogApi'
 import {
+  AI_ACCESS,
   Connection,
   DriverInfo,
   EXTRA_COLORS,
@@ -16,8 +17,10 @@ import {
   TAGS,
   Tag,
   connectionColor,
+  effectiveAIAccess,
   isFileBased,
   sslModes,
+  type AIAccess,
   type SSHAuthMethod,
   type SSLMode,
   type Secrets,
@@ -52,6 +55,7 @@ interface Draft {
   tag: Tag
   color: string
   safeMode: SafeMode
+  aiAccess: AIAccess
   sshEnabled: boolean
   sshHost: string
   sshPort: string
@@ -109,6 +113,7 @@ function toDraft(c: Connection | undefined, drivers: DriverInfo[]): Draft {
     tag: c?.tag ?? 'none',
     color: c?.color ?? '',
     safeMode: c?.safeMode ?? 'off',
+    aiAccess: c?.aiAccess ?? 'off',
     sshEnabled: c?.ssh?.enabled ?? false,
     sshHost: c?.ssh?.host ?? '',
     sshPort: String(c?.ssh?.port || 22),
@@ -204,6 +209,7 @@ function toConnection(d: Draft, initial: Connection | undefined): Connection {
     tag: d.tag,
     color: d.color,
     safeMode: d.safeMode,
+    aiAccess: d.aiAccess,
     ssh: file
       ? null
       : {
@@ -786,6 +792,23 @@ export default function ConnectionForm({
               ))}
             </select>
             <span className="hint">{SAFE_MODES.find((m) => m.value === draft.safeMode)?.hint}</span>
+          </div>
+
+          <label htmlFor={field('aiAccess')}>AI access (MCP)</label>
+          <div className="field">
+            <select id={field('aiAccess')} value={draft.aiAccess} onChange={(e) => update('aiAccess', e.target.value as AIAccess)}>
+              {AI_ACCESS.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            <span className="hint">
+              {AI_ACCESS.find((a) => a.value === draft.aiAccess)?.hint}
+              {draft.aiAccess === 'write' &&
+                effectiveAIAccess({ aiAccess: draft.aiAccess, safeMode: draft.safeMode, kind: draft.kind, readOnly: draft.readOnly }) === 'read' &&
+                ' This connection is read-only, so Claude gets read access only.'}
+            </span>
           </div>
 
           <span id={`${uid}-color-label`}>Colour</span>

@@ -118,6 +118,11 @@ export default function HistoryPanel({ api, connectionId, refreshKey, onInsert, 
             >
               <span className="history-sql mono">{firstLine(e.sql, 200)}</span>
               <span className="history-meta">
+                {e.source === 'mcp' && (
+                  <span className="history-ai" title="Run by an AI assistant through Lontar's MCP server">
+                    AI
+                  </span>
+                )}
                 {e.isError && (
                   <span className="history-err" title={e.error} aria-label="failed">
                     ✗

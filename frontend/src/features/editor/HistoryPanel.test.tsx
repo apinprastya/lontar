@@ -27,6 +27,14 @@ describe('HistoryPanel', () => {
     api = fakeEditorApi()
     api.historyList.mockResolvedValue([entry(2, 'SELECT * FROM users'), entry(1, 'SELEC 1', { isError: true, error: 'syntax error' })] as never)
   })
+
+  it('marks queries run by an AI assistant', async () => {
+    api.historyList.mockResolvedValue([entry(3, 'SELECT 1', { source: 'mcp' }), entry(2, 'SELECT 2', { source: '' })] as never)
+    render(<HistoryPanel {...props()} />)
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
+    expect(screen.getAllByText('AI')).toHaveLength(1)
+    expect(screen.getByText('AI')).toHaveAttribute('title', expect.stringContaining('MCP'))
+  })
   afterEach(() => vi.useRealTimers())
 
   it('lists, searches and reloads entries', async () => {

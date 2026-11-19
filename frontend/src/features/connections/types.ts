@@ -25,6 +25,8 @@ export interface Connection {
   color?: string
   /** Guards against accidental writes; "off" when absent. */
   safeMode?: SafeMode
+  /** What AI assistants may do through `lontar mcp`; "off" when absent. */
+  aiAccess?: AIAccess
   ssh?: SSHConfig | null
   ssl?: SSLConfig | null
   /** Set by the backend; the password itself never reaches the frontend. */
@@ -34,6 +36,34 @@ export interface Connection {
   hasSshPassphrase?: boolean
   createdAt: string
   updatedAt: string
+}
+
+/** What an AI assistant connected through Lontar's MCP server may do. */
+export type AIAccess = 'off' | 'read' | 'write'
+
+export const AI_ACCESS: { value: AIAccess; label: string; hint: string }[] = [
+  { value: 'off', label: 'Off', hint: 'Not visible to AI assistants' },
+  {
+    value: 'read',
+    label: 'Read',
+    hint: 'Claude can read the schema and run read-only queries. Query results are sent to the AI provider.',
+  },
+  {
+    value: 'write',
+    label: 'Read and write',
+    hint: 'Claude can also change data (INSERT, UPDATE, DELETE), each change approved by you first. Query results are sent to the AI provider.',
+  },
+]
+
+/**
+ * The access the MCP server grants (store.Connection.EffectiveAIAccess):
+ * write is capped at read when the connection itself is read-only.
+ */
+export function effectiveAIAccess(c: Pick<Connection, 'aiAccess' | 'safeMode' | 'kind' | 'readOnly'>): AIAccess {
+  const a = c.aiAccess ?? 'off'
+  if (!AI_ACCESS.some((x) => x.value === a)) return 'off'
+  if (a === 'write' && (c.safeMode === 'readonly' || (isFileBased(c.kind) && c.readOnly))) return 'read'
+  return a
 }
 
 export type SSHAuthMethod = 'password' | 'key' | 'agent'

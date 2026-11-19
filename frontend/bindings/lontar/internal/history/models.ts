@@ -28,4 +28,10 @@ export interface Entry {
      * Truncated reports that SQL was cut to MaxSQLBytes.
      */
     "truncated": boolean;
+
+    /**
+     * Source is who ran the script: SourceEditor ("", the SQL editor) or
+     * SourceMCP (an AI assistant through `lontar mcp`).
+     */
+    "source": string;
 }

@@ -44,6 +44,7 @@ export type {
     FileFilter,
     ImportResult,
     Location,
+    MCPSetup,
     SQLRunResult,
     SessionInfo,
     SettingsState,

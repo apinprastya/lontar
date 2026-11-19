@@ -18,6 +18,8 @@ var Version = DevVersion
 // AppService exposes basic application metadata to the frontend.
 type AppService struct {
 	goos string
+	// mcp is the environment MCPSetup reads (zero: the real one).
+	mcp mcpEnv
 }
 
 // NewAppService returns an AppService that reports the host platform.
