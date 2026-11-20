@@ -30,6 +30,10 @@ export const updateApi = {
     if (!info) throw new Error('no update information')
     return info as unknown as UpdateInfo
   },
+  /** The scheduled check; null for a development build (GitHub is not asked). */
+  async autoCheck(): Promise<UpdateInfo | null> {
+    return ((await UpdateService.AutoCheck()) ?? null) as unknown as UpdateInfo | null
+  },
   install: () => UpdateService.Install() as Promise<void>,
   cancel: () => UpdateService.Cancel() as Promise<boolean>,
   restart: () => UpdateService.Restart() as Promise<void>,

@@ -160,7 +160,14 @@ func TestUpdateServiceNotNewerAndBlockers(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if info, err := s.AutoCheck(ctx); err != nil || info == nil || info.Available {
+		t.Fatalf("auto check same version: %+v %v", info, err)
+	}
+
 	Version = DevVersion
+	if info, err := s.AutoCheck(ctx); err != nil || info != nil {
+		t.Fatalf("auto check dev build: %+v %v", info, err)
+	}
 	info, _ = s.Check(ctx)
 	if !info.Available || info.CanInstall || !strings.Contains(info.Reason, "development") {
 		t.Fatalf("dev: %+v", info)

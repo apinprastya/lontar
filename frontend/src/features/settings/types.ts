@@ -29,6 +29,8 @@ export interface Settings {
   csvExport: CsvDefaults
   confirmCloseDirtyQuery: boolean
   sqlFormat: SqlFormatSettings
+  /** Check for, and install, new releases in the background. */
+  autoUpdate: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -40,6 +42,7 @@ export const DEFAULT_SETTINGS: Settings = {
   csvExport: { delimiter: ',', header: true, quote: '"', null: 'empty', nullText: '', crlf: false, bom: false },
   confirmCloseDirtyQuery: false,
   sqlFormat: { keywordCase: 'upper', indent: 2 },
+  autoUpdate: true,
 }
 
 export const LIMITS = {

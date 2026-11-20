@@ -700,6 +700,7 @@ versioned. You can set:
   saved in its `.sql` file is not asked about.
 - **SQL format:** keyword case (UPPER, lower or as typed) and indent (2 or 4
   spaces) of **Format** in the SQL editor.
+- **Install updates automatically** (on by default; see "Updates").
 
 The dialog also shows how to connect Claude to Lontar (see "AI assistants
 (MCP)").
@@ -731,10 +732,26 @@ replaced.
 
 ## Updates
 
-Lontar never checks for updates on its own. To check, use **Check for
-updates…** in Settings or in the command palette. It asks GitHub Releases for
-the latest **stable** release (pre-releases are never offered) and shows its
-version and release notes.
+Lontar asks GitHub Releases for the latest **stable** release (pre-releases
+are never offered) shortly after it starts and then every 6 hours.
+
+- If a newer version exists and this installation can update itself (see the
+  table below), Lontar downloads, verifies and installs it in the background
+  and shows a small notice: **Restart…** opens the update dialog, where
+  **Restart now** switches to the new version. If you ignore it, the new
+  version runs the next time you start Lontar.
+- If this installation cannot update itself (`.deb`, `.rpm`), the notice only
+  says that a new version is available; **Details** shows why and links to
+  the release page. A dismissed notice is not shown again for that version
+  until Lontar restarts.
+- Up to date, offline or rate limited: nothing is shown. Development builds
+  never check on their own.
+
+Turn this off with **Install updates automatically** in Settings (on by
+default). Lontar then only checks when you ask.
+
+To check by hand, use **Check for updates…** in Settings or in the command
+palette. It shows the latest version and its release notes.
 
 If a newer version exists, **Download and install** downloads it in the
 background and shows the progress (**Cancel download** stops it). Lontar

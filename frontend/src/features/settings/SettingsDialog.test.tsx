@@ -32,6 +32,8 @@ describe('SettingsDialog', () => {
     await user.clear(max)
     await user.type(max, '2000')
     await user.click(screen.getByRole('checkbox', { name: /Ask before closing/ }))
+    expect(screen.getByRole('checkbox', { name: 'Install updates automatically' })).toBeChecked()
+    await user.click(screen.getByRole('checkbox', { name: 'Install updates automatically' }))
     await user.selectOptions(screen.getByLabelText('Delimiter'), ';')
     await user.selectOptions(screen.getByLabelText('NULL as'), 'custom')
     await user.type(screen.getByLabelText('NULL text'), 'NULL')
@@ -48,6 +50,7 @@ describe('SettingsDialog', () => {
       gridPageSize: 500,
       editorMaxRows: 2000,
       confirmCloseDirtyQuery: true,
+      autoUpdate: false,
       csvExport: { delimiter: ';', header: false, quote: '"', null: 'custom', nullText: 'NULL', crlf: true, bom: true },
       sqlFormat: { keywordCase: 'lower', indent: 4 },
     })

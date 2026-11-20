@@ -70,6 +70,13 @@ export interface Settings {
      * SQLFormat configures Format in the SQL editor.
      */
     "sqlFormat": SQLFormat;
+
+    /**
+     * AutoUpdate checks for a new release at startup and every few hours,
+     * and installs it in the background when this installation can update
+     * itself. Missing in older files: on.
+     */
+    "autoUpdate": boolean;
 }
 
 /**

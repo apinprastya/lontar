@@ -99,6 +99,7 @@ export const SettingsService = {
 
 export const UpdateService = {
   Check: vi.fn<() => Promise<unknown>>(),
+  AutoCheck: vi.fn<() => Promise<unknown>>(),
   Install: vi.fn<() => Promise<void>>(),
   Cancel: vi.fn<() => Promise<boolean>>(),
   Restart: vi.fn<() => Promise<void>>(),
