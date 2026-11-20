@@ -38,8 +38,9 @@ type UpdateInfo struct {
 // ReleasesPage is where every release is listed.
 const ReleasesPage = "https://github.com/" + update.Repo + "/releases"
 
-// UpdateService checks for, installs and restarts into new releases. It
-// only acts when the user asks (no background checks).
+// UpdateService checks for, installs and restarts into new releases. The
+// frontend calls Check when the user asks and AutoCheck on its schedule
+// (when the autoUpdate setting is on); Install runs only when called.
 type UpdateService struct {
 	updater *update.Updater
 	events  Emitter
@@ -96,6 +97,15 @@ func (s *UpdateService) Check(ctx context.Context) (*UpdateInfo, error) {
 	info.Reason = s.installBlocker()
 	info.CanInstall = info.Available && info.Reason == ""
 	return info, nil
+}
+
+// AutoCheck is Check for the automatic background check. A development
+// build never updates itself, so it returns nil without asking GitHub.
+func (s *UpdateService) AutoCheck(ctx context.Context) (*UpdateInfo, error) {
+	if update.IsDev(Version) {
+		return nil, nil
+	}
+	return s.Check(ctx)
 }
 
 // Install downloads, verifies and installs the release found by the last

@@ -106,6 +106,12 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
             a query tab with unrun changes
           </label>
 
+          <span />
+          <label className="checks">
+            <input type="checkbox" checked={draft.autoUpdate ?? true} onChange={(e) => set('autoUpdate', e.target.checked)} /> Install updates
+            automatically
+          </label>
+
           <h3 className="form-section">SQL format</h3>
           <label htmlFor={id('kwcase')}>Keyword case</label>
           <select id={id('kwcase')} value={fmt.keywordCase} onChange={(e) => setFmt('keywordCase', e.target.value as Settings['sqlFormat']['keywordCase'])}>

@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import Welcome from '../features/connections/Welcome'
 import SettingsDialog from '../features/settings/SettingsDialog'
+import { useAutoUpdate } from '../features/update/autoUpdate'
 import UpdateDialog from '../features/update/UpdateDialog'
+import UpdateNotice from '../features/update/UpdateNotice'
 import Workspace from '../features/workspace/Workspace'
 import { matchesShortcut, modLabel } from '../lib/mod'
 import { useConnections } from '../stores/connections'
@@ -60,7 +62,9 @@ export default function App() {
   const session = useConnections((s) => s.session)
   const settingsOpen = useSettings((s) => s.open)
   const updateOpen = useUpdate((s) => s.open)
+  const autoUpdate = useSettings((s) => s.loaded && s.settings.autoUpdate !== false)
   useAppearance(platform, Boolean(session))
+  useAutoUpdate(autoUpdate)
 
   if (session) {
     // The workspace brings its own sidebar, toolbar and status bar.
@@ -69,6 +73,7 @@ export default function App() {
         <Workspace platform={platform} />
         {settingsOpen && <SettingsDialog platform={platform} />}
         {updateOpen && <UpdateDialog />}
+        <UpdateNotice />
       </div>
     )
   }
@@ -101,6 +106,7 @@ export default function App() {
       </footer>
       {settingsOpen && <SettingsDialog platform={platform} />}
       {updateOpen && <UpdateDialog />}
+      <UpdateNotice />
     </div>
   )
 }

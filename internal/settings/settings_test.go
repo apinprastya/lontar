@@ -15,7 +15,7 @@ func TestDefaultsAndRoundTrip(t *testing.T) {
 		t.Fatalf("load missing = %+v, %v", got, err)
 	}
 	if d := Defaults(); d.GridPageSize != 300 || d.Theme != ThemeSystem || d.CSV.Delimiter != "," || !d.CSV.Header || d.CSV.CRLF ||
-		d.SQLFormat != (SQLFormat{KeywordCase: KeywordUpper, Indent: 2}) {
+		d.SQLFormat != (SQLFormat{KeywordCase: KeywordUpper, Indent: 2}) || !d.AutoUpdate {
 		t.Fatalf("defaults = %+v", d)
 	}
 	v := Defaults()
@@ -24,6 +24,7 @@ func TestDefaultsAndRoundTrip(t *testing.T) {
 	v.GridPageSize = 500
 	v.EditorMaxRows = 2000
 	v.ConfirmCloseDirtyQuery = true
+	v.AutoUpdate = false
 	v.SQLFormat = SQLFormat{KeywordCase: KeywordLower, Indent: 4}
 	v.CSV = CSV{Delimiter: ";", Header: false, Quote: "'", Null: NullCustom, NullText: "NULL", CRLF: true, BOM: true}
 	saved, err := s.Save(v)
@@ -77,7 +78,7 @@ func TestVersionsAndErrors(t *testing.T) {
 	write(`{"version":1,"theme":"dark","gridPageSize":5}`)
 	got, err := s.Load()
 	if err != nil || got.Theme != ThemeDark || got.GridPageSize != MinPageSize || got.EditorMaxRows != 1000 || !got.CSV.Header ||
-		got.SQLFormat != Defaults().SQLFormat {
+		got.SQLFormat != Defaults().SQLFormat || !got.AutoUpdate {
 		t.Fatalf("partial = %+v, %v", got, err)
 	}
 	write(`{"version":2}`)

@@ -25,7 +25,7 @@ const FileName = "settings.json"
 //
 //	1: M6 (theme, editor font size, grid page size, editor max rows, CSV
 //	   export defaults, confirm closing dirty query tabs); later SQL format
-//	   options (missing in older files: defaults)
+//	   options and automatic updates (missing in older files: defaults)
 const CurrentVersion = 1
 
 // ErrNewerVersion is returned for a settings file written by a newer Lontar.
@@ -92,6 +92,10 @@ type Settings struct {
 	ConfirmCloseDirtyQuery bool `json:"confirmCloseDirtyQuery"`
 	// SQLFormat configures Format in the SQL editor.
 	SQLFormat SQLFormat `json:"sqlFormat"`
+	// AutoUpdate checks for a new release at startup and every few hours,
+	// and installs it in the background when this installation can update
+	// itself. Missing in older files: on.
+	AutoUpdate bool `json:"autoUpdate"`
 }
 
 // Limits.
@@ -111,6 +115,7 @@ func Defaults() Settings {
 		EditorMaxRows:  1000,
 		CSV:            CSV{Delimiter: ",", Header: true, Quote: `"`, Null: NullEmpty},
 		SQLFormat:      SQLFormat{KeywordCase: KeywordUpper, Indent: 2},
+		AutoUpdate:     true,
 	}
 }
 

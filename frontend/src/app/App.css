@@ -3324,3 +3324,23 @@ textarea.cell-editor-input {
   font-family: var(--font-mono);
   font-size: 12px;
 }
+
+/* ---- Update notice (automatic updates) ------------------------------------ */
+
+.update-notice {
+  position: fixed;
+  right: 16px;
+  bottom: 40px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 14px;
+  background: var(--bg-dialog);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
