@@ -10,6 +10,7 @@ import (
 
 	"lontar/internal/appstate"
 	"lontar/internal/migrate"
+	"lontar/internal/spotlight"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -35,6 +36,8 @@ func main() {
 		}
 		return
 	}
+	// macOS: make Lontar.app findable in Spotlight by "db", "sql", "query"…
+	go tagForSpotlight()
 	b := newBackend(dir)
 	app := application.New(appOptions(assets, b))
 	saved, ok := b.state.Window()
@@ -77,5 +80,17 @@ func trackWindow(app *application.App, win *application.WebviewWindow, st *appst
 				win.Center()
 			}
 		})
+	}
+}
+
+// tagForSpotlight writes Spotlight keywords onto the running Lontar.app
+// (once; a no-op elsewhere). A bundle Lontar may not write to only logs.
+func tagForSpotlight() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	if err := spotlight.Ensure(exe); err != nil {
+		log.Printf("spotlight: %v", err)
 	}
 }

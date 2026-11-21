@@ -866,6 +866,18 @@ The packages install `lontar` to `/usr/bin`, a desktop entry
 Lontar stores passwords in its encrypted file instead (see "Saved connections
 and passwords").
 
+**Finding Lontar in Spotlight (macOS).** Besides its name, Spotlight finds
+Lontar by what it does: "db", "database", "sql", "query", "postgres",
+"mysql", "mariadb", "sqlite" and similar. Lontar writes these keywords onto
+its own `Lontar.app` the first time it starts (and again after an update
+replaces the bundle), as Spotlight metadata (`kMDItemKeywords`) and a Finder
+comment. The comment is only added when the app has none, so one you wrote
+in **Get Info → Comments** is kept; anything you write there is searchable
+too. The metadata sits on the bundle folder, outside the code signature. If
+Lontar may not write to the bundle (installed by another user, or still
+running from the download before being moved to Applications), it just
+skips this.
+
 **Windows installer.** It installs **per user** into
 `%LOCALAPPDATA%\Programs\Lontar` (no administrator prompt), adds a Start-menu
 and a desktop shortcut and an "Apps & features" entry with an uninstaller.
