@@ -686,26 +686,26 @@ background, after asking if it has staged edits that were not committed.
 
 ## Settings and themes
 
-**Settings** (Mod+, or the status bar on the start screen) are stored in
-`settings.json` next to `connections.json`. It is written atomically and
-versioned. You can set:
+**Settings** (Mod+, or the gear button at the bottom left of the status bar)
+are stored in `settings.json` next to `connections.json`. It is written
+atomically and versioned. The dialog lists its sections on the left (Up/Down
+move between them) and reopens on the one you used last:
 
-- **Theme:** System (follows the OS setting live), Dark or Light. The grid,
-  editor and structure views switch too.
-- **Editor font size.**
-- **Rows per table page** (default 300) and the editor's default **max
-  rows** (1,000). Both apply to new tabs.
-- **CSV export defaults.**
-- **Ask before closing a query tab with unrun changes.** A tab whose text is
-  saved in its `.sql` file is not asked about.
-- **SQL format:** keyword case (UPPER, lower or as typed) and indent (2 or 4
-  spaces) of **Format** in the SQL editor.
-- **Install updates automatically** (on by default; see "Updates").
+- **Appearance:** the **theme**, System (follows the OS setting live), Dark or
+  Light (the grid, editor and structure views switch too), and the **editor
+  font size**.
+- **SQL editor:** the default **max rows** (1,000) of new query tabs; **ask
+  before closing a query tab with unrun changes** (a tab whose text is saved
+  in its `.sql` file is not asked about); and **Format SQL**: keyword case
+  (UPPER, lower or as typed) and indent (2 or 4 spaces) of **Format**.
+- **Data & export:** **rows per page** of new table tabs (default 300) and
+  the **CSV export defaults**.
+- **AI assistants:** how to connect Claude to Lontar (see "AI assistants
+  (MCP)").
+- **Updates:** the installed version, **Install updates automatically** (on
+  by default) and **Check for updates…** (see "Updates").
 
-The dialog also shows how to connect Claude to Lontar (see "AI assistants
-(MCP)").
-
-The **Check for updates…** button in the dialog is described in "Updates".
+Changes in every section are kept until you **Save** or **Cancel**.
 
 ### Window and layout
 

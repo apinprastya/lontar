@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TabState } from '../../stores/workspace'
+import { useSettings } from '../../stores/settings'
 import StatusBar, { pendingText, rowRangeText } from './StatusBar'
 
 const rows = (n: number) => Array.from({ length: n }, () => [])
@@ -100,5 +101,21 @@ describe('pending changes in the status bar', () => {
     rerender(<StatusBar tab={null} serverVersion="v" onPrev={vi.fn()} onNext={vi.fn()} pending={{ ...pending, count: 0 }} />)
     expect(screen.queryByTestId('pending')).toBeNull()
     expect(pendingText(1200)).toBe('1,200 pending changes')
+  })
+
+  it('opens the settings from the left of the bar', async () => {
+    useSettings.getState().setOpen(false)
+    render(<StatusBar tab={null} serverVersion="v" onPrev={vi.fn()} onNext={vi.fn()} settingsHint="Ctrl+," />)
+    const button = screen.getByRole('button', { name: 'Settings' })
+    expect(button).toHaveAttribute('title', 'Settings (Ctrl+,)')
+    expect(screen.getByRole('status').firstElementChild).toBe(button)
+    await userEvent.setup().click(button)
+    expect(useSettings.getState().open).toBe(true)
+    useSettings.getState().setOpen(false)
+  })
+
+  it('titles the settings button without a hint', () => {
+    render(<StatusBar tab={null} serverVersion="v" onPrev={vi.fn()} onNext={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('title', 'Settings')
   })
 })

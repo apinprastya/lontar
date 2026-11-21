@@ -5,7 +5,8 @@ import { useAutoUpdate } from '../features/update/autoUpdate'
 import UpdateDialog from '../features/update/UpdateDialog'
 import UpdateNotice from '../features/update/UpdateNotice'
 import Workspace from '../features/workspace/Workspace'
-import { matchesShortcut, modLabel } from '../lib/mod'
+import { SettingsIcon } from '../components/icons'
+import { matchesShortcut, modLabel, shortcutLabel } from '../lib/mod'
 import { useConnections } from '../stores/connections'
 import { bindAppearance, useSettings, watchSystemTheme } from '../stores/settings'
 import { useUpdate } from '../stores/update'
@@ -71,7 +72,7 @@ export default function App() {
     return (
       <div className="app-shell app-shell-workspace" data-platform={platform}>
         <Workspace platform={platform} />
-        {settingsOpen && <SettingsDialog platform={platform} />}
+        {settingsOpen && <SettingsDialog platform={platform} version={info.status === 'ready' ? info.version : undefined} />}
         {updateOpen && <UpdateDialog />}
         <UpdateNotice />
       </div>
@@ -90,6 +91,14 @@ export default function App() {
       </main>
 
       <footer className="statusbar" role="status">
+        <button
+          type="button"
+          className="statusbar-button statusbar-settings"
+          title={`Settings (${shortcutLabel(platform, ',')})`}
+          onClick={() => useSettings.getState().setOpen(true)}
+        >
+          <SettingsIcon /> Settings
+        </button>
         {info.status === 'loading' && <span>Loading…</span>}
         {info.status === 'ready' && (
           <>
@@ -99,12 +108,8 @@ export default function App() {
           </>
         )}
         {info.status === 'error' && <span className="statusbar-error">Backend unavailable: {info.error}</span>}
-        <span className="spacer" />
-        <button type="button" className="statusbar-button" onClick={() => useSettings.getState().setOpen(true)}>
-          Settings
-        </button>
       </footer>
-      {settingsOpen && <SettingsDialog platform={platform} />}
+      {settingsOpen && <SettingsDialog platform={platform} version={info.status === 'ready' ? info.version : undefined} />}
       {updateOpen && <UpdateDialog />}
       <UpdateNotice />
     </div>
