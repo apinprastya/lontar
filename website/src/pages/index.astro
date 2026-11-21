@@ -16,6 +16,9 @@ const groups = [
       'Each query tab keeps its own connection, so BEGIN, SET and temp tables carry over',
       'Follow a foreign key to the referenced row with one click',
       'Structure view: columns, indexes, foreign keys, checks, triggers and DDL',
+      'Sidebar lists functions, procedures, sequences, types, triggers and events, each with its DDL',
+      'Explain and Explain analyze show the query plan as a collapsible tree',
+      'Format SQL, and open and save .sql files',
     ],
   },
   {
@@ -34,7 +37,7 @@ const groups = [
     intro: 'Production databases deserve a second look, and Lontar gives it to them.',
     items: [
       'Safe mode per connection: off, confirm every write, or read-only in the database itself',
-      'SSH tunnels through a bastion, with host keys checked against known_hosts',
+      'SSH tunnels through a bastion or a chain of up to three jump hosts, with host keys checked on every hop',
       'SSL/TLS with CA and host name verification, and client certificates',
       'Passwords live in the system keychain, or in an encrypted file when there is none',
       'Several connections open at once; switch between them from the keyboard',
@@ -45,10 +48,30 @@ const groups = [
     intro: 'Get a table or a query result into a file, or a file into a table.',
     items: [
       'Export to CSV, JSON or SQL INSERT statements',
-      'Import CSV files into an existing table',
+      'Import CSV, JSON and NDJSON files into an existing table',
+      'Run a SQL file or a dump (pg_dump, mysqldump, sqlite3 .dump) with progress, cancel and safe-mode checks',
       'Copy selected cells as tab-separated text, paste ranges back in',
       'Command palette and keyboard shortcuts for everything',
       'Light and dark themes',
+    ],
+  },
+  {
+    title: 'Work with AI assistants',
+    intro: 'Let an assistant look at your data, on your terms.',
+    items: [
+      'Built-in MCP server (lontar mcp) serves the connections you enable for AI access',
+      'Reads run in read-only transactions that are rolled back',
+      'Writes are DML only and need your approval each time',
+      'Every query is recorded in the history',
+    ],
+  },
+  {
+    title: 'Stay up to date',
+    intro: 'Updates are optional and verified.',
+    items: [
+      'Check for updates on demand, or let Lontar check automatically',
+      'Downloads are verified against an ed25519-signed checksum list before install',
+      'A sectioned settings dialog keeps preferences in one place',
     ],
   },
 ];
