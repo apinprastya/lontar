@@ -340,3 +340,16 @@ export function EventIcon(p: IconProps) {
     </Svg>
   )
 }
+
+export function SettingsIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="8" cy="8" r="2" {...stroke} />
+      <path
+        d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7L3.4 3.4"
+        {...stroke}
+      />
+      <circle cx="8" cy="8" r="4.6" {...stroke} />
+    </Svg>
+  )
+}

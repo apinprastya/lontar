@@ -2410,9 +2410,103 @@ textarea.cell-editor-input {
   }
 }
 
-.export-dialog,
-.settings-dialog {
+.export-dialog {
   width: min(600px, calc(100vw - 32px));
+}
+
+/* Settings: sections on the left, the selected one on the right. A fixed
+   height keeps the dialog from jumping when switching sections. */
+.settings-dialog {
+  width: min(760px, calc(100vw - 32px));
+  height: min(540px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  margin: 0 -22px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.settings-nav button {
+  border: none;
+  background: none;
+  text-align: left;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-weight: 400;
+}
+
+.settings-nav button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.settings-nav button.active {
+  background: var(--bg-selected);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.settings-panel {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px 22px 20px;
+}
+
+.settings-panel h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.settings-description {
+  margin: 2px 0 16px;
+}
+
+.settings-updates {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-updates p {
+  margin: 0;
+}
+
+.settings-dialog .dialog-actions {
+  margin-top: 14px;
+}
+
+@media (max-width: 560px) {
+  .settings-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .settings-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
 }
 
 /* ---- Host key dialog ------------------------------------------------------ */
@@ -2780,6 +2874,13 @@ textarea.cell-editor-input {
   border-radius: 4px;
   font-size: 12px;
   font-weight: 400;
+}
+
+.statusbar-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: -6px;
 }
 
 .statusbar-button:hover:not(:disabled) {

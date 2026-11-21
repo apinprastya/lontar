@@ -30,6 +30,7 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `internal/store/`, `internal/settings/`, `internal/history/`, `internal/migrate/` | Saved connections + secrets, settings, query history, data migration from the old `dbedit` name |
 | `internal/appstate/`, `window.go` | `state.json`: main window bounds (tracked in `window.go`, wired in `main.go`) and UI values the frontend keeps via `UIStateService` (`frontend/src/lib/uiState.ts`, `panelLayout.ts`) |
 | `internal/update/` | Self-update from GitHub Releases (on demand, or scheduled by `frontend/src/features/update/autoUpdate.ts` when the `autoUpdate` setting is on): ed25519-signed `SHA256SUMS`, per-install replacement (AppImage, exe, .app) |
+| `internal/spotlight/` | macOS: writes Spotlight keywords and a Finder comment (binary-plist xattrs) onto the running `Lontar.app` at start-up, so "db"/"sql"/"query" find it |
 | `internal/values/` | Cell value model shared by grid, edits and export |
 | `internal/testutil/`, `internal/sshtest/`, `internal/tlstest/` | Test helpers (containers, in-process SSH servers that can be chained as jump hosts, certificates) |
 | `tools/` | Build helpers (`stamp`, `iconrender`, `calver`, `updatesign`) — a **separate Go module** |

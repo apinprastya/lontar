@@ -1,5 +1,7 @@
 import type { Tab, TabState } from '../../stores/workspace'
 import { activeResultView, type QueryTabState } from '../../stores/queryTabs'
+import { SettingsIcon } from '../../components/icons'
+import { useSettings } from '../../stores/settings'
 import { formatDuration, rowCountText } from '../editor/format'
 
 const fmt = (n: number) => n.toLocaleString('en-US')
@@ -37,16 +39,26 @@ export interface StatusBarProps {
   onPrev(): void
   onNext(): void
   pending?: PendingStatus | null
+  /** Label of the settings shortcut, e.g. "Ctrl+,". */
+  settingsHint?: string
 }
 
 export function pendingText(n: number): string {
   return `${n.toLocaleString('en-US')} pending change${n === 1 ? '' : 's'}`
 }
 
-/** Bottom bar: row range, query time, paging and pending-change actions. */
-export default function StatusBar({ tab, serverVersion, onPrev, onNext, pending }: StatusBarProps) {
+/** Bottom bar: settings, row range, query time, paging and pending-change actions. */
+export default function StatusBar({ tab, serverVersion, onPrev, onNext, pending, settingsHint }: StatusBarProps) {
   return (
     <footer className="statusbar ws-statusbar" role="status">
+      <button
+        type="button"
+        className="statusbar-button statusbar-settings"
+        title={settingsHint ? `Settings (${settingsHint})` : 'Settings'}
+        onClick={() => useSettings.getState().setOpen(true)}
+      >
+        <SettingsIcon /> Settings
+      </button>
       {pending && pending.count > 0 && (
         <span className="pending-actions" data-testid="pending">
           <span className="pending-count">{pendingText(pending.count)}</span>

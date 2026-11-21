@@ -48,6 +48,7 @@ vi.mock('@glideapps/glide-data-grid', async (importOriginal) => {
 })
 
 import { initialConnectionsState, useConnections } from '../../stores/connections'
+import { useSettings } from '../../stores/settings'
 import { ConnectionService, makeConnection, makeSession, resetBindings } from '../../test/mockBindings'
 import type { WorkspaceApi } from './api'
 import type { FetchRequest, Page, TableInfo } from './types'
@@ -280,6 +281,16 @@ describe('Workspace', () => {
     // Middle click closes a tab.
     fireEvent(screen.getByRole('tab', { name: /orders/ }), new MouseEvent('auxclick', { bubbles: true, button: 1 }))
     expect(screen.queryAllByRole('tab')).toHaveLength(0)
+  })
+
+  it('opens the settings from the status bar', async () => {
+    useSettings.getState().setOpen(false)
+    const user = userEvent.setup()
+    render(<Workspace api={api} />)
+    await screen.findByRole('button', { name: /^users/ })
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(useSettings.getState().open).toBe(true)
+    useSettings.getState().setOpen(false)
   })
 
   it('disconnects and refreshes from the toolbar', async () => {

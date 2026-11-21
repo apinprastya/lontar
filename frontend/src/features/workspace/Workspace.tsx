@@ -417,6 +417,7 @@ function WorkspaceView({
       <StatusBar
         tab={tab}
         serverVersion={session.serverVersion}
+        settingsHint={shortcutLabel(platform, ',')}
         onPrev={() => tab?.kind === 'table' && store.getState().prevPage(tab.id)}
         onNext={() => tab?.kind === 'table' && store.getState().nextPage(tab.id)}
         pending={

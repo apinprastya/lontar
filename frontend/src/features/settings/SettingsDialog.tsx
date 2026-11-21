@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { shortcutLabel } from '../../lib/mod'
 import { useSettings } from '../../stores/settings'
 import { useUpdate } from '../../stores/update'
@@ -7,6 +7,8 @@ import { DEFAULT_SETTINGS, LIMITS, type Settings, type ThemeSetting } from './ty
 
 export interface SettingsDialogProps {
   platform?: string
+  /** Application version, shown in the Updates section. */
+  version?: string
 }
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
@@ -22,10 +24,23 @@ export const DELIMITERS: { value: string; label: string }[] = [
   { value: '|', label: 'Pipe (|)' },
 ]
 
+export type SettingsSection = 'appearance' | 'editor' | 'data' | 'ai' | 'updates'
+
+export const SECTIONS: { id: SettingsSection; label: string; description: string }[] = [
+  { id: 'appearance', label: 'Appearance', description: 'Theme and text size.' },
+  { id: 'editor', label: 'SQL editor', description: 'Running queries and formatting SQL.' },
+  { id: 'data', label: 'Data & export', description: 'Table paging and CSV export defaults.' },
+  { id: 'ai', label: 'AI assistants', description: 'Connect Claude to Lontar over MCP.' },
+  { id: 'updates', label: 'Updates', description: 'Check GitHub Releases for a newer version.' },
+]
+
+// The section shown when the dialog opens again in this run.
+let lastSection: SettingsSection = 'appearance'
+
 const clamp = (v: number, [lo, hi]: readonly [number, number]) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : lo)
 
-/** The settings dialog (Mod+,). Changes apply when saved. */
-export default function SettingsDialog({ platform }: SettingsDialogProps) {
+/** The settings dialog (Mod+,): sections on the left, one shown at a time. Changes apply when saved. */
+export default function SettingsDialog({ platform, version }: SettingsDialogProps) {
   const uid = useId()
   const stored = useSettings((s) => s.settings)
   const error = useSettings((s) => s.error)
@@ -33,12 +48,17 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
   const setOpen = useSettings((s) => s.setOpen)
   const [draft, setDraft] = useState<Settings>(stored)
   const [busy, setBusy] = useState(false)
-  const firstRef = useRef<HTMLInputElement>(null)
+  const [section, setSectionState] = useState<SettingsSection>(lastSection)
+  const tabRefs = useRef<Partial<Record<SettingsSection, HTMLButtonElement | null>>>({})
 
   useEffect(() => {
-    firstRef.current?.focus()
+    tabRefs.current[lastSection]?.focus()
   }, [])
 
+  const setSection = (s: SettingsSection) => {
+    lastSection = s
+    setSectionState(s)
+  }
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setDraft((d) => ({ ...d, [k]: v }))
   const setCsv = <K extends keyof Settings['csvExport']>(k: K, v: Settings['csvExport'][K]) =>
     setDraft((d) => ({ ...d, csvExport: { ...d.csvExport, [k]: v } }))
@@ -59,33 +79,30 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
     if (ok) close()
   }
 
+  // Arrow keys, Home and End move between sections (vertical tab list).
+  const onTabKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const i = SECTIONS.findIndex((s) => s.id === section)
+    const next = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: SECTIONS.length - 1 }[e.key]
+    if (next === undefined) return
+    e.preventDefault()
+    const target = SECTIONS[(next + SECTIONS.length) % SECTIONS.length].id
+    setSection(target)
+    tabRefs.current[target]?.focus()
+  }
+
   const id = (name: string) => `${uid}-${name}`
-  return (
-    <div className="dialog-backdrop">
-      <form
-        className="dialog settings-dialog"
-        noValidate
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={id('title')}
-        onSubmit={(e) => {
-          e.preventDefault()
-          void submit()
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault()
-            close()
-          }
-        }}
-      >
-        <h2 id={id('title')}>Settings</h2>
+  const current = SECTIONS.find((s) => s.id === section)!
+
+  let body: ReactNode
+  switch (section) {
+    case 'appearance':
+      body = (
         <div className="form-grid">
           <span id={id('theme')}>Theme</span>
           <div className="segmented" role="radiogroup" aria-labelledby={id('theme')}>
-            {THEMES.map((t, i) => (
+            {THEMES.map((t) => (
               <label key={t.value}>
-                <input ref={i === 0 ? firstRef : undefined} type="radio" name={id('theme')} checked={draft.theme === t.value} onChange={() => set('theme', t.value)} />
+                <input type="radio" name={id('theme')} checked={draft.theme === t.value} onChange={() => set('theme', t.value)} />
                 {t.label}
               </label>
             ))}
@@ -93,11 +110,13 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
 
           <label htmlFor={id('font')}>Editor font size</label>
           <input id={id('font')} type="number" min={LIMITS.fontSize[0]} max={LIMITS.fontSize[1]} value={draft.editorFontSize} onChange={(e) => set('editorFontSize', Number(e.target.value))} />
-
-          <label htmlFor={id('page')}>Rows per table page</label>
-          <input id={id('page')} type="number" min={LIMITS.pageSize[0]} max={LIMITS.pageSize[1]} value={draft.gridPageSize} onChange={(e) => set('gridPageSize', Number(e.target.value))} />
-
-          <label htmlFor={id('maxrows')}>Editor max rows</label>
+        </div>
+      )
+      break
+    case 'editor':
+      body = (
+        <div className="form-grid">
+          <label htmlFor={id('maxrows')}>Max rows</label>
           <input id={id('maxrows')} type="number" min={LIMITS.maxRows[0]} max={LIMITS.maxRows[1]} value={draft.editorMaxRows} onChange={(e) => set('editorMaxRows', Number(e.target.value))} />
 
           <span />
@@ -106,13 +125,7 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
             a query tab with unrun changes
           </label>
 
-          <span />
-          <label className="checks">
-            <input type="checkbox" checked={draft.autoUpdate ?? true} onChange={(e) => set('autoUpdate', e.target.checked)} /> Install updates
-            automatically
-          </label>
-
-          <h3 className="form-section">SQL format</h3>
+          <h4 className="form-section">Format SQL</h4>
           <label htmlFor={id('kwcase')}>Keyword case</label>
           <select id={id('kwcase')} value={fmt.keywordCase} onChange={(e) => setFmt('keywordCase', e.target.value as Settings['sqlFormat']['keywordCase'])}>
             <option value="upper">UPPER</option>
@@ -125,8 +138,16 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
             <option value={2}>2 spaces</option>
             <option value={4}>4 spaces</option>
           </select>
+        </div>
+      )
+      break
+    case 'data':
+      body = (
+        <div className="form-grid">
+          <label htmlFor={id('page')}>Rows per page</label>
+          <input id={id('page')} type="number" min={LIMITS.pageSize[0]} max={LIMITS.pageSize[1]} value={draft.gridPageSize} onChange={(e) => set('gridPageSize', Number(e.target.value))} />
 
-          <h3 className="form-section">CSV export defaults</h3>
+          <h4 className="form-section">CSV export defaults</h4>
           <label htmlFor={id('delim')}>Delimiter</label>
           <select id={id('delim')} value={draft.csvExport.delimiter} onChange={(e) => setCsv('delimiter', e.target.value)}>
             {DELIMITERS.map((d) => (
@@ -160,9 +181,90 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
               <input type="checkbox" checked={draft.csvExport.bom} onChange={(e) => setCsv('bom', e.target.checked)} /> UTF-8 BOM (Excel)
             </label>
           </div>
-
-          <h3 className="form-section">AI assistants (MCP)</h3>
+        </div>
+      )
+      break
+    case 'ai':
+      body = (
+        <div className="form-grid">
           <McpSetupSection />
+        </div>
+      )
+      break
+    case 'updates':
+      body = (
+        <div className="settings-updates">
+          {version && (
+            <p>
+              Installed version <strong className="mono" data-testid="settings-version">v{version}</strong>
+            </p>
+          )}
+          <label className="checks">
+            <input type="checkbox" checked={draft.autoUpdate ?? true} onChange={(e) => set('autoUpdate', e.target.checked)} /> Install updates
+            automatically
+          </label>
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                close()
+                void useUpdate.getState().check()
+              }}
+            >
+              Check for updates…
+            </button>
+          </div>
+        </div>
+      )
+      break
+  }
+
+  return (
+    <div className="dialog-backdrop">
+      <form
+        className="dialog settings-dialog"
+        noValidate
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={id('title')}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void submit()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            close()
+          }
+        }}
+      >
+        <h2 id={id('title')}>Settings</h2>
+        <div className="settings-body">
+          <div className="settings-nav" role="tablist" aria-orientation="vertical" aria-label="Settings sections" onKeyDown={onTabKey}>
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                ref={(el) => {
+                  tabRefs.current[s.id] = el
+                }}
+                id={id(`tab-${s.id}`)}
+                type="button"
+                role="tab"
+                aria-selected={section === s.id}
+                aria-controls={id('panel')}
+                tabIndex={section === s.id ? 0 : -1}
+                className={section === s.id ? 'active' : undefined}
+                onClick={() => setSection(s.id)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <div className="settings-panel" role="tabpanel" id={id('panel')} aria-labelledby={id(`tab-${section}`)}>
+            <h3>{current.label}</h3>
+            <p className="hint settings-description">{current.description}</p>
+            {body}
+          </div>
         </div>
         {error && (
           <p className="error" role="alert">
@@ -172,15 +274,6 @@ export default function SettingsDialog({ platform }: SettingsDialogProps) {
         <div className="dialog-actions">
           <button type="button" onClick={() => setDraft({ ...DEFAULT_SETTINGS })}>
             Restore defaults
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              close()
-              void useUpdate.getState().check()
-            }}
-          >
-            Check for updates…
           </button>
           <span className="spacer" />
           <span className="hint">{shortcutLabel(platform, ',')}</span>
