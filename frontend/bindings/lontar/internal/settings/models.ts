@@ -77,6 +77,20 @@ export interface Settings {
      * itself. Missing in older files: on.
      */
     "autoUpdate": boolean;
+
+    /**
+     * IdleDisconnectMinutes closes the connection (pool and SSH tunnel) of
+     * a session unused for this many minutes; the session stays open and
+     * reconnects on its next use. 0 (the default) never does.
+     */
+    "idleDisconnectMinutes": number;
+
+    /**
+     * ConnectTimeoutSeconds bounds one connect attempt: the SSH tunnel
+     * (every hop), opening the database and pinging it. Missing in older
+     * files: 15.
+     */
+    "connectTimeoutSeconds": number;
 }
 
 /**

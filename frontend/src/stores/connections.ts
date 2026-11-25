@@ -2,7 +2,12 @@ import { create } from 'zustand'
 import { connectionApi } from '../features/connections/api'
 import type { Connection, DriverInfo, Secrets, SessionInfo } from '../features/connections/types'
 import { errorMessage } from '../lib/errors'
+import { onEvent } from '../lib/events'
 import { hostKeyInfo, type HostKeyInfo } from '../lib/hostkey'
+
+/** Go events (services/idle.go) for a session closed while idle, and reopened. */
+export const SESSION_SUSPENDED = 'session:suspended'
+export const SESSION_RESUMED = 'session:resumed'
 
 /** An SSH host key waiting for the user's decision (connect retries after Accept). */
 export interface HostKeyPrompt {
@@ -23,6 +28,11 @@ export interface ConnectionsState {
   sessions: SessionInfo[]
   /** Connection currently being connected to. */
   connectingId: string | null
+  /**
+   * Sessions whose connection was closed while idle (Settings › Connections).
+   * They stay open and reconnect on their next action.
+   */
+  suspended: string[]
 
   load(): Promise<void>
   /** Saves and returns the connection; throws so forms can show the error. */
@@ -50,6 +60,8 @@ export interface ConnectionsState {
    * activates the most recently opened remaining one, if any.
    */
   disconnect(sessionId?: string): Promise<void>
+  /** Records that the backend suspended (true) or resumed (false) a session. */
+  setSuspended(sessionId: string, suspended: boolean): void
   clearError(): void
 }
 
@@ -62,6 +74,7 @@ export const initialConnectionsState = {
   sessions: [] as SessionInfo[],
   connectingId: null as string | null,
   hostKey: null as HostKeyPrompt | null,
+  suspended: [] as string[],
 }
 
 function sortByName(list: Connection[]): Connection[] {
@@ -172,7 +185,7 @@ export const useConnections = create<ConnectionsState>()((set, get) => ({
     set((s) => {
       const sessions = s.sessions.filter((x) => x.id !== id)
       const session = s.session?.id === id ? (sessions[sessions.length - 1] ?? null) : s.session
-      return { sessions, session }
+      return { sessions, session, suspended: s.suspended.filter((x) => x !== id) }
     })
     try {
       await connectionApi.disconnect(id)
@@ -181,7 +194,25 @@ export const useConnections = create<ConnectionsState>()((set, get) => ({
     }
   },
 
+  setSuspended(sessionId, suspended) {
+    set((s) => {
+      const rest = s.suspended.filter((x) => x !== sessionId)
+      if (suspended && !s.sessions.some((x) => x.id === sessionId)) return {}
+      return { suspended: suspended ? [...rest, sessionId] : rest }
+    })
+  },
+
   clearError() {
     set({ error: null })
   },
 }))
+
+/** Follows the backend's idle suspend/resume events; returns the unsubscribe function. */
+export function watchIdleSessions(): () => void {
+  const offSuspended = onEvent<{ sessionId: string }>(SESSION_SUSPENDED, (e) => useConnections.getState().setSuspended(e.sessionId, true))
+  const offResumed = onEvent<{ sessionId: string }>(SESSION_RESUMED, (e) => useConnections.getState().setSuspended(e.sessionId, false))
+  return () => {
+    offSuspended()
+    offResumed()
+  }
+}

@@ -77,6 +77,17 @@ export function SafeModeBadge({ mode }: { mode: string | undefined }) {
   )
 }
 
+/** Shown while the session's connection is closed for idleness (it reconnects on the next action). */
+export function IdleBadge({ sessionId }: { sessionId: string }) {
+  const suspended = useConnections((s) => s.suspended.includes(sessionId))
+  if (!suspended) return null
+  return (
+    <span className="idle-badge" data-testid="idle-badge" title="Disconnected while idle: reconnects on the next action">
+      Idle
+    </span>
+  )
+}
+
 /** Tables for quick open: the current schema's, then other schemas' (loaded when the palette opens). */
 function usePaletteTables(store: WorkspaceStore, api: WorkspaceApi, open: boolean): { tables: PaletteTable[]; loading: boolean } {
   const schema = useWorkspace((s) => s.schema)
@@ -291,6 +302,7 @@ function WorkspaceView({
             badge={
               <>
                 <SafeModeBadge mode={safeMode} />
+                <IdleBadge sessionId={session.id} />
                 {session.tunneled && (
                   <span className="ssh-badge" title={sshBadgeTitle(connection?.ssh)} data-testid="ssh-badge">
                     SSH

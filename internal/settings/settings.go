@@ -25,7 +25,8 @@ const FileName = "settings.json"
 //
 //	1: M6 (theme, editor font size, grid page size, editor max rows, CSV
 //	   export defaults, confirm closing dirty query tabs); later SQL format
-//	   options and automatic updates (missing in older files: defaults)
+//	   options, automatic updates, the idle disconnect and the connect
+//	   timeout (missing in older files: defaults)
 const CurrentVersion = 1
 
 // ErrNewerVersion is returned for a settings file written by a newer Lontar.
@@ -96,6 +97,14 @@ type Settings struct {
 	// and installs it in the background when this installation can update
 	// itself. Missing in older files: on.
 	AutoUpdate bool `json:"autoUpdate"`
+	// IdleDisconnectMinutes closes the connection (pool and SSH tunnel) of
+	// a session unused for this many minutes; the session stays open and
+	// reconnects on its next use. 0 (the default) never does.
+	IdleDisconnectMinutes int `json:"idleDisconnectMinutes"`
+	// ConnectTimeoutSeconds bounds one connect attempt: the SSH tunnel
+	// (every hop), opening the database and pinging it. Missing in older
+	// files: 15.
+	ConnectTimeoutSeconds int `json:"connectTimeoutSeconds"`
 }
 
 // Limits.
@@ -103,6 +112,8 @@ const (
 	MinFontSize, MaxFontSize = 9, 32
 	MinPageSize, MaxPageSize = 10, 5000
 	MinMaxRows, MaxMaxRows   = 1, 50000
+	MinIdle, MaxIdle         = 1, 24 * 60 // idle disconnect, in minutes (0 = off)
+	MinConnect, MaxConnect   = 5, 300     // connect timeout, in seconds
 )
 
 // Defaults returns the default settings.
@@ -116,6 +127,8 @@ func Defaults() Settings {
 		CSV:            CSV{Delimiter: ",", Header: true, Quote: `"`, Null: NullEmpty},
 		SQLFormat:      SQLFormat{KeywordCase: KeywordUpper, Indent: 2},
 		AutoUpdate:     true,
+
+		ConnectTimeoutSeconds: 15,
 	}
 }
 
@@ -143,6 +156,11 @@ func (s *Settings) Normalize() {
 	s.EditorFontSize = clamp(s.EditorFontSize, MinFontSize, MaxFontSize, d.EditorFontSize)
 	s.GridPageSize = clamp(s.GridPageSize, MinPageSize, MaxPageSize, d.GridPageSize)
 	s.EditorMaxRows = clamp(s.EditorMaxRows, MinMaxRows, MaxMaxRows, d.EditorMaxRows)
+	if s.IdleDisconnectMinutes < 0 {
+		s.IdleDisconnectMinutes = 0
+	}
+	s.IdleDisconnectMinutes = clamp(s.IdleDisconnectMinutes, MinIdle, MaxIdle, 0)
+	s.ConnectTimeoutSeconds = clamp(s.ConnectTimeoutSeconds, MinConnect, MaxConnect, d.ConnectTimeoutSeconds)
 	if len([]rune(s.CSV.Delimiter)) != 1 || s.CSV.Delimiter == "\n" || s.CSV.Delimiter == "\r" {
 		s.CSV.Delimiter = d.CSV.Delimiter
 	}

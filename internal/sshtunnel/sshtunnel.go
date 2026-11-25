@@ -150,6 +150,9 @@ type Options struct {
 	// Timeout bounds dialling plus the SSH handshake; 0 means
 	// DefaultTimeout.
 	Timeout time.Duration
+	// TimeoutFunc, when set and positive, replaces Timeout; it is re-read
+	// for every connect (a settings change applies to the next one).
+	TimeoutFunc func() time.Duration
 }
 
 // Dialer opens tunnels.
@@ -180,6 +183,16 @@ func New(opts Options) *Dialer {
 		opts.HostKeys = &HostKeys{}
 	}
 	return &Dialer{opts: opts}
+}
+
+// timeout returns the current connect timeout.
+func (d *Dialer) timeout() time.Duration {
+	if d.opts.TimeoutFunc != nil {
+		if t := d.opts.TimeoutFunc(); t > 0 {
+			return t
+		}
+	}
+	return d.opts.Timeout
 }
 
 // HostKeys returns the dialer's host key store.
@@ -291,7 +304,7 @@ func (d *Dialer) closeChain(chain []*ssh.Client) error {
 // authenticates on every hop. It returns the chain of clients (the last one
 // is connected to cfg's server). Options.Timeout bounds the whole chain.
 func (d *Dialer) connect(ctx context.Context, cfg Config) ([]*ssh.Client, error) {
-	ctx, cancel := context.WithTimeout(ctx, d.opts.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, d.timeout())
 	defer cancel()
 	final := cfg
 	final.Jumps = nil
@@ -360,7 +373,7 @@ func (d *Dialer) connectHop(ctx context.Context, cfg Config, via *ssh.Client) (*
 		Auth:              auth,
 		HostKeyCallback:   cb,
 		HostKeyAlgorithms: algos,
-		Timeout:           d.opts.Timeout,
+		Timeout:           d.timeout(),
 	}
 	var raw net.Conn
 	if via == nil {

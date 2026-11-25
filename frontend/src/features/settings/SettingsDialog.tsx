@@ -24,15 +24,25 @@ export const DELIMITERS: { value: string; label: string }[] = [
   { value: '|', label: 'Pipe (|)' },
 ]
 
-export type SettingsSection = 'appearance' | 'editor' | 'data' | 'ai' | 'updates'
+export type SettingsSection = 'appearance' | 'editor' | 'data' | 'connections' | 'ai' | 'updates'
 
 export const SECTIONS: { id: SettingsSection; label: string; description: string }[] = [
   { id: 'appearance', label: 'Appearance', description: 'Theme and text size.' },
   { id: 'editor', label: 'SQL editor', description: 'Running queries and formatting SQL.' },
   { id: 'data', label: 'Data & export', description: 'Table paging and CSV export defaults.' },
+  { id: 'connections', label: 'Connections', description: 'Connect timeout and closing connections that are not in use.' },
   { id: 'ai', label: 'AI assistants', description: 'Connect Claude to Lontar over MCP.' },
   { id: 'updates', label: 'Updates', description: 'Check GitHub Releases for a newer version.' },
 ]
+
+/** Idle disconnect choices, in minutes (0 = never). */
+export const IDLE_CHOICES = [0, 5, 15, 30, 60, 120, 240]
+
+export function idleLabel(min: number): string {
+  if (min === 0) return 'Never'
+  if (min % 60 === 0) return min === 60 ? '1 hour' : `${min / 60} hours`
+  return `${min} minutes`
+}
 
 // The section shown when the dialog opens again in this run.
 let lastSection: SettingsSection = 'appearance'
@@ -74,6 +84,7 @@ export default function SettingsDialog({ platform, version }: SettingsDialogProp
       editorFontSize: clamp(draft.editorFontSize, LIMITS.fontSize),
       gridPageSize: clamp(draft.gridPageSize, LIMITS.pageSize),
       editorMaxRows: clamp(draft.editorMaxRows, LIMITS.maxRows),
+      connectTimeoutSeconds: clamp(draft.connectTimeoutSeconds ?? DEFAULT_SETTINGS.connectTimeoutSeconds, LIMITS.connectTimeout),
     })
     setBusy(false)
     if (ok) close()
@@ -184,6 +195,44 @@ export default function SettingsDialog({ platform, version }: SettingsDialogProp
         </div>
       )
       break
+    case 'connections': {
+      const idle = draft.idleDisconnectMinutes ?? 0
+      const choices = IDLE_CHOICES.includes(idle) ? IDLE_CHOICES : [...IDLE_CHOICES, idle].sort((a, b) => a - b)
+      body = (
+        <div className="form-grid">
+          <label htmlFor={id('connect')}>Connect timeout (seconds)</label>
+          <input
+            id={id('connect')}
+            type="number"
+            min={LIMITS.connectTimeout[0]}
+            max={LIMITS.connectTimeout[1]}
+            aria-describedby={id('connect-hint')}
+            value={draft.connectTimeoutSeconds ?? DEFAULT_SETTINGS.connectTimeoutSeconds}
+            onChange={(e) => set('connectTimeoutSeconds', Number(e.target.value))}
+          />
+          <span />
+          <p className="hint" id={id('connect-hint')}>
+            How long connecting may take before it gives up: the SSH tunnel (all hops), opening the database and the first query. Also used by
+            Test and by reconnects.
+          </p>
+
+          <label htmlFor={id('idle')}>Disconnect when idle for</label>
+          <select id={id('idle')} aria-describedby={id('idle-hint')} value={idle} onChange={(e) => set('idleDisconnectMinutes', Number(e.target.value))}>
+            {choices.map((m) => (
+              <option key={m} value={m}>
+                {idleLabel(m)}
+              </option>
+            ))}
+          </select>
+          <span />
+          <p className="hint" id={id('idle-hint')}>
+            Closes the database connection and SSH tunnel of an unused session. Its tabs stay open and it reconnects on the next action. A
+            running query, an open transaction or a truncated result keeps the connection open; temporary tables and session settings are lost.
+          </p>
+        </div>
+      )
+      break
+    }
     case 'ai':
       body = (
         <div className="form-grid">

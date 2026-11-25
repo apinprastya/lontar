@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"path/filepath"
 
-	"lontar/internal/conn"
 	"lontar/internal/driver/all"
 	"lontar/internal/history"
 	"lontar/internal/mcpserver"
 	"lontar/internal/services"
-	"lontar/internal/sshtunnel"
+	"lontar/internal/settings"
 	"lontar/internal/store"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -33,9 +31,8 @@ func isMCP(args []string) bool {
 func newMCPServer(configDir string, logger *log.Logger) (*mcpserver.Server, func()) {
 	st := store.New(configDir, store.NewSecretStore(configDir))
 	drivers := all.Registry()
-	sessions := conn.NewManager(st, drivers)
-	hostKeys := &sshtunnel.HostKeys{UserFiles: userKnownHosts(), AppFile: filepath.Join(configDir, KnownHostsFile)}
-	sessions.Tunnels = conn.SSHTunnels(sshtunnel.New(sshtunnel.Options{HostKeys: hostKeys}))
+	// The connect timeout is read from settings.json once, at start.
+	sessions := newSessions(st, drivers, hostKeys(configDir), services.LoadTimeouts(settings.New(configDir)))
 	hist := history.New(configDir)
 	srv := mcpserver.New(mcpserver.Options{
 		Connections: st,

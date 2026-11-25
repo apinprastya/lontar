@@ -112,9 +112,16 @@ type Session struct {
 	// tunnel is the session's SSH tunnel (nil without SSH). It lives as
 	// long as the session: UseDatabase reuses it, Disconnect closes it.
 	tunnel Tunnel
+	// suspended is set on the copy SuspendIdle stores: its pool (and
+	// tunnel) are closed and the next Get reopens them.
+	suspended bool
+	// resume serialises reopening the session; copies share it.
+	resume *sync.Mutex
 }
 
-// close closes the pool, then the tunnel.
+// close closes the pool, then the tunnel. Closing a suspended session's
+// already closed pool again is a no-op (sql.DB.Close is idempotent) and its
+// tunnel is nil.
 func (s *Session) close() error {
 	err := s.DB.Close()
 	if s.tunnel != nil {
@@ -130,8 +137,13 @@ type Manager struct {
 	src     Source
 	drivers *driver.Registry
 
-	// PingTimeout bounds Connect and Test. Zero means DefaultPingTimeout.
+	// PingTimeout bounds Connect and Test. Zero means ConnectTimeout, or
+	// DefaultPingTimeout without it.
 	PingTimeout time.Duration
+	// ConnectTimeout, when set, returns the connect timeout (re-read for
+	// every attempt, so a settings change applies to the next one); a
+	// result <= 0 means DefaultPingTimeout.
+	ConnectTimeout func() time.Duration
 	// Tunnels opens SSH tunnels; nil refuses SSH connections.
 	Tunnels TunnelOpener
 	// HomeDir expands "~" in certificate paths (default os.UserHomeDir).
@@ -139,6 +151,7 @@ type Manager struct {
 
 	mu        sync.Mutex
 	sessions  map[string]*Session
+	used      map[string]time.Time // last Get per session ID
 	closed    bool
 	listeners []func(Event)
 	newID     func() string
@@ -152,6 +165,7 @@ func NewManager(src Source, drivers *driver.Registry) *Manager {
 		src:      src,
 		drivers:  drivers,
 		sessions: map[string]*Session{},
+		used:     map[string]time.Time{},
 		newID:    uuid.NewString,
 		now:      time.Now,
 	}
@@ -167,12 +181,19 @@ const (
 	SessionClosed EventKind = iota + 1
 	// DatabaseChanged: UseDatabase replaced the session's pool.
 	DatabaseChanged
+	// SessionSuspended: SuspendIdle is about to close the session's pool
+	// (and tunnel) because it was idle; the session stays open.
+	SessionSuspended
+	// SessionResumed: Get reopened a suspended session's pool.
+	SessionResumed
 )
 
 // Event is delivered to Subscribe listeners.
 type Event struct {
 	SessionID string
 	Kind      EventKind
+	// DB is the pool being closed (SessionSuspended only).
+	DB *sql.DB
 }
 
 // Subscribe registers fn to be called (synchronously, without the
@@ -196,6 +217,11 @@ func (m *Manager) emit(ev Event) {
 func (m *Manager) pingTimeout() time.Duration {
 	if m.PingTimeout > 0 {
 		return m.PingTimeout
+	}
+	if m.ConnectTimeout != nil {
+		if d := m.ConnectTimeout(); d > 0 {
+			return d
+		}
 	}
 	return DefaultPingTimeout
 }
@@ -413,6 +439,7 @@ func (m *Manager) connect(ctx context.Context, connectionID string, readOnly boo
 		DB:            o.db,
 		Tunneled:      o.tunnel != nil,
 		tunnel:        o.tunnel,
+		resume:        &sync.Mutex{},
 	}
 
 	m.mu.Lock()
@@ -422,6 +449,7 @@ func (m *Manager) connect(ctx context.Context, connectionID string, readOnly boo
 		return "", ErrClosed
 	}
 	m.sessions[s.ID] = s
+	m.used[s.ID] = m.now()
 	return s.ID, nil
 }
 
@@ -431,15 +459,168 @@ func (m *Manager) isClosed() bool {
 	return m.closed
 }
 
-// Get returns the session with the given ID.
+// Get returns the session with the given ID and marks it as used. A
+// session suspended by SuspendIdle is reopened first (see resume), so the
+// returned session's pool is always open.
 func (m *Manager) Get(sessionID string) (*Session, error) {
+	m.mu.Lock()
+	s, ok := m.sessions[sessionID]
+	if !ok {
+		m.mu.Unlock()
+		return nil, ErrSessionNotFound
+	}
+	m.used[sessionID] = m.now()
+	m.mu.Unlock()
+	if s.suspended {
+		return m.resume(sessionID)
+	}
+	return s, nil
+}
+
+// Suspended reports whether the session is suspended (idle, pool closed),
+// without reopening it.
+func (m *Manager) Suspended(sessionID string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.sessions[sessionID]
 	if !ok {
+		return false, ErrSessionNotFound
+	}
+	return s.suspended, nil
+}
+
+// resume reopens a suspended session from the saved connection (current
+// SSH and TLS settings and secrets), keeping its ID, safe mode and
+// database. Concurrent calls for one session wait for a single reconnect.
+// On failure the session stays suspended, so a later Get retries.
+func (m *Manager) resume(sessionID string) (*Session, error) {
+	m.mu.Lock()
+	s, ok := m.sessions[sessionID]
+	m.mu.Unlock()
+	if !ok {
 		return nil, ErrSessionNotFound
 	}
-	return s, nil
+	s.resume.Lock()
+	defer s.resume.Unlock()
+	m.mu.Lock()
+	s, ok = m.sessions[sessionID] // another call may have resumed it
+	m.mu.Unlock()
+	switch {
+	case !ok:
+		return nil, ErrSessionNotFound
+	case !s.suspended:
+		return s, nil
+	}
+
+	c, err := m.src.Get(s.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	c.Normalize()
+	sec, err := m.secrets(c)
+	if err != nil {
+		return nil, err
+	}
+	if s.Database != "" {
+		c.Database = s.Database
+	}
+	c.SafeMode = s.SafeMode
+	o, err := m.openDB(context.Background(), c, sec, nil)
+	if err != nil {
+		return nil, err
+	}
+	next := *s
+	next.DB, next.ServerVersion, next.tunnel, next.Tunneled = o.db, o.version, o.tunnel, o.tunnel != nil
+	if o.current != "" {
+		next.Database = o.current
+	}
+	next.suspended = false
+
+	m.mu.Lock()
+	if cur, ok := m.sessions[sessionID]; !ok || cur != s || m.closed {
+		m.mu.Unlock()
+		_ = next.close()
+		return nil, ErrSessionNotFound
+	}
+	m.sessions[sessionID] = &next
+	m.used[sessionID] = m.now()
+	m.mu.Unlock()
+	m.emit(Event{SessionID: sessionID, Kind: SessionResumed})
+	return &next, nil
+}
+
+// SuspendIdle suspends every open session that has not been used (Get)
+// for at least idle: its pool and SSH tunnel are closed but the session
+// stays, and the next Get reopens it. A session is kept open while its
+// pool has connections in use beyond those keep allows for, or when keep
+// returns -1 (busy). keep returns how many in-use connections belong to
+// idle holders that SessionSuspended listeners release (SQL editors); nil
+// means none. idle <= 0 does nothing. It returns the suspended IDs.
+func (m *Manager) SuspendIdle(idle time.Duration, keep func(*Session) int) []string {
+	if idle <= 0 {
+		return nil
+	}
+	now := m.now()
+	m.mu.Lock()
+	var cands []*Session
+	for id, s := range m.sessions {
+		if !s.suspended && now.Sub(m.used[id]) >= idle {
+			cands = append(cands, s)
+		}
+	}
+	m.mu.Unlock()
+
+	var out []string
+	for _, s := range cands {
+		allowed := 0
+		if keep != nil {
+			if allowed = keep(s); allowed < 0 {
+				continue
+			}
+		}
+		if s.DB.Stats().InUse > allowed {
+			continue
+		}
+		next := *s
+		next.suspended, next.tunnel = true, nil
+		if next.resume == nil {
+			next.resume = &sync.Mutex{}
+		}
+		m.mu.Lock()
+		// Skip sessions used, replaced or closed since the scan.
+		if cur, ok := m.sessions[s.ID]; !ok || cur != s || m.closed || now.Sub(m.used[s.ID]) < idle {
+			m.mu.Unlock()
+			continue
+		}
+		m.sessions[s.ID] = &next
+		m.mu.Unlock()
+		m.emit(Event{SessionID: s.ID, Kind: SessionSuspended, DB: s.DB})
+		_ = s.close()
+		out = append(out, s.ID)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// StartIdleSweep runs SuspendIdle every interval with the timeout idle()
+// returns (re-read each time, so a settings change applies on the next
+// tick) until the returned stop function is called.
+func (m *Manager) StartIdleSweep(interval time.Duration, idle func() time.Duration, keep func(*Session) int) (stop func()) {
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				m.SuspendIdle(idle(), keep)
+			}
+		}
+	}()
+	return func() { once.Do(func() { close(done) }) }
 }
 
 // List returns all open sessions ordered by connect time.
@@ -459,6 +640,7 @@ func (m *Manager) Disconnect(sessionID string) error {
 	m.mu.Lock()
 	s, ok := m.sessions[sessionID]
 	delete(m.sessions, sessionID)
+	delete(m.used, sessionID)
 	m.mu.Unlock()
 	if !ok {
 		return ErrSessionNotFound
@@ -473,6 +655,7 @@ func (m *Manager) DisconnectAll() error {
 	m.mu.Lock()
 	sessions := m.sessions
 	m.sessions = map[string]*Session{}
+	m.used = map[string]time.Time{}
 	m.closed = true
 	m.mu.Unlock()
 

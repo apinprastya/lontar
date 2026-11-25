@@ -113,3 +113,28 @@ func TestVersionsAndErrors(t *testing.T) {
 		t.Fatal("save over a directory succeeded")
 	}
 }
+
+func TestNormalizeIdleDisconnect(t *testing.T) {
+	for in, want := range map[int]int{0: 0, -5: 0, 1: 1, 30: 30, 5000: MaxIdle} {
+		s := Defaults()
+		s.IdleDisconnectMinutes = in
+		s.Normalize()
+		if s.IdleDisconnectMinutes != want {
+			t.Errorf("Normalize(%d) = %d, want %d", in, s.IdleDisconnectMinutes, want)
+		}
+	}
+	if Defaults().IdleDisconnectMinutes != 0 {
+		t.Error("idle disconnect should be off by default")
+	}
+}
+
+func TestNormalizeConnectTimeout(t *testing.T) {
+	for in, want := range map[int]int{0: 15, 1: MinConnect, 30: 30, 9999: MaxConnect} {
+		s := Defaults()
+		s.ConnectTimeoutSeconds = in
+		s.Normalize()
+		if s.ConnectTimeoutSeconds != want {
+			t.Errorf("Normalize(%d) = %d, want %d", in, s.ConnectTimeoutSeconds, want)
+		}
+	}
+}

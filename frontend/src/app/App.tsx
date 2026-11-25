@@ -7,7 +7,7 @@ import UpdateNotice from '../features/update/UpdateNotice'
 import Workspace from '../features/workspace/Workspace'
 import { SettingsIcon } from '../components/icons'
 import { matchesShortcut, modLabel, shortcutLabel } from '../lib/mod'
-import { useConnections } from '../stores/connections'
+import { useConnections, watchIdleSessions } from '../stores/connections'
 import { bindAppearance, useSettings, watchSystemTheme } from '../stores/settings'
 import { useUpdate } from '../stores/update'
 import { useAppInfo } from './useAppInfo'
@@ -37,9 +37,11 @@ export function useAppearance(platform: string | undefined, hasSession: boolean)
     void useSettings.getState().load()
     const unbind = bindAppearance()
     const unwatch = watchSystemTheme()
+    const unwatchIdle = watchIdleSessions()
     return () => {
       unbind()
       unwatch()
+      unwatchIdle()
     }
   }, [])
 
