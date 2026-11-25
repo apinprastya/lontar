@@ -70,6 +70,19 @@ const ACTIONS: Record<string, (ctx: CommandContext) => void> = {
     const tab = s.activeTab()
     if (tab?.kind === 'query') void s.formatQuery(tab.id)
   },
+  editStructure: (ctx) => {
+    const s = ctx.store.getState()
+    const tab = s.activeTab()
+    if (tab?.kind !== 'table') return
+    s.setTabView(tab.id, 'structure')
+    void s.startStructureEdit(tab.id)
+  },
+  newTable: (ctx) => void ctx.store.getState().newTable(),
+  dropTable: (ctx) => {
+    const s = ctx.store.getState()
+    const tab = s.activeTab()
+    if (tab?.kind === 'table' && !tab.creating) void s.requestDropTable(tab.schema, tab.table)
+  },
   explainAnalyze: (ctx) => {
     const s = ctx.store.getState()
     const tab = s.activeTab()
@@ -120,6 +133,11 @@ export function commandAvailable(id: string, s: WorkspaceState): boolean {
       return exportSourceFor(s) !== null
     case 'importCsv':
       return importTargetFor(s) !== null
+    case 'newTable':
+      return s.safeMode !== 'readonly' && s.schema !== ''
+    case 'editStructure':
+    case 'dropTable':
+      return tab?.kind === 'table' && tab.type === 'table' && !tab.creating && !tab.structureEdit && s.safeMode !== 'readonly'
   }
   return true
 }

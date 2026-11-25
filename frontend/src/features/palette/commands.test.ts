@@ -13,6 +13,7 @@ import { makeDetail } from '../../test/structure'
 import type { WorkspaceApi } from '../workspace/api'
 import { commands, conflicts, SHORTCUTS, shortcutEvent, shortcutText } from '../workspace/keymap'
 import type { FetchRequest } from '../workspace/types'
+import { fakeStructureApi } from '../../test/fakeStructureApi'
 import { ACTION_IDS, commandAvailable, exportSourceFor, importTargetFor, runCommand, type CommandContext } from './commands'
 
 function fakeApi(): WorkspaceApi {
@@ -199,6 +200,35 @@ describe('palette commands', () => {
       ),
     })
     expect(exportSourceFor(store.getState())).toMatchObject({ type: 'query', sql: 'SELECT 1 AS a', rows: [[{ k: 'num', v: 1 }]] })
+  })
+
+  it('edits, creates and drops tables from the palette', async () => {
+    const structure = fakeStructureApi()
+    const st = createWorkspaceStore({ id: 's1', kind: 'postgres', connectionId: 'c1', safeMode: 'off' }, fakeApi(), fakeEditorApi(), undefined, undefined, structure)
+    await st.getState().init()
+    const c = { ...ctx, store: st }
+    // Without a table tab: nothing to edit or drop.
+    expect(commandAvailable('editStructure', st.getState())).toBe(false)
+    expect(commandAvailable('newTable', st.getState())).toBe(true)
+    runCommand('editStructure', c)
+    runCommand('dropTable', c)
+    expect(st.getState().dropTable).toBeNull()
+    st.getState().openTableView('public', 'users', 'data')
+    await flush()
+    expect(commandAvailable('editStructure', st.getState())).toBe(true)
+    runCommand('editStructure', c)
+    await flush()
+    const tab = st.getState().activeTab()
+    expect(tab).toMatchObject({ view: 'structure', structureEdit: expect.anything() })
+    expect(commandAvailable('dropTable', st.getState())).toBe(false)
+    runCommand('dropTable', c)
+    await flush()
+    expect(st.getState().dropTable?.table).toBe('users')
+    runCommand('newTable', c)
+    await flush()
+    expect(st.getState().activeTab()).toMatchObject({ creating: true })
+    const ro = createWorkspaceStore({ id: 's2', kind: 'postgres', safeMode: 'readonly' }, fakeApi(), fakeEditorApi())
+    expect(commandAvailable('newTable', ro.getState())).toBe(false)
   })
 
   it('formats shortcuts and synthetic events', () => {

@@ -3,6 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as ddl$0 from "../ddl/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as driver$0 from "../driver/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -227,6 +230,26 @@ export interface Statement {
      * DelimEnd is the offset after the statement's delimiter.
      */
     "delimEnd": number;
+}
+
+/**
+ * StructureApplyResult is the outcome of an Apply or DropTable. A refused
+ * or failed change is not a Go error: Failure describes it.
+ */
+export interface StructureApplyResult {
+    "ok": boolean;
+    "result": ddl$0.Result | null;
+    "failure": ddl$0.ChangeError | null;
+}
+
+/**
+ * StructurePreview is the outcome of StructureEditService.Preview: the
+ * statements Apply would run, or why the change set is refused (Failure
+ * names the change and field to highlight).
+ */
+export interface StructurePreview {
+    "statements": ddl$0.Statement[] | null;
+    "failure": ddl$0.ChangeError | null;
 }
 
 /**

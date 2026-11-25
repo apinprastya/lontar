@@ -43,6 +43,8 @@ import { useSettings } from './settings'
 import type { ExportSource } from '../features/export/ExportDialog'
 import { editApi as defaultEditApi, type EditApi } from '../features/edits/api'
 import { sqlFileApi as defaultSqlFileApi, type SqlFileApi } from '../features/editor/sqlFiles'
+import { structureEditApi as defaultStructureEditApi, type StructureEditApi } from '../features/structure/editApi'
+import { createStructureActions, structureDirty, type StructureEditState, type StructureFields, type StructureState } from './structureTabs'
 import type { EditValue, PreviewStatement, SafeMode } from '../features/edits/types'
 import {
   buildChangeSet,
@@ -128,6 +130,10 @@ export interface TabState {
   ddl: string | null
   ddlLoading: boolean
   ddlError: string | null
+  /** Staged structure changes (null: the structure view is read-only). */
+  structureEdit: StructureEditState | null
+  /** A table being created: the tab has no rows until it is applied. */
+  creating: boolean
 }
 
 export type TabView = 'data' | 'structure'
@@ -173,7 +179,7 @@ export type GuardChoice = 'commit' | 'discard' | 'cancel'
 /** A tab of the workspace: a table, an SQL editor or a schema object. */
 export type Tab = TabState | QueryTabState | ObjectTabState
 
-export interface WorkspaceState extends QueryState {
+export interface WorkspaceState extends QueryState, StructureState {
   sessionId: string
   kind: Kind
   /** Saved connection ID (query drafts and history are kept per connection). */
@@ -210,6 +216,8 @@ export interface WorkspaceState extends QueryState {
   toggleTabView(id: string): void
   setStructureSection(id: string, section: StructureSection): void
   loadStructure(id: string): Promise<void>
+  /** Column names of a table (foreign key targets); [] when it cannot be read. */
+  tableColumns(schema: string, table: string): Promise<string[]>
   loadDDL(id: string): Promise<void>
   /** Copies a table's DDL (sidebar menu); errors go to the sidebar. */
   copyDDL(schema: string, name: string): Promise<boolean>
@@ -388,6 +396,8 @@ function newTab(t: TableInfo, pinned: boolean): TabState {
     ddl: null,
     ddlLoading: false,
     ddlError: null,
+    structureEdit: null,
+    creating: false,
   }
 }
 
@@ -422,6 +432,7 @@ export function createWorkspaceStore(
   editor: EditorApi = defaultEditorApi,
   edits: EditApi = defaultEditApi,
   files: SqlFileApi = defaultSqlFileApi,
+  structureApi: StructureEditApi = defaultStructureEditApi,
 ): WorkspaceStore {
   let disposed = false
   const connectionId = session.connectionId ?? ''
@@ -595,10 +606,15 @@ export function createWorkspaceStore(
       }
     }
 
-    /** Tabs among ids with staged changes (table tabs and query results). */
+    /** Whether a table tab has staged structure changes. */
+    const structureDirtyTab = (id: string) => {
+      const tab = findTab(id)
+      return tab ? structureDirty(tab, get().structureCaps) : false
+    }
+    /** Tabs among ids with staged changes (table tabs, structure drafts and query results). */
     const dirtyTabs = (ids: string[]) => ids.filter((id) => {
       const t = target(id)
-      return t ? isDirty(t.pending) : false
+      return (t ? isDirty(t.pending) : false) || structureDirtyTab(id)
     })
     const allTabIds = () => get().tabs.map((t) => t.id)
     /** Stages a pending change: pins the tab and clears a stale failure. */
@@ -611,9 +627,34 @@ export function createWorkspaceStore(
     }
 
     const queryActions = createQueryActions<WorkspaceState>(set, get, editor, () => disposed, files)
+    const structureActions = createStructureActions<TabState, WorkspaceState>(set, get, structureApi, {
+      sessionId: () => get().sessionId,
+      schema: () => get().schema,
+      safeMode: () => get().safeMode,
+      findTab,
+      patchTab,
+      openNewTableTab(schema, edit) {
+        const tab: TabState = { ...newTab(tableInfoOf(schema, ''), true), view: 'structure', creating: true, structureEdit: edit }
+        set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }))
+      },
+      closeTabNow: (id) => get().closeTabNow(id),
+      openStructureTab(schema, table) {
+        get().openTableView(schema, table, 'structure')
+        return findTableTab(schema, table)?.id ?? null
+      },
+      tabsOf: (schema, table) => get().tabs.filter((t) => t.kind === 'table' && t.schema === schema && t.table === table).map((t) => t.id),
+      refreshTables: () => get().refreshTables(),
+      loadStructure: (id) => get().loadStructure(id),
+      loadTab: (id) => get().loadTab(id),
+      isDisposed: () => disposed,
+    })
 
     return {
       ...queryActions,
+      ...(structureActions as Omit<StructureState, StructureFields>),
+      structureCaps: null,
+      structureCapsError: null,
+      dropTable: null,
 
       // Runs and result switches drop staged result edits: ask first.
       async runQuery(id, mode) {
@@ -672,14 +713,19 @@ export function createWorkspaceStore(
           return
         }
         if (choice === 'discard') {
-          for (const id of g.tabIds) target(id)?.patch({ pending: emptyPending, commitError: null, failed: null })
+          for (const id of g.tabIds) {
+            target(id)?.patch({ pending: emptyPending, commitError: null, failed: null })
+            if (findTab(id)?.structureEdit) get().cancelStructureEdit(id)
+          }
           set({ guard: null })
           g.proceed()
           return
         }
         set({ guard: { ...g, busy: true } })
         for (const id of g.tabIds) {
-          if (!(await get().commit(id))) {
+          const t = target(id)
+          const ok = (!t || !isDirty(t.pending) || (await get().commit(id))) && (!structureDirtyTab(id) || (await get().applyStructure(id)))
+          if (!ok) {
             // The failure is shown in the tab; stay where we are.
             set({ guard: null, activeTabId: id })
             return
@@ -891,7 +937,7 @@ export function createWorkspaceStore(
 
       setTabView(id, view) {
         const tab = findTab(id)
-        if (!tab || tab.view === view) return
+        if (!tab || tab.view === view || tab.creating) return
         patchTab(id, { view })
         if (view === 'structure' && !tab.structure && !tab.structureLoading) void get().loadStructure(id)
         if (view === 'structure' && tab.section === 'ddl' && tab.ddl === null && !tab.ddlLoading) void get().loadDDL(id)
@@ -918,6 +964,14 @@ export function createWorkspaceStore(
           if (!disposed) patchTab(id, { structure, structureLoading: false })
         } catch (err) {
           if (!disposed) patchTab(id, { structureLoading: false, structureError: errorMessage(err) })
+        }
+      },
+
+      async tableColumns(schema, table) {
+        try {
+          return (await api.tableInfo(get().sessionId, schema, table)).columns.map((c) => c.name)
+        } catch {
+          return []
         }
       },
 
@@ -1165,8 +1219,18 @@ export function createWorkspaceStore(
           const fresh = get().objects.find((o) => objectKey(o) === key)
           if (fresh) patchObjectTab(tab.id, { object: fresh })
           await get().loadObjectDDL(tab.id)
+        } else if (tab?.creating) {
+          await get().refreshTables()
         } else if (tab?.view === 'structure') {
-          // Structure only: nothing staged is lost, so no guard.
+          // Reloading the structure drops a structure draft: ask first.
+          if (structureDirtyTab(tab.id)) {
+            get().guarded([tab.id], () => {
+              get().cancelStructureEdit(tab.id)
+              void get().refresh()
+            })
+            return
+          }
+          if (tab.structureEdit) patchTab(tab.id, { structureEdit: null })
           await Promise.all([get().refreshTables(), get().loadStructure(tab.id), tab.ddl !== null ? get().loadDDL(tab.id) : Promise.resolve()])
         } else if (tab) {
           if (dirtyTabs([tab.id]).length > 0) {

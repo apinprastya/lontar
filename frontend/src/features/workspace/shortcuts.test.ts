@@ -236,3 +236,39 @@ describe('structure shortcuts', () => {
   })
 })
 
+
+describe('handleShortcut while editing a structure', () => {
+  function editing(creating = false) {
+    return {
+      activeTab: () => ({ id: 't1', kind: 'table', view: 'structure', structureEdit: {}, creating }),
+      previewStructure: vi.fn(async () => {}),
+      undoStructure: vi.fn(),
+      redoStructure: vi.fn(),
+      toggleTabView: vi.fn(),
+      requestCommit: vi.fn(),
+    } as unknown as WorkspaceState & Record<string, ReturnType<typeof vi.fn>>
+  }
+
+  it('previews with Mod+S and undoes the draft', () => {
+    const s = editing()
+    expect(handleShortcut(key('s'), 'linux', s)).toBe(true)
+    expect(s.previewStructure).toHaveBeenCalledWith('t1')
+    expect(s.requestCommit).not.toHaveBeenCalled()
+    expect(handleShortcut(key('z'), 'linux', s)).toBe(true)
+    expect(s.undoStructure).toHaveBeenCalledWith('t1')
+    expect(handleShortcut(key('z', { shiftKey: true }), 'linux', s)).toBe(true)
+    expect(s.redoStructure).toHaveBeenCalledWith('t1')
+    // In a text field, undo is the field's own.
+    vi.mocked(s.undoStructure).mockClear()
+    handleShortcut(key('z'), 'linux', s, true)
+    expect(s.undoStructure).not.toHaveBeenCalled()
+    expect(handleShortcut(key('e'), 'linux', s)).toBe(true)
+    expect(s.toggleTabView).toHaveBeenCalledWith('t1')
+  })
+
+  it('keeps a new table in the structure view', () => {
+    const s = editing(true)
+    expect(handleShortcut(key('e'), 'linux', s)).toBe(true)
+    expect(s.toggleTabView).not.toHaveBeenCalled()
+  })
+})

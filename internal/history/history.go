@@ -52,7 +52,8 @@ type Entry struct {
 	// Truncated reports that SQL was cut to MaxSQLBytes.
 	Truncated bool `json:"truncated"`
 	// Source is who ran the script: SourceEditor ("", the SQL editor) or
-	// SourceMCP (an AI assistant through `lontar mcp`).
+	// SourceMCP (an AI assistant through `lontar mcp`) or SourceStructure
+	// (the Structure view).
 	Source string `json:"source"`
 }
 
@@ -60,6 +61,8 @@ type Entry struct {
 const (
 	SourceEditor = ""
 	SourceMCP    = "mcp"
+	// SourceStructure is DDL applied from the Structure view.
+	SourceStructure = "structure"
 )
 
 // Store is the history database. It opens lazily on first use and is safe

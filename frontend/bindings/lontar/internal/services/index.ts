@@ -14,6 +14,7 @@ import * as SQLFileService from "./sqlfileservice.js";
 import * as SQLRunService from "./sqlrunservice.js";
 import * as SchemaService from "./schemaservice.js";
 import * as SettingsService from "./settingsservice.js";
+import * as StructureEditService from "./structureeditservice.js";
 import * as UIStateService from "./uistateservice.js";
 import * as UpdateService from "./updateservice.js";
 export {
@@ -30,6 +31,7 @@ export {
     SQLRunService,
     SchemaService,
     SettingsService,
+    StructureEditService,
     UIStateService,
     UpdateService
 };
@@ -49,5 +51,7 @@ export type {
     SessionInfo,
     SettingsState,
     Statement,
+    StructureApplyResult,
+    StructurePreview,
     UpdateInfo
 } from "./models.js";

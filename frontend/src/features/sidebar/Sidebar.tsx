@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { copyText } from '../../lib/clipboard'
 import { getUIJSON, isStringArray, setUIJSON } from '../../lib/uiState'
-import { CaretIcon, ChevronIcon, MatViewIcon, RefreshIcon, TableIcon, ViewIcon } from '../../components/icons'
+import { CaretIcon, ChevronIcon, MatViewIcon, RefreshIcon, RowPlusIcon, TableIcon, ViewIcon } from '../../components/icons'
 import { useWorkspace } from '../../stores/workspace'
 import { KIND_LABELS, type Kind } from '../connections/types'
 import { EngineBadge } from '../../components/EngineLogo'
@@ -59,7 +59,11 @@ function ContextMenu({ label, x, y, items, onClose }: { label: string; x: number
 export function TableMenu({ menu, onClose }: { menu: { t: TableInfo; x: number; y: number }; onClose(): void }) {
   const openTableView = useWorkspace((s) => s.openTableView)
   const copyDDL = useWorkspace((s) => s.copyDDL)
+  const editTableStructure = useWorkspace((s) => s.editTableStructure)
+  const requestDropTable = useWorkspace((s) => s.requestDropTable)
+  const writable = useWorkspace((s) => s.safeMode !== 'readonly')
   const { t } = menu
+  const editStructure = () => void editTableStructure(t.schema, t.name)
   return (
     <ContextMenu
       label={`${t.name} actions`}
@@ -71,6 +75,12 @@ export function TableMenu({ menu, onClose }: { menu: { t: TableInfo; x: number; 
         ['Open structure', () => openTableView(t.schema, t.name, 'structure')],
         ['Copy name', () => void copyText(t.name).catch(() => {})],
         ['Copy DDL', () => void copyDDL(t.schema, t.name)],
+        ...(writable && t.type === 'table'
+          ? ([
+              ['Edit structure', editStructure],
+              ['Drop table…', () => void requestDropTable(t.schema, t.name)],
+            ] as [string, () => void][])
+          : []),
       ]}
     />
   )
@@ -239,6 +249,11 @@ export default function Sidebar({ name, kind, color, badge, onSwitchConnection, 
             <div className="ws-conn-card">{body}</div>
           )
         })()}
+        {s.safeMode !== 'readonly' && s.schema && (
+          <button type="button" className="icon-button ws-conn-refresh" aria-label="New table" title="New table" onClick={() => void s.newTable()}>
+            <RowPlusIcon />
+          </button>
+        )}
         <button type="button" className="icon-button ws-conn-refresh" aria-label="Refresh table list" title="Refresh" onClick={() => void s.refreshTables()}>
           <RefreshIcon />
         </button>

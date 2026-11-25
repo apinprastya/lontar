@@ -11,6 +11,7 @@ import { WorkspaceContext, createWorkspaceStore, type TabState, type WorkspaceSt
 import { makeDetail } from '../../test/structure'
 import type { WorkspaceApi } from '../workspace/api'
 import Sidebar from './Sidebar'
+import { fakeStructureApi } from '../../test/fakeStructureApi'
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
@@ -37,6 +38,7 @@ function api(): WorkspaceApi {
 describe('Sidebar table menu', () => {
   let store: WorkspaceStore
   let wsApi: WorkspaceApi
+  let structure: ReturnType<typeof fakeStructureApi>
   const mount = () =>
     render(
       <WorkspaceContext.Provider value={store}>
@@ -49,17 +51,48 @@ describe('Sidebar table menu', () => {
   beforeEach(async () => {
     vi.mocked(copyText).mockClear()
     wsApi = api()
-    store = createWorkspaceStore({ id: 's', kind: 'postgres', safeMode: 'off' }, wsApi)
+    structure = fakeStructureApi()
+    store = createWorkspaceStore({ id: 's', kind: 'postgres', safeMode: 'off' }, wsApi, undefined, undefined, undefined, structure)
     await store.getState().init()
   })
   afterEach(cleanup)
+
+  it('edits the structure, drops a table and creates one', async () => {
+    mount()
+    openMenu('orders')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit structure' }))
+    await act(tick)
+    expect(tableTab().view).toBe('structure')
+    expect(tableTab().structureEdit).not.toBeNull()
+    openMenu('orders')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Drop table…' }))
+    await act(tick)
+    expect(store.getState().dropTable).toMatchObject({ schema: 'public', table: 'orders', loading: false })
+    store.getState().cancelDropTable()
+    // Views have neither.
+    openMenu('v')
+    expect(screen.queryByRole('menuitem', { name: 'Edit structure' })).toBeNull()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    fireEvent.click(screen.getByRole('button', { name: 'New table' }))
+    await act(tick)
+    expect(store.getState().activeTab()).toMatchObject({ kind: 'table', creating: true, view: 'structure' })
+  })
+
+  it('has no structure actions in read-only safe mode', async () => {
+    store = createWorkspaceStore({ id: 's', kind: 'postgres', safeMode: 'readonly' }, wsApi, undefined, undefined, undefined, structure)
+    await store.getState().init()
+    mount()
+    expect(screen.queryByRole('button', { name: 'New table' })).toBeNull()
+    openMenu('orders')
+    expect(screen.queryByRole('menuitem', { name: 'Drop table…' })).toBeNull()
+  })
 
   it('opens data and structure', async () => {
     mount()
     openMenu('orders')
     const menu = screen.getByRole('menu', { name: 'orders actions' })
     expect(menu).toHaveStyle({ left: '20px', top: '30px' })
-    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Open data', 'Open structure', 'Copy name', 'Copy DDL'])
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Open data', 'Open structure', 'Copy name', 'Copy DDL', 'Edit structure', 'Drop table…'])
     fireEvent.click(screen.getByRole('menuitem', { name: 'Open structure' }))
     expect(screen.queryByRole('menu')).toBeNull()
     await act(tick)

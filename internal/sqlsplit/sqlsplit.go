@@ -154,6 +154,9 @@ type Scanner struct {
 	// onParam is an optional hook for every :name placeholder (Params);
 	// start and end are absolute offsets of the colon and after the name.
 	onParam func(name string, start, end int)
+	// onPunct is an optional hook for every punctuation byte outside
+	// strings, quoted identifiers and comments (Balanced).
+	onPunct func(c byte)
 }
 
 const wordLimit = 6
@@ -260,6 +263,30 @@ func Words(kind driver.Kind, text string, limit int) []string {
 	for {
 		if _, err := sc.Next(); err != nil {
 			return out
+		}
+	}
+}
+
+// Balanced reports whether the parentheses of text are balanced, ignoring
+// those inside strings, quoted identifiers and comments.
+func Balanced(kind driver.Kind, text string) bool {
+	depth, ok := 0, true
+	sc := stringScanner(kind, text)
+	sc.d.copyData, sc.d.metaCommands, sc.d.delimiter = false, false, false
+	sc.onPunct = func(c byte) {
+		switch c {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth < 0 {
+				ok = false
+			}
+		}
+	}
+	for {
+		if _, err := sc.Next(); err != nil {
+			return ok && depth == 0
 		}
 	}
 }
@@ -624,6 +651,9 @@ func (sc *Scanner) token() {
 		sc.wordEnd = j // 1e'x' is not an E-string
 	default:
 		sc.i = i + 1
+		if sc.onPunct != nil {
+			sc.onPunct(c)
+		}
 	}
 	sc.content(i, sc.i)
 }
