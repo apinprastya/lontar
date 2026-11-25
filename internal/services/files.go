@@ -334,6 +334,10 @@ type SettingsState struct {
 // SettingsService reads and writes the application settings.
 type SettingsService struct {
 	store *settings.Store
+
+	// OnSave, when set, is called with the stored settings after each
+	// successful Save (the idle disconnect applies them at once).
+	OnSave func(settings.Settings)
 }
 
 // NewSettingsService returns a SettingsService.
@@ -353,5 +357,9 @@ func (s *SettingsService) Defaults() settings.Settings { return settings.Default
 
 // Save validates (clamps) and stores v, and returns what was stored.
 func (s *SettingsService) Save(v settings.Settings) (settings.Settings, error) {
-	return s.store.Save(v)
+	out, err := s.store.Save(v)
+	if err == nil && s.OnSave != nil {
+		s.OnSave(out)
+	}
+	return out, err
 }

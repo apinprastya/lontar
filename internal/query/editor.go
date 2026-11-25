@@ -49,6 +49,7 @@ const (
 	msgReconnect = "This editor's previous connection was closed, so this run used a new one: its open transaction, temporary tables and session settings (SET, USE, search_path) are gone."
 	msgIdle      = "The editor's connection was closed after 30 minutes without a run (any open transaction was rolled back)."
 	msgSwitched  = "The database was switched in the sidebar, so the editor reconnected (any open transaction was rolled back)."
+	msgSuspended = "The connection was closed while idle (Settings › Connections) and reopened for this run, so this editor's temporary tables and session settings (SET, USE, search_path) are gone."
 )
 
 // Resolver returns a session's pool and engine kind.
@@ -924,21 +925,61 @@ func (e *Editors) SessionClosed(sessionID string) {
 // the session switched databases (its pool was replaced). The editors stay
 // open and reconnect on their next run, which reports the reset.
 func (e *Editors) SessionChanged(sessionID string) {
-	e.mu.Lock()
-	var eds []*Editor
-	for _, ed := range e.editors {
-		if ed.sessionID == sessionID {
-			eds = append(eds, ed)
-		}
-	}
-	e.mu.Unlock()
-	for _, ed := range eds {
+	for _, ed := range e.of(sessionID) {
 		if rid := ed.request(); rid != "" {
 			e.runner.Cancel(rid)
 		}
 		ed.run.Lock()
 		if ed.conn != nil {
 			e.release(ed, msgSwitched, true)
+		}
+		ed.run.Unlock()
+	}
+}
+
+// of returns the editors of a session.
+func (e *Editors) of(sessionID string) []*Editor {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var eds []*Editor
+	for _, ed := range e.editors {
+		if ed.sessionID == sessionID {
+			eds = append(eds, ed)
+		}
+	}
+	return eds
+}
+
+// IdleHold says whether a session's editors let its pool db be closed for
+// idleness: -1 when one of them is running, keeps a truncated result open
+// or may be in a transaction; otherwise the number of connections they pin
+// from db (released by SessionSuspended, so they do not count as busy).
+func (e *Editors) IdleHold(sessionID string, db *sql.DB) int {
+	n := 0
+	for _, ed := range e.of(sessionID) {
+		if !ed.run.TryLock() {
+			return -1
+		}
+		busy := ed.cursor != nil || (ed.conn != nil && ed.txInfo().State != TxIdle)
+		if ed.conn != nil && ed.db == db {
+			n++
+		}
+		ed.run.Unlock()
+		if busy {
+			return -1
+		}
+	}
+	return n
+}
+
+// SessionSuspended releases the editors' connections pinned from db, the
+// pool of a session suspended for idleness. The editors stay open and
+// reconnect on their next run, which reports the reset.
+func (e *Editors) SessionSuspended(sessionID string, db *sql.DB) {
+	for _, ed := range e.of(sessionID) {
+		ed.run.Lock()
+		if ed.conn != nil && ed.db == db {
+			e.release(ed, msgSuspended, true)
 		}
 		ed.run.Unlock()
 	}

@@ -25,7 +25,8 @@ const FileName = "settings.json"
 //
 //	1: M6 (theme, editor font size, grid page size, editor max rows, CSV
 //	   export defaults, confirm closing dirty query tabs); later SQL format
-//	   options and automatic updates (missing in older files: defaults)
+//	   options, automatic updates and the idle disconnect (missing in older
+//	   files: defaults)
 const CurrentVersion = 1
 
 // ErrNewerVersion is returned for a settings file written by a newer Lontar.
@@ -96,6 +97,10 @@ type Settings struct {
 	// and installs it in the background when this installation can update
 	// itself. Missing in older files: on.
 	AutoUpdate bool `json:"autoUpdate"`
+	// IdleDisconnectMinutes closes the connection (pool and SSH tunnel) of
+	// a session unused for this many minutes; the session stays open and
+	// reconnects on its next use. 0 (the default) never does.
+	IdleDisconnectMinutes int `json:"idleDisconnectMinutes"`
 }
 
 // Limits.
@@ -103,6 +108,7 @@ const (
 	MinFontSize, MaxFontSize = 9, 32
 	MinPageSize, MaxPageSize = 10, 5000
 	MinMaxRows, MaxMaxRows   = 1, 50000
+	MinIdle, MaxIdle         = 1, 24 * 60 // idle disconnect, in minutes (0 = off)
 )
 
 // Defaults returns the default settings.
@@ -143,6 +149,10 @@ func (s *Settings) Normalize() {
 	s.EditorFontSize = clamp(s.EditorFontSize, MinFontSize, MaxFontSize, d.EditorFontSize)
 	s.GridPageSize = clamp(s.GridPageSize, MinPageSize, MaxPageSize, d.GridPageSize)
 	s.EditorMaxRows = clamp(s.EditorMaxRows, MinMaxRows, MaxMaxRows, d.EditorMaxRows)
+	if s.IdleDisconnectMinutes < 0 {
+		s.IdleDisconnectMinutes = 0
+	}
+	s.IdleDisconnectMinutes = clamp(s.IdleDisconnectMinutes, MinIdle, MaxIdle, 0)
 	if len([]rune(s.CSV.Delimiter)) != 1 || s.CSV.Delimiter == "\n" || s.CSV.Delimiter == "\r" {
 		s.CSV.Delimiter = d.CSV.Delimiter
 	}

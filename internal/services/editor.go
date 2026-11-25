@@ -101,13 +101,27 @@ func (s *EditorService) resolve(sessionID string) (*sql.DB, driver.Kind, error) 
 }
 
 func (s *EditorService) onSessionEvent(ev conn.Event) {
-	s.invalidate(ev.SessionID)
+	switch ev.Kind {
+	case conn.SessionClosed, conn.DatabaseChanged:
+		s.invalidate(ev.SessionID)
+	}
 	switch ev.Kind {
 	case conn.SessionClosed:
 		s.editors.SessionClosed(ev.SessionID)
 	case conn.DatabaseChanged:
 		s.editors.SessionChanged(ev.SessionID)
+	case conn.SessionSuspended:
+		s.editors.SessionSuspended(ev.SessionID, ev.DB)
 	}
+}
+
+// EditorIdleHold returns the keep function of conn.Manager.SuspendIdle for
+// s's editors: -1 while an editor of the session is running, in a
+// transaction or keeps a truncated result, else the number of idle editor
+// connections pinned from its pool. (A function, not a method, so that
+// Wails does not bind it.)
+func EditorIdleHold(s *EditorService) func(*conn.Session) int {
+	return func(sess *conn.Session) int { return s.editors.IdleHold(sess.ID, sess.DB) }
 }
 
 // OpenEditor creates an editor for a session and returns its ID. Its

@@ -2740,6 +2740,16 @@ textarea.cell-editor-input {
   margin-left: 4px;
 }
 
+.idle-badge {
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid var(--muted);
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: 4px;
+}
+
 .palette {
   width: min(640px, calc(100vw - 32px));
   background: var(--bg-dialog);

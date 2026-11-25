@@ -430,7 +430,7 @@ func TestSessionEvents(t *testing.T) {
 	if err := m.DisconnectAll(); err != nil {
 		t.Fatal(err)
 	}
-	want := []Event{{a, DatabaseChanged}, {a, SessionClosed}, {b, SessionClosed}}
+	want := []Event{{SessionID: a, Kind: DatabaseChanged}, {SessionID: a, Kind: SessionClosed}, {SessionID: b, Kind: SessionClosed}}
 	mu.Lock()
 	defer mu.Unlock()
 	if fmt.Sprint(events) != fmt.Sprint(want) {

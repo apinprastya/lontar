@@ -700,6 +700,17 @@ move between them) and reopens on the one you used last:
   (UPPER, lower or as typed) and indent (2 or 4 spaces) of **Format**.
 - **Data & export:** **rows per page** of new table tabs (default 300) and
   the **CSV export defaults**.
+- **Connections:** **Disconnect when idle for** Never (default), 5, 15 or 30
+  minutes, or 1, 2 or 4 hours. A session unused for that long has its
+  database connection (and SSH tunnel) closed but stays open: its tabs keep
+  their state, the sidebar shows an **Idle** badge, and the next action
+  reconnects with the saved settings, on the same database and with the same
+  safe mode. A running query, an import, export or SQL file run, a query tab
+  with an open transaction and a truncated result whose rows are still being
+  fetched all keep the connection open. Query tabs reconnect on their next run
+  and say so: their temporary tables and session settings (SET, USE,
+  search_path) are gone. The MCP server (`lontar mcp`) has its own 10-minute
+  idle limit.
 - **AI assistants:** how to connect Claude to Lontar (see "AI assistants
   (MCP)").
 - **Updates:** the installed version, **Install updates automatically** (on

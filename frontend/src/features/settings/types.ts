@@ -31,6 +31,8 @@ export interface Settings {
   sqlFormat: SqlFormatSettings
   /** Check for, and install, new releases in the background. */
   autoUpdate: boolean
+  /** Close a session's connection after this many idle minutes (it reconnects on use); 0 = never. */
+  idleDisconnectMinutes: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmCloseDirtyQuery: false,
   sqlFormat: { keywordCase: 'upper', indent: 2 },
   autoUpdate: true,
+  idleDisconnectMinutes: 0,
 }
 
 export const LIMITS = {
