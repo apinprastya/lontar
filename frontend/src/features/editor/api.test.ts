@@ -21,7 +21,10 @@ describe('editorApi', () => {
       cancelled: false,
     })
     const res = await editorApi.execute('e', 'r', 'x; y', { maxRows: 10, continueOnError: true, baseOffset: 4, confirmed: false })
-    expect(EditorService.Execute).toHaveBeenCalledWith('e', 'r', 'x; y', { maxRows: 10, continueOnError: true, baseOffset: 4, confirmed: false })
+    expect(EditorService.Execute).toHaveBeenCalledWith('e', 'r', 'x; y', { maxRows: 10, continueOnError: true, baseOffset: 4, confirmed: false, params: null })
+    const p = { a: { value: '1', null: false, type: 'number' as const } }
+    await editorApi.execute('e', 'r', ':a', { maxRows: 10, continueOnError: false, baseOffset: 0, confirmed: false, params: p })
+    expect(EditorService.Execute).toHaveBeenLastCalledWith('e', 'r', ':a', { maxRows: 10, continueOnError: false, baseOffset: 0, confirmed: false, params: p })
     expect(res.notices).toEqual([])
     expect(res.statements[0].resultSets[0]).toEqual({ id: 'r', columns: [], rows: [[], [{ k: 'num', v: 1 }]], truncated: false, canLoadMore: false })
     expect(res.statements[0].rowsAffected).toBeNull()
@@ -51,7 +54,7 @@ describe('editorApi', () => {
       durationMs: 1,
     })
     const p = await editorApi.explain('e', 'r', 'x', { analyze: false, baseOffset: 3 })
-    expect(EditorService.Explain).toHaveBeenCalledWith('e', 'r', 'x', { analyze: false, baseOffset: 3 })
+    expect(EditorService.Explain).toHaveBeenCalledWith('e', 'r', 'x', { analyze: false, baseOffset: 3, params: null })
     expect(p).toMatchObject({ planningMs: null, executionMs: 2, notices: [], rawFormat: 'json', error: { message: 'm', code: 'c', position: null } })
     expect(p.nodes[0]).toEqual({
       op: 'Sort', object: '', detail: '', estRows: 1, actualRows: null, loops: null, cost: null, timeMs: null, props: [],
@@ -80,6 +83,11 @@ describe('editorApi', () => {
     expect(await editorApi.statementAt('postgres', 'x', 0)).toBeNull()
     EditorService.StatementAt.mockResolvedValue({ text: 'x', start: 0, end: 1, delimEnd: 1 })
     expect(await editorApi.statementAt('postgres', 'x', 0)).toEqual({ text: 'x', start: 0, end: 1, delimEnd: 1 })
+    EditorService.ParamNames.mockResolvedValue(null)
+    expect(await editorApi.paramNames('postgres', 'x')).toEqual([])
+    EditorService.ParamNames.mockResolvedValue(['a'])
+    expect(await editorApi.paramNames('sqlite', 'SELECT :a')).toEqual(['a'])
+    expect(EditorService.ParamNames).toHaveBeenCalledWith('sqlite', 'SELECT :a')
     EditorService.CompletionSchema.mockResolvedValue({ database: 'd', schema: 's', schemas: null, tables: [{ name: 't', type: 'table', columns: null }], columnsLoaded: false })
     expect(await editorApi.completionSchema('s1', 's', true)).toEqual({ database: 'd', schema: 's', schemas: [], tables: [{ name: 't', type: 'table', columns: null }], columnsLoaded: false })
     EditorService.CompletionSchema.mockResolvedValue({ database: 'd', schema: 's', schemas: [], tables: null, columnsLoaded: true })

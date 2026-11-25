@@ -145,6 +145,10 @@ const MsgReadOnly = "This connection is in read-only safe mode: the database rej
 // query.Editors.Execute. requestID can be passed to Cancel. The run is
 // recorded in the query history.
 //
+// Parameters: a script with :name placeholders that have no value in
+// opts.Params runs nothing; the result only has NeedsParams. This is
+// checked before safe mode, so the values are asked for first.
+//
 // Safe mode: on a "confirm" connection a script containing writes
 // (query.IsWrite) is not run unless opts.Confirmed; the result then only
 // has NeedsConfirm and the write statements, for the UI to show. On a
@@ -155,6 +159,11 @@ func (s *EditorService) Execute(ctx context.Context, editorID, requestID, sql st
 	if err != nil {
 		// Unknown editor or closed session: let Execute report it.
 		sess = &conn.Session{}
+	} else if missing := query.MissingParams(sess.Kind, sql, opts.Params); len(missing) > 0 {
+		return &query.ExecResult{
+			Statements: []query.StatementResult{}, Notices: []string{}, Tx: query.TxInfo{State: query.TxUnknown},
+			NeedsParams: missing,
+		}, nil
 	}
 	var writes []string
 	if sess.SafeMode == store.SafeConfirm || sess.SafeMode == store.SafeReadOnly {
@@ -190,6 +199,9 @@ func (s *EditorService) Explain(ctx context.Context, editorID, requestID, sql st
 	plan, err := s.editors.Explain(ctx, editorID, requestID, sql, opts)
 	if err != nil {
 		return nil, err
+	}
+	if len(plan.NeedsParams) > 0 {
+		return plan, nil
 	}
 	st := query.StatementResult{SQL: plan.SQL, Status: query.StatusOK, ResultSets: []query.ResultSet{}, Error: plan.Error}
 	if plan.Error != nil {
@@ -266,6 +278,12 @@ func (s *EditorService) Split(kind driver.Kind, sql string) []Statement {
 		out[i] = toStatement(st, m)
 	}
 	return out
+}
+
+// ParamNames returns the distinct :name placeholders of a script in order
+// of first use; the editor asks for their values before a run.
+func (s *EditorService) ParamNames(kind driver.Kind, sql string) []string {
+	return query.ParamNames(kind, sql)
 }
 
 // StatementAt returns the statement at a cursor position (UTF-16 offset)

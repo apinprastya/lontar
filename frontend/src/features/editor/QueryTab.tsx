@@ -13,6 +13,7 @@ import SqlEditor from './SqlEditor'
 import TxIndicator from './TxIndicator'
 import { MAX_ROWS_OPTIONS } from './types'
 import { ConfirmRunDialog } from '../edits/dialogs'
+import { ParamsDialog } from './ParamsDialog'
 
 /** Debounce of the current-statement highlight (a backend call). */
 export const HIGHLIGHT_DELAY = 120
@@ -172,6 +173,16 @@ export default function QueryTab({ tab, platform, api = editorApi }: QueryTabPro
           editorAndResults
         )}
       </div>
+      {tab.paramsPrompt && (
+        <ParamsDialog
+          key={tab.paramsPrompt.names.join('\u0000')}
+          names={tab.paramsPrompt.names}
+          initial={tab.params}
+          explain={tab.paramsPrompt.action === 'explain'}
+          onSubmit={(values) => void s.submitParams(tab.id, values)}
+          onCancel={() => s.cancelParams(tab.id)}
+        />
+      )}
       {tab.confirm && (
         <ConfirmRunDialog statements={tab.confirm.statements} onConfirm={() => void s.confirmRun(tab.id)} onCancel={() => s.cancelConfirm(tab.id)} />
       )}

@@ -59,6 +59,13 @@ export interface ExecOptions {
      * ExecResult.NeedsConfirm). It is ignored in other modes.
      */
     "confirmed": boolean;
+
+    /**
+     * Params are the values of the script's :name placeholders, bound as
+     * parameters. A run with a placeholder that has no value runs nothing
+     * and reports ExecResult.NeedsParams.
+     */
+    "params": { [_ in string]?: ParamValue } | null;
 }
 
 /**
@@ -89,6 +96,12 @@ export interface ExecResult {
      */
     "needsConfirm": boolean;
     "writeStatements": string[] | null;
+
+    /**
+     * NeedsParams reports that nothing was run: these :name placeholders
+     * have no value in ExecOptions.Params.
+     */
+    "needsParams"?: string[] | null;
 }
 
 /**
@@ -106,6 +119,12 @@ export interface ExplainOptions {
      * (UTF-16 code units); it is added to the reported error position.
      */
     "baseOffset": number;
+
+    /**
+     * Params are the values of the statement's :name placeholders (see
+     * ExecOptions.Params).
+     */
+    "params": { [_ in string]?: ParamValue } | null;
 }
 
 /**
@@ -168,6 +187,25 @@ export interface Page {
 }
 
 /**
+ * ParamValue is the value of one :name placeholder of the SQL editor. It
+ * is always bound as a parameter, never written into the SQL.
+ */
+export interface ParamValue {
+    "value": string;
+
+    /**
+     * Null binds NULL (Value is ignored).
+     */
+    "null": boolean;
+
+    /**
+     * Type is ParamText (the default: a string, cast by the database) or
+     * ParamNumber (an integer or a float, e.g. for LIMIT).
+     */
+    "type": string;
+}
+
+/**
  * Plan is the result of Explain: the engine's plan parsed into one tree
  * shape shared by every engine, plus the raw output.
  */
@@ -198,6 +236,12 @@ export interface Plan {
     "sessionReset": boolean;
     "tx": TxInfo;
     "durationMs": number;
+
+    /**
+     * NeedsParams reports that nothing was run: these :name placeholders
+     * have no value in ExplainOptions.Params.
+     */
+    "needsParams"?: string[] | null;
 }
 
 /**

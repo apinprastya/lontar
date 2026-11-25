@@ -362,3 +362,45 @@ func TestEditorServiceExplainAnalyzeWriteRefused(t *testing.T) {
 		t.Fatalf("analyze delete = %v", err)
 	}
 }
+
+func TestEditorServiceParams(t *testing.T) {
+	ctx := context.Background()
+	m, sid := openSQLiteSessionMode(t, store.SafeConfirm)
+	hist := history.New(t.TempDir())
+	svc := NewEditorService(m, all.Registry(), hist)
+	t.Cleanup(func() { _ = svc.ServiceShutdown() })
+	sess, _ := m.Get(sid)
+	eid, _ := svc.OpenEditor(sid)
+
+	if got := svc.ParamNames(driver.SQLite, "SELECT :a, ':b', :c, :a"); len(got) != 2 || got[0] != "a" || got[1] != "c" {
+		t.Fatalf("ParamNames = %q", got)
+	}
+
+	// Values are asked for before the confirmation of a write.
+	const upd = "UPDATE t SET name = :name WHERE id = :id"
+	res, err := svc.Execute(ctx, eid, "", upd, query.ExecOptions{})
+	if err != nil || len(res.NeedsParams) != 2 || res.NeedsConfirm || len(res.Statements) != 0 {
+		t.Fatalf("needs params = %+v, %v", res, err)
+	}
+	params := map[string]query.ParamValue{"name": {Value: "secret-value"}, "id": {Value: "1", Type: query.ParamNumber}}
+	res, err = svc.Execute(ctx, eid, "", upd, query.ExecOptions{Params: params})
+	if err != nil || !res.NeedsConfirm || len(res.NeedsParams) != 0 {
+		t.Fatalf("needs confirm = %+v, %v", res, err)
+	}
+	res, err = svc.Execute(ctx, eid, "", upd, query.ExecOptions{Params: params, Confirmed: true})
+	if err != nil || len(res.Statements) != 1 || res.Statements[0].RowsAffected == nil || *res.Statements[0].RowsAffected != 1 {
+		t.Fatalf("update = %+v, %v", res, err)
+	}
+
+	// Explain asks too, and is recorded only once it runs.
+	plan, err := svc.Explain(ctx, eid, "", "SELECT * FROM t WHERE id = :id", query.ExplainOptions{})
+	if err != nil || len(plan.NeedsParams) != 1 {
+		t.Fatalf("explain needs params = %+v, %v", plan, err)
+	}
+
+	// History has the SQL as written, never the values.
+	entries, err := NewHistoryService(hist).List(ctx, sess.ConnectionID, "", 10, 0)
+	if err != nil || len(entries) != 1 || entries[0].SQL != upd {
+		t.Fatalf("history = %+v, %v", entries, err)
+	}
+}

@@ -13,6 +13,7 @@ export type {
     ExplainOptions,
     Filter,
     Page,
+    ParamValue,
     Plan,
     PlanNode,
     PlanProp,

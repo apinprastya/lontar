@@ -212,6 +212,41 @@ it with **History**: click an entry to insert it, double-click to open it in a
 new tab. Queries run by an AI assistant (see "AI assistants (MCP)") are
 marked **AI**.
 
+### Query parameters
+
+Write `:name` where a value goes, and Lontar asks for the values when you run
+the query:
+
+```sql
+SELECT * FROM orders
+WHERE customer_id = :customer AND created_at >= :since
+LIMIT :n;
+```
+
+**Run** and **Explain** open a **Query parameters** dialog with one row per
+name. A name used several times is asked for once. Each row has a type and a
+**NULL** box:
+
+- **Text** (the default) sends the value as a string, and the database
+  converts it to the type it needs. On PostgreSQL, the server works out each
+  parameter's type from where it appears, so `id = :id` works with an integer
+  column.
+- **Number** sends an integer or a decimal. Use it where the engine wants a
+  real number, such as `LIMIT :n` on MySQL and MariaDB.
+- **NULL** binds SQL `NULL`.
+
+Values are always sent as bound parameters and are never pasted into the SQL.
+That means a value can't be a list: on PostgreSQL write `id = ANY(:ids)` with
+a value like `{1,2,3}`. The dialog starts with the tab's last values. They are
+saved with the tab's text in local storage, so they come back after a restart.
+Query history keeps the SQL with its `:names`, never the values.
+
+These are not parameters: anything inside strings, quoted identifiers or
+comments, PostgreSQL casts (`x::int`), assignments (`:=`), array slices
+(`a[1:n]`), MySQL labels (`lbl: LOOP`) and psql variables (`:'var'`).
+`?` and `$1` are passed through as written. Parameters work in the SQL editor
+only, not in Run SQL file or the filter bar.
+
 ### Formatting
 
 **Format** (toolbar, Mod+Shift+F in the editor, or the command palette)

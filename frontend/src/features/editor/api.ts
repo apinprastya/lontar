@@ -17,6 +17,8 @@ export interface EditorApi {
   cancel(requestId: string): Promise<boolean>
   fetchMore(editorId: string, requestId: string, resultId: string, n: number): Promise<ResultSet>
   statementAt(kind: Kind, sql: string, cursor: number): Promise<Statement | null>
+  /** The distinct :name placeholders of a script, in order of first use. */
+  paramNames(kind: Kind, sql: string): Promise<string[]>
   completionSchema(sessionId: string, schema: string, refresh: boolean): Promise<CompletionSchema>
   completionColumns(sessionId: string, schema: string, table: string): Promise<CompletionColumn[]>
   historyList(connectionId: string, search: string, limit: number, offset: number): Promise<HistoryEntry[]>
@@ -73,13 +75,14 @@ export const editorApi: EditorApi = {
     await EditorService.CloseEditor(editorId)
   },
   async execute(editorId, requestId, sql, opts) {
-    const res = await EditorService.Execute(editorId, requestId, sql, opts)
+    const res = await EditorService.Execute(editorId, requestId, sql, { ...opts, params: opts.params ?? null })
     if (!res) throw new Error('empty response')
     return {
       ...res,
       notices: res.notices ?? [],
       needsConfirm: res.needsConfirm ?? false,
       writeStatements: res.writeStatements ?? [],
+      needsParams: res.needsParams ?? [],
       statements: (res.statements ?? []).map((s) => ({
         ...s,
         resultSets: (s.resultSets ?? []).map(toResultSet),
@@ -89,7 +92,7 @@ export const editorApi: EditorApi = {
     } as ExecResult
   },
   async explain(editorId, requestId, sql, opts) {
-    const p = await EditorService.Explain(editorId, requestId, sql, opts)
+    const p = await EditorService.Explain(editorId, requestId, sql, { ...opts, params: opts.params ?? null })
     if (!p) throw new Error('empty response')
     return toPlan(p)
   },
@@ -103,6 +106,9 @@ export const editorApi: EditorApi = {
   },
   async statementAt(kind, sql, cursor) {
     return (await EditorService.StatementAt(kind as BindingKind, sql, cursor)) ?? null
+  },
+  async paramNames(kind, sql) {
+    return (await EditorService.ParamNames(kind as BindingKind, sql)) ?? []
   },
   async completionSchema(sessionId, schema, refresh) {
     const cs = await EditorService.CompletionSchema(sessionId, schema, refresh)

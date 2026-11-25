@@ -2,7 +2,7 @@ import type { Kind } from '../features/connections/types'
 import type { EditorApi } from '../features/editor/api'
 import { cycleSort, sortOrder, sortRows } from '../features/grid/sort'
 import { useSettings } from './settings'
-import { DEFAULT_MAX_ROWS, type CompletionSchema, type ExecResult, type Plan, type ResultSet, type TxInfo } from '../features/editor/types'
+import { DEFAULT_MAX_ROWS, type CompletionSchema, type ExecResult, type ParamValue, type ParamValues, type Plan, type ResultSet, type TxInfo } from '../features/editor/types'
 import type { Cell, ResultColumn, SortSpec } from '../features/workspace/types'
 import type { PreviewStatement, ResultSource, SafeMode } from '../features/edits/types'
 import { errorMessage } from '../lib/errors'
@@ -80,6 +80,10 @@ export interface QueryTabState {
   editorRequest: EditorRequest | null
   /** Confirm safe mode: a run waiting for the user to confirm its writes. */
   confirm: PendingRun | null
+  /** The last values of the :name placeholders (saved with the draft). */
+  params: ParamValues
+  /** A run or Explain waiting for the values of its placeholders. */
+  paramsPrompt: ParamsPrompt | null
   /** The SQL when the tab last ran (unrun changes: sql differs). */
   ranSql: string | null
   /** Editing of a result set, like a table (null: none loaded). */
@@ -168,6 +172,18 @@ export interface PendingRun {
   text: string
   base: number
   statements: string[]
+  /** The values its placeholders were given. */
+  params?: ParamValues
+}
+
+/** A run (or Explain) that waits for the values of its :name placeholders. */
+export interface ParamsPrompt {
+  names: string[]
+  text: string
+  base: number
+  action: 'run' | 'explain'
+  /** Explain analyze (action "explain"). */
+  analyze?: boolean
 }
 
 export type RunMode = 'current' | 'all'
@@ -211,6 +227,9 @@ export interface QueryState {
   /** A save found the file changed on disk: Overwrite (true) or Cancel. */
   resolveFileConflict(overwrite: boolean): Promise<void>
   dismissFileError(): void
+  /** Runs the run or Explain waiting for parameter values with these values (also kept for the next run). */
+  submitParams(id: string, values: ParamValues): Promise<void>
+  cancelParams(id: string): void
   /** Runs the run waiting for confirmation (confirm safe mode). */
   confirmRun(id: string): Promise<void>
   cancelConfirm(id: string): void
@@ -298,6 +317,8 @@ export function newQueryTabState(title: string, sql = ''): QueryTabState {
     continueOnError: false,
     editorRequest: null,
     confirm: null,
+    params: {},
+    paramsPrompt: null,
     ranSql: null,
     edit: null,
     filePath: null,
@@ -339,6 +360,24 @@ export interface Draft {
   savedSql?: string
   fileModTime?: number
   eol?: string
+  /** The tab's last parameter values (absent in drafts of older versions). */
+  params?: ParamValues
+}
+
+/** At most this many parameter values are kept per draft. */
+const MAX_DRAFT_PARAMS = 100
+
+/** The draft's parameter values, if they are valid. */
+function draftParams(d: Record<string, unknown>): Partial<Draft> {
+  const raw = d.params
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
+  const params: ParamValues = {}
+  for (const [name, v] of Object.entries(raw as Record<string, unknown>).slice(0, MAX_DRAFT_PARAMS)) {
+    if (typeof v !== 'object' || v === null) continue
+    const p = v as Partial<ParamValue>
+    params[name] = { value: typeof p.value === 'string' ? p.value : '', null: p.null === true, type: p.type === 'number' ? 'number' : 'text' }
+  }
+  return Object.keys(params).length ? { params } : {}
 }
 
 /** The draft's file fields, if they are valid. */
@@ -354,7 +393,7 @@ function draftFile(d: Record<string, unknown>): Partial<Draft> {
 
 /** The tab state restored from a draft. */
 export function tabFromDraft(d: Draft): QueryTabState {
-  const tab = { ...newQueryTabState(d.title, d.sql), cursor: 0 }
+  const tab = { ...newQueryTabState(d.title, d.sql), cursor: 0, params: d.params ?? {} }
   if (!d.filePath) return tab
   return { ...tab, filePath: d.filePath, savedSql: d.savedSql ?? '', fileModTime: d.fileModTime ?? 0, eol: d.eol ?? '\n' }
 }
@@ -362,6 +401,7 @@ export function tabFromDraft(d: Draft): QueryTabState {
 function toDraft(t: QueryTabState): Draft {
   const d: Draft = { title: t.title, sql: t.sql }
   if (t.filePath) Object.assign(d, { filePath: t.filePath, savedSql: t.savedSql ?? '', fileModTime: t.fileModTime, eol: t.eol })
+  if (Object.keys(t.params).length) d.params = t.params
   return d
 }
 
@@ -380,7 +420,7 @@ export function loadDrafts(connectionId: string): Draft[] {
     return parsed
       .filter((d): d is Draft => typeof d === 'object' && d !== null && typeof d.title === 'string' && typeof d.sql === 'string')
       .slice(0, 50)
-      .map((d) => ({ title: d.title, sql: d.sql, ...draftFile(d as unknown as Record<string, unknown>) }))
+      .map((d) => ({ title: d.title, sql: d.sql, ...draftFile(d as unknown as Record<string, unknown>), ...draftParams(d as unknown as Record<string, unknown>) }))
   } catch {
     return []
   }
@@ -522,12 +562,28 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
     return text.trim() ? { text, base } : null
   }
 
+  /**
+   * The :name placeholders of text, or null when the lookup failed (the
+   * tab's error is set).
+   */
+  const placeholders = async (id: string, text: string): Promise<string[] | null> => {
+    try {
+      return await api.paramNames(get().kind, text)
+    } catch (err) {
+      patch(id, { error: errorMessage(err) })
+      return null
+    }
+  }
+
+  /** Asks for the values of names before prompt's action runs. */
+  const askParams = (id: string, prompt: ParamsPrompt) => patch(id, { running: false, requestId: null, error: null, paramsPrompt: prompt })
+
   /** Runs text (base = its offset in the editor); confirmed answers confirm safe mode. */
-  const execute = async (id: string, text: string, base: number, confirmed: boolean) => {
+  const execute = async (id: string, text: string, base: number, confirmed: boolean, params?: ParamValues) => {
     const tab = findQuery(id)
     if (!tab) return
     const requestId = `run-${Date.now().toString(36)}-${nextSeq()}`
-    patch(id, { running: true, requestId, error: null, confirm: null })
+    patch(id, { running: true, requestId, error: null, confirm: null, paramsPrompt: null })
     try {
       const editorId = await ensureEditor(id, tab)
       const result = await api.execute(editorId, requestId, text, {
@@ -535,10 +591,15 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
         continueOnError: tab.continueOnError,
         baseOffset: base,
         confirmed,
+        ...(params ? { params } : {}),
       })
       if (isDisposed() || findQuery(id)?.requestId !== requestId) return
+      if (result.needsParams?.length) {
+        askParams(id, { names: result.needsParams, text, base, action: 'run' })
+        return
+      }
       if (result.needsConfirm) {
-        patch(id, { running: false, requestId: null, confirm: { text, base, statements: result.writeStatements ?? [] } })
+        patch(id, { running: false, requestId: null, confirm: { text, base, statements: result.writeStatements ?? [], ...(params ? { params } : {}) } })
         return
       }
       const errPos = firstErrorPosition(result)
@@ -554,6 +615,42 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
         tx: result.tx,
         editorRequest: errPos ? { seq: nextSeq(), type: 'error', ...errPos } : findQuery(id)?.editorRequest ?? null,
       })
+    } catch (err) {
+      if (isDisposed() || findQuery(id)?.requestId !== requestId) return
+      runFailed(id, err)
+    }
+  }
+
+  /** Shows the plan of text (base = its offset in the editor). */
+  const explain = async (id: string, text: string, base: number, analyze: boolean, params?: ParamValues) => {
+    const tab = findQuery(id)
+    if (!tab) return
+    const requestId = `explain-${Date.now().toString(36)}-${nextSeq()}`
+    patch(id, { running: true, requestId, error: null, confirm: null, paramsPrompt: null })
+    try {
+      const editorId = await ensureEditor(id, tab)
+      const plan = await api.explain(editorId, requestId, text, { analyze, baseOffset: base, ...(params ? { params } : {}) })
+      if (isDisposed() || findQuery(id)?.requestId !== requestId) return
+      if (plan.needsParams?.length) {
+        askParams(id, { names: plan.needsParams, text, base, action: 'explain', analyze })
+        return
+      }
+      const pos = plan.error?.position ?? null
+      patch(id, (t) => ({
+        running: false,
+        requestId: null,
+        // Explain runs on the tab's connection, which closes an open cursor.
+        result: t.result && {
+          ...t.result,
+          statements: t.result.statements.map((s) => ({ ...s, resultSets: s.resultSets.map((rs) => ({ ...rs, canLoadMore: false })) })),
+        },
+        plan: { plan, analyze, sql: text },
+        activeResult: PLAN,
+        selectedRow: null,
+        tx: plan.tx,
+        editorRequest:
+          pos !== null ? { seq: nextSeq(), type: 'error', pos, from: base, to: base + text.length } : t.editorRequest,
+      }))
     } catch (err) {
       if (isDisposed() || findQuery(id)?.requestId !== requestId) return
       runFailed(id, err)
@@ -604,7 +701,14 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
       if (!tab || tab.running) return
       patch(id, { ranSql: tab.sql })
       const target = await targetText(id, tab, mode)
-      if (target) await execute(id, target.text, target.base, false)
+      if (!target) return
+      const names = await placeholders(id, target.text)
+      if (!names) return
+      if (names.length) {
+        askParams(id, { names, text: target.text, base: target.base, action: 'run' })
+        return
+      }
+      await execute(id, target.text, target.base, false)
     },
 
     async explainQuery(id, analyze) {
@@ -612,33 +716,28 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
       if (!tab || tab.running) return
       const target = await targetText(id, tab, 'current')
       if (!target) return
-      const { text, base } = target
-      const requestId = `explain-${Date.now().toString(36)}-${nextSeq()}`
-      patch(id, { running: true, requestId, error: null, confirm: null })
-      try {
-        const editorId = await ensureEditor(id, tab)
-        const plan = await api.explain(editorId, requestId, text, { analyze, baseOffset: base })
-        if (isDisposed() || findQuery(id)?.requestId !== requestId) return
-        const pos = plan.error?.position ?? null
-        patch(id, (t) => ({
-          running: false,
-          requestId: null,
-          // Explain runs on the tab's connection, which closes an open cursor.
-          result: t.result && {
-            ...t.result,
-            statements: t.result.statements.map((s) => ({ ...s, resultSets: s.resultSets.map((rs) => ({ ...rs, canLoadMore: false })) })),
-          },
-          plan: { plan, analyze, sql: text },
-          activeResult: PLAN,
-          selectedRow: null,
-          tx: plan.tx,
-          editorRequest:
-            pos !== null ? { seq: nextSeq(), type: 'error', pos, from: base, to: base + text.length } : t.editorRequest,
-        }))
-      } catch (err) {
-        if (isDisposed() || findQuery(id)?.requestId !== requestId) return
-        runFailed(id, err)
+      const names = await placeholders(id, target.text)
+      if (!names) return
+      if (names.length) {
+        askParams(id, { names, text: target.text, base: target.base, action: 'explain', analyze })
+        return
       }
+      await explain(id, target.text, target.base, analyze)
+    },
+
+    async submitParams(id, values) {
+      const tab = findQuery(id)
+      const prompt = tab?.paramsPrompt
+      if (!tab || !prompt || tab.running) return
+      const params = { ...tab.params, ...values }
+      patch(id, { params, paramsPrompt: null })
+      persist()
+      if (prompt.action === 'explain') await explain(id, prompt.text, prompt.base, prompt.analyze ?? false, params)
+      else await execute(id, prompt.text, prompt.base, false, params)
+    },
+
+    cancelParams(id) {
+      patch(id, { paramsPrompt: null })
     },
 
     async formatQuery(id) {
@@ -708,9 +807,9 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
     async confirmRun(id) {
       const tab = findQuery(id)
       if (!tab?.confirm || tab.running) return
-      const { text, base } = tab.confirm
+      const { text, base, params } = tab.confirm
       patch(id, { confirm: null })
-      await execute(id, text, base, true)
+      await execute(id, text, base, true, params)
     },
 
     cancelConfirm(id) {
@@ -760,6 +859,7 @@ export function createQueryActions<S extends QueryHost & QueryState & { tabs: Ta
           continueOnError: false,
           baseOffset: st.start,
           confirmed: false,
+          ...(Object.keys(tab.params).length ? { params: tab.params } : {}),
         })
         if (isDisposed() || findQuery(id)?.requestId !== requestId) return
         const fresh = res.statements[0]

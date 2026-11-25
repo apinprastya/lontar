@@ -58,6 +58,7 @@ export const EditorService = {
   TxState: vi.fn<(editorId: string) => Promise<unknown>>(),
   Split: vi.fn<(kind: string, sql: string) => Promise<unknown>>(),
   StatementAt: vi.fn<(kind: string, sql: string, cursor: number) => Promise<unknown>>(),
+  ParamNames: vi.fn<(kind: string, sql: string) => Promise<unknown>>(),
   CompletionSchema: vi.fn<(sessionId: string, schema: string, refresh: boolean) => Promise<unknown>>(),
   CompletionColumns: vi.fn<(sessionId: string, schema: string, table: string) => Promise<unknown>>(),
 }

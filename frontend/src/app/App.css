@@ -1960,6 +1960,40 @@ textarea.cell-editor-input {
   width: min(760px, calc(100vw - 32px));
 }
 
+.params-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.params-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.params-row {
+  display: grid;
+  grid-template-columns: minmax(80px, max-content) 1fr auto auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.params-name {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  padding-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.params-null {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  padding-top: 5px;
+  white-space: nowrap;
+}
+
 .preview-sql {
   font-family: var(--font-mono);
   font-size: 12px;

@@ -226,3 +226,53 @@ func TestExplainSQLiteSession(t *testing.T) {
 		t.Fatalf("after switch = %+v", p)
 	}
 }
+
+func TestIntegrationParams(t *testing.T) {
+	forEachExplainEngine(t, func(t *testing.T, kind dbdriver.Kind, e *Editors, db *sql.DB) {
+		id, _ := e.Open("s")
+		ctx := context.Background()
+		exec := func(text string, params map[string]ParamValue) StatementResult {
+			t.Helper()
+			res, err := e.Execute(ctx, id, "", text, ExecOptions{Params: params})
+			if err != nil {
+				t.Fatalf("Execute(%q): %v", text, err)
+			}
+			if len(res.Statements) != 1 || res.Statements[0].Error != nil {
+				t.Fatalf("Execute(%q) = %+v", text, res.Statements)
+			}
+			return res.Statements[0]
+		}
+
+		// A text value compared with an integer column, a repeated name.
+		st := exec("SELECT label FROM numbers WHERE n = :n OR n = :n", map[string]ParamValue{"n": {Value: "1"}})
+		if rows := st.ResultSets[0].Rows; len(rows) != 1 || rows[0][0].V != label1(t, db) {
+			t.Fatalf("rows = %v", rows)
+		}
+		// A number for LIMIT.
+		st = exec("SELECT n FROM numbers ORDER BY n LIMIT :lim", map[string]ParamValue{"lim": {Value: "3", Type: ParamNumber}})
+		if rows := st.ResultSets[0].Rows; len(rows) != 3 {
+			t.Fatalf("limit rows = %d", len(rows))
+		}
+		// NULL.
+		st = exec("SELECT count(*) AS c FROM numbers WHERE label = :x", map[string]ParamValue{"x": {Null: true}})
+		if rows := st.ResultSets[0].Rows; len(rows) != 1 || rows[0][0].V == nil {
+			t.Fatalf("null rows = %v", rows)
+		}
+		// Explain with a value.
+		p := explainOK(t, e, id, "SELECT n FROM numbers WHERE n < :max ORDER BY n", ExplainOptions{Params: map[string]ParamValue{"max": {Value: "500"}}})
+		if len(p.Nodes) == 0 || !strings.Contains(p.SQL, ":max") {
+			t.Fatalf("plan = %+v", p)
+		}
+		// PostgreSQL reports error positions: they point into the text as written.
+		if kind == dbdriver.Postgres {
+			text := "SELECT :a_long_parameter, nosuch FROM numbers"
+			res, err := e.Execute(ctx, id, "", text, ExecOptions{Params: map[string]ParamValue{"a_long_parameter": {Value: "1"}}})
+			if err != nil || res.Statements[0].Error == nil {
+				t.Fatalf("expected an error: %+v %v", res, err)
+			}
+			if pos := res.Statements[0].Error.Position; pos == nil || *pos != strings.Index(text, "nosuch") {
+				t.Fatalf("pg error position = %v", pos)
+			}
+		}
+	})
+}
