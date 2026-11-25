@@ -137,8 +137,13 @@ type Manager struct {
 	src     Source
 	drivers *driver.Registry
 
-	// PingTimeout bounds Connect and Test. Zero means DefaultPingTimeout.
+	// PingTimeout bounds Connect and Test. Zero means ConnectTimeout, or
+	// DefaultPingTimeout without it.
 	PingTimeout time.Duration
+	// ConnectTimeout, when set, returns the connect timeout (re-read for
+	// every attempt, so a settings change applies to the next one); a
+	// result <= 0 means DefaultPingTimeout.
+	ConnectTimeout func() time.Duration
 	// Tunnels opens SSH tunnels; nil refuses SSH connections.
 	Tunnels TunnelOpener
 	// HomeDir expands "~" in certificate paths (default os.UserHomeDir).
@@ -212,6 +217,11 @@ func (m *Manager) emit(ev Event) {
 func (m *Manager) pingTimeout() time.Duration {
 	if m.PingTimeout > 0 {
 		return m.PingTimeout
+	}
+	if m.ConnectTimeout != nil {
+		if d := m.ConnectTimeout(); d > 0 {
+			return d
+		}
 	}
 	return DefaultPingTimeout
 }

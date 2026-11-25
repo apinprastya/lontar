@@ -10,9 +10,14 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
+	"lontar/internal/driver/all"
 	"lontar/internal/migrate"
+	"lontar/internal/services"
+	"lontar/internal/settings"
 	"lontar/internal/sshtunnel"
+	"lontar/internal/store"
 	"lontar/internal/update"
 )
 
@@ -237,4 +242,24 @@ func TestConfigDirFallsBackToLegacy(t *testing.T) {
 	}
 	// The standard logger is used when Logf is nil.
 	logf(migrate.Options{}, "test %d", 1)
+}
+
+func TestConnectTimeoutFollowsSettings(t *testing.T) {
+	dir := t.TempDir()
+	st := settings.New(dir)
+	timeouts := services.LoadTimeouts(st)
+	sessions := newSessions(store.New(dir, store.NewMemorySecretStore()), all.Registry(), hostKeys(dir), timeouts)
+	if got := sessions.ConnectTimeout(); got != 15*time.Second {
+		t.Fatalf("default = %v", got)
+	}
+	svc, stop := idleDisconnect(sessions, services.NewEditorService(sessions, all.Registry(), nil), st, timeouts, WailsEmitter{})
+	defer stop()
+	v := settings.Defaults()
+	v.ConnectTimeoutSeconds = 45
+	if _, err := svc.Save(v); err != nil {
+		t.Fatal(err)
+	}
+	if got := sessions.ConnectTimeout(); got != 45*time.Second {
+		t.Fatalf("after save = %v", got)
+	}
 }

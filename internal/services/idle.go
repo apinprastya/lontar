@@ -43,18 +43,39 @@ func ForwardSessionEvents(sub SessionSubscriber, em Emitter) {
 	})
 }
 
-// IdleTimeout holds the idle disconnect timeout from the settings. It is
-// safe for concurrent use; the zero value is off.
-type IdleTimeout struct {
-	minutes atomic.Int64
+// Timeouts holds the connection timeouts from the settings: the idle
+// disconnect and the connect timeout. It is safe for concurrent use; the
+// zero value has the idle disconnect off and the connect timeout unset
+// (callers then use their default).
+type Timeouts struct {
+	idleMinutes    atomic.Int64
+	connectSeconds atomic.Int64
 }
 
-// Apply takes the timeout from v (SettingsService.OnSave).
-func (t *IdleTimeout) Apply(v settings.Settings) {
-	t.minutes.Store(int64(v.IdleDisconnectMinutes))
+// Apply takes the timeouts from v (at start and SettingsService.OnSave).
+func (t *Timeouts) Apply(v settings.Settings) {
+	t.idleMinutes.Store(int64(v.IdleDisconnectMinutes))
+	t.connectSeconds.Store(int64(v.ConnectTimeoutSeconds))
 }
 
-// Get returns the timeout (0: off).
-func (t *IdleTimeout) Get() time.Duration {
-	return time.Duration(t.minutes.Load()) * time.Minute
+// Idle returns the idle disconnect timeout (0: off).
+func (t *Timeouts) Idle() time.Duration {
+	return time.Duration(t.idleMinutes.Load()) * time.Minute
+}
+
+// Connect returns the connect timeout (0: unset, use the default).
+func (t *Timeouts) Connect() time.Duration {
+	return time.Duration(t.connectSeconds.Load()) * time.Second
+}
+
+// LoadTimeouts returns Timeouts applied from the stored settings (the
+// defaults when they cannot be read).
+func LoadTimeouts(st *settings.Store) *Timeouts {
+	t := &Timeouts{}
+	v, err := st.Load()
+	if err != nil {
+		v = settings.Defaults()
+	}
+	t.Apply(v)
+	return t
 }

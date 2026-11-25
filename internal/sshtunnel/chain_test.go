@@ -364,6 +364,16 @@ func TestChainTimeoutCoversWholeChain(t *testing.T) {
 		t.Fatalf("jump host client not closed (%d)", len(closed()))
 	}
 
+	// TimeoutFunc replaces Timeout (re-read for every connect).
+	d = c.dialer(Options{KeepAlive: -1, Timeout: time.Hour, TimeoutFunc: func() time.Duration { return timeout }})
+	start = time.Now()
+	if _, err = d.Open(context.Background(), cfg); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("TimeoutFunc: err = %v, want deadline exceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*timeout {
+		t.Fatalf("TimeoutFunc: took %s with a %s timeout", elapsed, timeout)
+	}
+
 	// A parent context that is already done stops at hop 1.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

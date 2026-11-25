@@ -30,7 +30,7 @@ export const SECTIONS: { id: SettingsSection; label: string; description: string
   { id: 'appearance', label: 'Appearance', description: 'Theme and text size.' },
   { id: 'editor', label: 'SQL editor', description: 'Running queries and formatting SQL.' },
   { id: 'data', label: 'Data & export', description: 'Table paging and CSV export defaults.' },
-  { id: 'connections', label: 'Connections', description: 'Closing connections that are not in use.' },
+  { id: 'connections', label: 'Connections', description: 'Connect timeout and closing connections that are not in use.' },
   { id: 'ai', label: 'AI assistants', description: 'Connect Claude to Lontar over MCP.' },
   { id: 'updates', label: 'Updates', description: 'Check GitHub Releases for a newer version.' },
 ]
@@ -84,6 +84,7 @@ export default function SettingsDialog({ platform, version }: SettingsDialogProp
       editorFontSize: clamp(draft.editorFontSize, LIMITS.fontSize),
       gridPageSize: clamp(draft.gridPageSize, LIMITS.pageSize),
       editorMaxRows: clamp(draft.editorMaxRows, LIMITS.maxRows),
+      connectTimeoutSeconds: clamp(draft.connectTimeoutSeconds ?? DEFAULT_SETTINGS.connectTimeoutSeconds, LIMITS.connectTimeout),
     })
     setBusy(false)
     if (ok) close()
@@ -199,6 +200,22 @@ export default function SettingsDialog({ platform, version }: SettingsDialogProp
       const choices = IDLE_CHOICES.includes(idle) ? IDLE_CHOICES : [...IDLE_CHOICES, idle].sort((a, b) => a - b)
       body = (
         <div className="form-grid">
+          <label htmlFor={id('connect')}>Connect timeout (seconds)</label>
+          <input
+            id={id('connect')}
+            type="number"
+            min={LIMITS.connectTimeout[0]}
+            max={LIMITS.connectTimeout[1]}
+            aria-describedby={id('connect-hint')}
+            value={draft.connectTimeoutSeconds ?? DEFAULT_SETTINGS.connectTimeoutSeconds}
+            onChange={(e) => set('connectTimeoutSeconds', Number(e.target.value))}
+          />
+          <span />
+          <p className="hint" id={id('connect-hint')}>
+            How long connecting may take before it gives up: the SSH tunnel (all hops), opening the database and the first query. Also used by
+            Test and by reconnects.
+          </p>
+
           <label htmlFor={id('idle')}>Disconnect when idle for</label>
           <select id={id('idle')} aria-describedby={id('idle-hint')} value={idle} onChange={(e) => set('idleDisconnectMinutes', Number(e.target.value))}>
             {choices.map((m) => (

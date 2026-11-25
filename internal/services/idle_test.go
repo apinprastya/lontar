@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -83,14 +84,37 @@ func TestForwardSessionEventsIgnoresOthers(t *testing.T) {
 	}
 }
 
-func TestIdleTimeout(t *testing.T) {
-	var it IdleTimeout
-	if it.Get() != 0 {
-		t.Fatal("zero value should be off")
+func TestTimeouts(t *testing.T) {
+	var it Timeouts
+	if it.Idle() != 0 || it.Connect() != 0 {
+		t.Fatal("zero value should be unset")
 	}
-	it.Apply(settings.Settings{IdleDisconnectMinutes: 15})
-	if it.Get() != 15*time.Minute {
-		t.Fatalf("Get = %v", it.Get())
+	it.Apply(settings.Settings{IdleDisconnectMinutes: 15, ConnectTimeoutSeconds: 40})
+	if it.Idle() != 15*time.Minute || it.Connect() != 40*time.Second {
+		t.Fatalf("Idle = %v, Connect = %v", it.Idle(), it.Connect())
+	}
+}
+
+func TestLoadTimeouts(t *testing.T) {
+	dir := t.TempDir()
+	st := settings.New(dir)
+	if got := LoadTimeouts(st).Connect(); got != 15*time.Second {
+		t.Fatalf("default connect = %v", got)
+	}
+	v := settings.Defaults()
+	v.ConnectTimeoutSeconds, v.IdleDisconnectMinutes = 60, 5
+	if _, err := st.Save(v); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadTimeouts(st); got.Connect() != time.Minute || got.Idle() != 5*time.Minute {
+		t.Fatalf("loaded = %v, %v", got.Connect(), got.Idle())
+	}
+	// A broken file: defaults.
+	if err := os.WriteFile(st.Path(), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadTimeouts(st); got.Connect() != 15*time.Second || got.Idle() != 0 {
+		t.Fatalf("broken file = %v, %v", got.Connect(), got.Idle())
 	}
 }
 

@@ -33,6 +33,8 @@ export interface Settings {
   autoUpdate: boolean
   /** Close a session's connection after this many idle minutes (it reconnects on use); 0 = never. */
   idleDisconnectMinutes: number
+  /** Seconds one connect attempt may take (SSH tunnel, opening the database and the ping). */
+  connectTimeoutSeconds: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -46,10 +48,12 @@ export const DEFAULT_SETTINGS: Settings = {
   sqlFormat: { keywordCase: 'upper', indent: 2 },
   autoUpdate: true,
   idleDisconnectMinutes: 0,
+  connectTimeoutSeconds: 15,
 }
 
 export const LIMITS = {
   fontSize: [9, 32],
   pageSize: [10, 5000],
   maxRows: [1, 50000],
+  connectTimeout: [5, 300],
 } as const

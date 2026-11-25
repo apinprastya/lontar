@@ -700,7 +700,12 @@ move between them) and reopens on the one you used last:
   (UPPER, lower or as typed) and indent (2 or 4 spaces) of **Format**.
 - **Data & export:** **rows per page** of new table tabs (default 300) and
   the **CSV export defaults**.
-- **Connections:** **Disconnect when idle for** Never (default), 5, 15 or 30
+- **Connections:** the **connect timeout** (15 seconds by default, 5–300):
+  how long one connect attempt may take before it gives up, covering the SSH
+  tunnel (all jump hosts), opening the database and the first query. It
+  applies to Connect, Test, reconnects after idle and switching databases,
+  from the next attempt after saving (`lontar mcp` reads it when it starts).
+  **Disconnect when idle for** Never (default), 5, 15 or 30
   minutes, or 1, 2 or 4 hours. A session unused for that long has its
   database connection (and SSH tunnel) closed but stays open: its tabs keep
   their state, the sidebar shows an **Idle** badge, and the next action

@@ -241,6 +241,16 @@ func TestPingTimeout(t *testing.T) {
 	if m.pingTimeout() != DefaultPingTimeout {
 		t.Fatal("default")
 	}
+	// The settings' connect timeout, re-read each time; <= 0 is the default.
+	setting := 40 * time.Second
+	m.ConnectTimeout = func() time.Duration { return setting }
+	if m.pingTimeout() != 40*time.Second {
+		t.Fatal("connect timeout")
+	}
+	setting = 0
+	if m.pingTimeout() != DefaultPingTimeout {
+		t.Fatal("unset connect timeout")
+	}
 	m.PingTimeout = time.Second
 	if m.pingTimeout() != time.Second {
 		t.Fatal("override")

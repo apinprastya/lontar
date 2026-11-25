@@ -28,6 +28,19 @@ describe('Settings › Connections', () => {
     expect(SettingsService.Save).toHaveBeenCalledWith({ ...DEFAULT_SETTINGS, idleDisconnectMinutes: 30 })
   })
 
+  it('saves the connect timeout, clamped', async () => {
+    const user = userEvent.setup()
+    render(<SettingsDialog />)
+    await user.click(screen.getByRole('tab', { name: 'Connections' }))
+    const input = screen.getByRole('spinbutton', { name: 'Connect timeout (seconds)' })
+    expect(input).toHaveValue(15)
+    expect(input).toHaveAccessibleDescription(/SSH tunnel/)
+    await user.clear(input)
+    await user.type(input, '999')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(SettingsService.Save).toHaveBeenCalledWith({ ...DEFAULT_SETTINGS, connectTimeoutSeconds: 300 })
+  })
+
   it('keeps a value set outside the presets', async () => {
     useSettings.setState({ settings: { ...DEFAULT_SETTINGS, idleDisconnectMinutes: 45 } })
     const user = userEvent.setup()

@@ -84,6 +84,13 @@ export interface Settings {
      * reconnects on its next use. 0 (the default) never does.
      */
     "idleDisconnectMinutes": number;
+
+    /**
+     * ConnectTimeoutSeconds bounds one connect attempt: the SSH tunnel
+     * (every hop), opening the database and pinging it. Missing in older
+     * files: 15.
+     */
+    "connectTimeoutSeconds": number;
 }
 
 /**

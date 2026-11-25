@@ -11,6 +11,7 @@ import (
 
 	"lontar/internal/appstate"
 	"lontar/internal/conn"
+	"lontar/internal/driver"
 	"lontar/internal/driver/all"
 	"lontar/internal/history"
 	"lontar/internal/migrate"
@@ -128,16 +129,17 @@ func logf(opts migrate.Options, format string, args ...any) {
 func newBackend(configDir string) backend {
 	st := store.New(configDir, store.NewSecretStore(configDir))
 	drivers := all.Registry()
-	sessions := conn.NewManager(st, drivers)
-	hostKeys := &sshtunnel.HostKeys{UserFiles: userKnownHosts(), AppFile: filepath.Join(configDir, KnownHostsFile)}
-	sessions.Tunnels = conn.SSHTunnels(sshtunnel.New(sshtunnel.Options{HostKeys: hostKeys}))
+	settingsStore := settings.New(configDir)
+	timeouts := services.LoadTimeouts(settingsStore)
+	hk := hostKeys(configDir)
+	sessions := newSessions(st, drivers, hk, timeouts)
 	hist := history.New(configDir)
 	connections := services.NewConnectionService(st, sessions, drivers)
-	connections.HostKeys = hostKeys
+	connections.HostKeys = hk
 	events := WailsEmitter{}
 	state := appstate.New(configDir)
 	editor := services.NewEditorService(sessions, drivers, hist)
-	settingsSvc, stopIdle := idleDisconnect(sessions, editor, settings.New(configDir), events)
+	settingsSvc, stopIdle := idleDisconnect(sessions, editor, settingsStore, timeouts, events)
 	return backend{
 		connections: connections,
 		schema:      services.NewSchemaService(sessions, drivers),
@@ -158,20 +160,32 @@ func newBackend(configDir string) backend {
 	}
 }
 
-// idleDisconnect wires the idle disconnect: the timeout comes from the
-// settings (at start and on every save), the sweep suspends idle sessions
+// hostKeys is the SSH host key store: ~/.ssh/known_hosts (read only) and
+// Lontar's own known_hosts in configDir.
+func hostKeys(configDir string) *sshtunnel.HostKeys {
+	return &sshtunnel.HostKeys{UserFiles: userKnownHosts(), AppFile: filepath.Join(configDir, KnownHostsFile)}
+}
+
+// newSessions returns the session manager with its SSH tunnels (host keys
+// checked against hk). Both read the connect timeout from timeouts at every
+// attempt.
+func newSessions(st *store.Store, drivers *driver.Registry, hk *sshtunnel.HostKeys, timeouts *services.Timeouts) *conn.Manager {
+	sessions := conn.NewManager(st, drivers)
+	sessions.ConnectTimeout = timeouts.Connect
+	sessions.Tunnels = conn.SSHTunnels(sshtunnel.New(sshtunnel.Options{HostKeys: hk, TimeoutFunc: timeouts.Connect}))
+	return sessions
+}
+
+// idleDisconnect wires the settings service and the idle disconnect: the
+// timeouts are applied on every save, the sweep suspends idle sessions
 // (keeping those whose SQL editors are busy) and the frontend is told about
 // suspended and resumed sessions. It returns the settings service and the
 // function that stops the sweep.
-func idleDisconnect(sessions *conn.Manager, editor *services.EditorService, st *settings.Store, events services.Emitter) (*services.SettingsService, func()) {
-	timeout := &services.IdleTimeout{}
-	if v, err := st.Load(); err == nil {
-		timeout.Apply(v)
-	}
+func idleDisconnect(sessions *conn.Manager, editor *services.EditorService, st *settings.Store, timeouts *services.Timeouts, events services.Emitter) (*services.SettingsService, func()) {
 	svc := services.NewSettingsService(st)
-	svc.OnSave = timeout.Apply
+	svc.OnSave = timeouts.Apply
 	services.ForwardSessionEvents(sessions, events)
-	stop := sessions.StartIdleSweep(services.IdleSweepInterval, timeout.Get, services.EditorIdleHold(editor))
+	stop := sessions.StartIdleSweep(services.IdleSweepInterval, timeouts.Idle, services.EditorIdleHold(editor))
 	return svc, stop
 }
 
