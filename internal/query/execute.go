@@ -41,6 +41,10 @@ type ExecOptions struct {
 	// run on a connection in "confirm" safe mode (see
 	// ExecResult.NeedsConfirm). It is ignored in other modes.
 	Confirmed bool `json:"confirmed"`
+	// Params are the values of the script's :name placeholders, bound as
+	// parameters. A run with a placeholder that has no value runs nothing
+	// and reports ExecResult.NeedsParams.
+	Params map[string]ParamValue `json:"params"`
 }
 
 // NormalizeMaxRows applies the default and the upper bound.
@@ -146,6 +150,9 @@ type ExecResult struct {
 	// Run it again with ExecOptions.Confirmed to execute it.
 	NeedsConfirm    bool     `json:"needsConfirm"`
 	WriteStatements []string `json:"writeStatements"`
+	// NeedsParams reports that nothing was run: these :name placeholders
+	// have no value in ExecOptions.Params.
+	NeedsParams []string `json:"needsParams,omitempty"`
 }
 
 // FirstError returns the first failed statement's error (nil if none).

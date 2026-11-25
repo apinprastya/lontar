@@ -252,6 +252,27 @@ describe('QueryTab', () => {
     expect(editor.execute).toHaveBeenCalledTimes(3)
   })
 
+  it('asks for parameter values before running', async () => {
+    act(() => store.getState().setSql(tab().id, 'SELECT * FROM t WHERE id = :id'))
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Run all' }))
+    const dlg = await screen.findByRole('dialog', { name: 'Query parameters' })
+    expect(editor.execute).not.toHaveBeenCalled()
+    fireEvent.change(within(dlg).getByRole('textbox', { name: ':id' }), { target: { value: '7' } })
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Run' }))
+    await waitFor(() => expect(tab().result).not.toBeNull())
+    expect(screen.queryByRole('dialog', { name: 'Query parameters' })).toBeNull()
+    expect(editor.execute).toHaveBeenLastCalledWith('ed-1', expect.any(String), 'SELECT * FROM t WHERE id = :id', expect.objectContaining({ params: { id: { value: '7', null: false, type: 'text' } } }))
+
+    // The next run starts from the last values; Cancel closes the dialog.
+    fireEvent.click(screen.getByRole('button', { name: 'Run all' }))
+    const again = await screen.findByRole('dialog', { name: 'Query parameters' })
+    expect(within(again).getByRole('textbox', { name: ':id' })).toHaveValue('7')
+    fireEvent.click(within(again).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Query parameters' })).toBeNull()
+    expect(editor.execute).toHaveBeenCalledTimes(1)
+  })
+
   it('explains from the toolbar and shows the Plan tab next to the results', async () => {
     mount()
     expect(screen.getByText(/Explain it with Ctrl\+Shift\+E/)).toBeInTheDocument()

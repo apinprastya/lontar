@@ -305,6 +305,17 @@ func (e *Editors) execute(ctx context.Context, ed *Editor, sqlText string, opts 
 		return nil, err
 	}
 	res := &ExecResult{Statements: []StatementResult{}, Notices: []string{}}
+	stmts := sqlsplit.Split(kind, sqlText)
+	missing, err := checkParams(kind, stmts, opts.Params)
+	if err != nil {
+		return nil, err
+	}
+	if len(missing) > 0 {
+		// Nothing runs until every :name has a value.
+		res.NeedsParams = missing
+		res.Tx = ed.txInfo()
+		return res, nil
+	}
 	e.closeCursor(ed)
 	if ed.conn != nil && ed.db != db {
 		e.release(ed, msgSwitched, true)
@@ -317,7 +328,6 @@ func (e *Editors) execute(ctx context.Context, ed *Editor, sqlText string, opts 
 	e.reportLost(ed, res)
 
 	maxRows := NormalizeMaxRows(opts.MaxRows)
-	stmts := sqlsplit.Split(ed.kind, sqlText)
 	om := sqlsplit.NewOffsetMap(sqlText, opts.BaseOffset)
 	stopped := false
 	for i, st := range stmts {
@@ -325,7 +335,7 @@ func (e *Editors) execute(ctx context.Context, ed *Editor, sqlText string, opts 
 		if stopped {
 			sr.Status = StatusSkipped
 		} else {
-			e.runStatement(ctx, ed, &sr, st, i == len(stmts)-1, maxRows, om, res)
+			e.runStatement(ctx, ed, &sr, st, opts.Params, i == len(stmts)-1, maxRows, om, res)
 			switch {
 			case sr.Status == StatusCancelled:
 				res.Cancelled, stopped = true, true
@@ -382,6 +392,21 @@ func (e *Editors) explain(ctx context.Context, ed *Editor, sqlText string, st sq
 	if err != nil {
 		return nil, err
 	}
+	shown, _ := explainSQL(kind, st.Text, opts)
+	plan := &Plan{Engine: string(kind), Analyzed: opts.Analyze, SQL: shown, Nodes: []PlanNode{}, Notices: []string{}}
+	missing, err := checkParams(kind, []sqlsplit.Statement{st}, opts.Params)
+	if err != nil {
+		return nil, err
+	}
+	if len(missing) > 0 {
+		plan.NeedsParams = missing
+		plan.Tx = ed.txInfo()
+		return plan, nil
+	}
+	b, err := bindParams(kind, st.Text, opts.Params)
+	if err != nil {
+		return nil, err
+	}
 	e.closeCursor(ed)
 	if ed.conn != nil && ed.db != db {
 		e.release(ed, msgSwitched, true)
@@ -394,15 +419,17 @@ func (e *Editors) explain(ctx context.Context, ed *Editor, sqlText string, st sq
 	res := &ExecResult{}
 	e.reportLost(ed, res)
 
-	q, prefix := explainSQL(ed.kind, st.Text, opts)
-	plan := &Plan{Engine: string(ed.kind), Analyzed: opts.Analyze, SQL: q, Nodes: []PlanNode{}, Notices: []string{}}
-	raw, lite, err := e.readPlan(ctx, ed, q)
+	// The plan shows the statement as written (:name); the database gets
+	// bind placeholders and the values.
+	q, prefix := explainSQL(ed.kind, b.SQL, opts)
+	args := b.driverArgs(ed.kind)
+	raw, lite, err := e.readPlan(ctx, ed, q, args)
 	if err != nil && ctx.Err() == nil && (errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone)) {
 		// The connection died while idle: replace it and try once more.
 		e.drop(ed, msgReconnect)
 		if err = e.pin(ctx, ed, ed.db, ed.kind); err == nil {
 			e.reportLost(ed, res)
-			raw, lite, err = e.readPlan(ctx, ed, q)
+			raw, lite, err = e.readPlan(ctx, ed, q, args)
 		}
 	}
 	switch {
@@ -414,7 +441,7 @@ func (e *Editors) explain(ctx context.Context, ed *Editor, sqlText string, st sq
 		e.checkAlive(ed, res, msgCancelled)
 	default:
 		om := sqlsplit.NewOffsetMap(sqlText, opts.BaseOffset)
-		plan.Error = toExecError(err, q, func(b int) int { return om.UTF16(st.Start + shiftPosition(b, prefix)) })
+		plan.Error = toExecError(err, q, func(off int) int { return om.UTF16(st.Start + b.Pos(shiftPosition(off, prefix))) })
 		if isBadConn(err) {
 			e.checkAlive(ed, res, msgLost)
 		}
@@ -430,11 +457,11 @@ func (e *Editors) explain(ctx context.Context, ed *Editor, sqlText string, st sq
 
 // readPlan runs an EXPLAIN statement and returns its output: the text of
 // the first column of every row, or SQLite's query plan rows.
-func (e *Editors) readPlan(ctx context.Context, ed *Editor, q string) (string, []sqliteQPRow, error) {
+func (e *Editors) readPlan(ctx context.Context, ed *Editor, q string, args []any) (string, []sqliteQPRow, error) {
 	if ed.conn == nil {
 		return "", nil, sql.ErrConnDone
 	}
-	rows, err := ed.conn.QueryContext(ctx, q, statementArgs(ed.kind)...)
+	rows, err := ed.conn.QueryContext(ctx, q, args...)
 	if err != nil {
 		return "", nil, err
 	}
@@ -498,14 +525,17 @@ func (e *Editors) reportLost(ed *Editor, res *ExecResult) {
 	ed.lost = ""
 }
 
-func (e *Editors) runStatement(ctx context.Context, ed *Editor, sr *StatementResult, st sqlsplit.Statement, last bool, maxRows int, om sqlsplit.OffsetMap, res *ExecResult) {
+func (e *Editors) runStatement(ctx context.Context, ed *Editor, sr *StatementResult, st sqlsplit.Statement, params map[string]ParamValue, last bool, maxRows int, om sqlsplit.OffsetMap, res *ExecResult) {
 	t0 := time.Now()
 	defer func() { sr.DurationMs = durationMs(time.Since(t0)) }()
 	words := sqlsplit.Words(ed.kind, st.Text, 0)
 
-	err := ctx.Err()
+	b, err := bindParams(ed.kind, st.Text, params)
 	if err == nil {
-		err = e.runOnce(ctx, ed, sr, st.Text, words, last, maxRows)
+		err = ctx.Err()
+	}
+	if err == nil {
+		err = e.runOnce(ctx, ed, sr, b.SQL, b.driverArgs(ed.kind), words, last, maxRows)
 	}
 	if err != nil && ctx.Err() == nil && (errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone)) {
 		// The connection died while idle and nothing was sent: replace
@@ -514,7 +544,7 @@ func (e *Editors) runStatement(ctx context.Context, ed *Editor, sr *StatementRes
 		if err = e.pin(ctx, ed, ed.db, ed.kind); err == nil {
 			e.reportLost(ed, res)
 			sr.ResultSets = sr.ResultSets[:0]
-			err = e.runOnce(ctx, ed, sr, st.Text, words, last, maxRows)
+			err = e.runOnce(ctx, ed, sr, b.SQL, b.driverArgs(ed.kind), words, last, maxRows)
 		}
 	}
 	switch {
@@ -527,7 +557,7 @@ func (e *Editors) runStatement(ctx context.Context, ed *Editor, sr *StatementRes
 		e.checkAlive(ed, res, msgCancelled)
 	default:
 		sr.Status = StatusError
-		sr.Error = toExecError(err, st.Text, func(b int) int { return om.UTF16(st.Start + b) })
+		sr.Error = toExecError(err, b.SQL, func(off int) int { return om.UTF16(st.Start + b.Pos(off)) })
 		ed.track.observe(ed.kind, st.Text, words, err)
 		if errors.Is(err, gomysql.ErrInvalidConn) || errors.Is(err, driver.ErrBadConn) {
 			e.checkAlive(ed, res, msgLost)
@@ -538,7 +568,7 @@ func (e *Editors) runStatement(ctx context.Context, ed *Editor, sr *StatementRes
 // runOnce runs one statement on the pinned connection. The statement runs
 // under its own context, detached from ctx but cancelled with it, so that
 // the rows of a truncated last result can stay open after the call.
-func (e *Editors) runOnce(ctx context.Context, ed *Editor, sr *StatementResult, text string, words []string, last bool, maxRows int) error {
+func (e *Editors) runOnce(ctx context.Context, ed *Editor, sr *StatementResult, text string, args []any, words []string, last bool, maxRows int) error {
 	if ed.conn == nil {
 		return sql.ErrConnDone
 	}
@@ -551,7 +581,6 @@ func (e *Editors) runOnce(ctx context.Context, ed *Editor, sr *StatementResult, 
 			scancel()
 		}
 	}()
-	args := statementArgs(ed.kind)
 	if !returnsRows(words) {
 		r, err := ed.conn.ExecContext(sctx, text, args...)
 		if err != nil {

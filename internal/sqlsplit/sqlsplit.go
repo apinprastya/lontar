@@ -151,6 +151,9 @@ type Scanner struct {
 	copy    *copyReader // the data block being read
 
 	onWord func(upper string) // optional hook for every word (Words)
+	// onParam is an optional hook for every :name placeholder (Params);
+	// start and end are absolute offsets of the colon and after the name.
+	onParam func(name string, start, end int)
 }
 
 const wordLimit = 6
@@ -259,6 +262,47 @@ func Words(kind driver.Kind, text string, limit int) []string {
 			return out
 		}
 	}
+}
+
+// Param is one :name placeholder of a statement.
+type Param struct {
+	// Name is the name without the colon.
+	Name string `json:"name"`
+	// Start is the byte offset of the colon; End the offset after the name.
+	Start int `json:"start"`
+	End   int `json:"end"`
+}
+
+// Params returns the :name placeholders of text in order, skipping
+// strings, quoted identifiers, comments, dollar-quoted bodies, psql
+// meta-commands and variables (:'var'), casts (::type), assignments (:=),
+// array slices (a[1:n]) and labels (lbl: BEGIN).
+func Params(kind driver.Kind, text string) []Param {
+	out := []Param{}
+	sc := stringScanner(kind, text)
+	sc.d.copyData = false
+	sc.onParam = func(name string, start, end int) {
+		out = append(out, Param{Name: name, Start: start, End: end})
+	}
+	for {
+		if _, err := sc.Next(); err != nil {
+			return out
+		}
+	}
+}
+
+// ParamNames returns the distinct placeholder names of text in order of
+// first use (names are case-sensitive).
+func ParamNames(kind driver.Kind, text string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, p := range Params(kind, text) {
+		if !seen[p.Name] {
+			seen[p.Name] = true
+			out = append(out, p.Name)
+		}
+	}
+	return out
 }
 
 // StatementAt returns the statement the cursor (a byte offset) belongs to:
@@ -538,6 +582,22 @@ func (sc *Scanner) token() {
 			sc.i = end
 		} else {
 			sc.i = i + 1
+		}
+	case c == ':' && next == ':':
+		// A PostgreSQL cast (x::int): never the start of a :name.
+		sc.i = i + 2
+	case c == ':' && isIdentStart(next) && (i == 0 || !(isIdent(s[i-1]) || s[i-1] == ']' || s[i-1] == ')')):
+		// A :name placeholder (not a[1:n], a[i:n] or a MySQL label).
+		j := i + 2
+		for j < len(s) && isIdent(s[j]) && !sc.delimAt(j) {
+			j++
+		}
+		if j == len(s) && sc.needMore() {
+			return
+		}
+		sc.i = j
+		if sc.onParam != nil {
+			sc.onParam(string(s[i+1:j]), sc.base+i, sc.base+j)
 		}
 	case isIdentStart(c):
 		j := i + 1

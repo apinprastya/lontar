@@ -251,3 +251,60 @@ func TestWords(t *testing.T) {
 		t.Fatalf("Words empty = %q", got)
 	}
 }
+
+func TestParams(t *testing.T) {
+	const (
+		pg   = driver.Postgres
+		my   = driver.MySQL
+		lite = driver.SQLite
+	)
+	tests := []struct {
+		name string
+		kind driver.Kind
+		sql  string
+		want []string
+	}{
+		{"simple", pg, "SELECT * FROM t WHERE a = :a AND b > :b_2", []string{"a", "b_2"}},
+		{"repeated", lite, "SELECT :x, :y, :x", []string{"x", "y", "x"}},
+		{"in parens and lists", my, "SELECT * FROM t WHERE id IN (:a,:b)", []string{"a", "b"}},
+		{"cast", pg, "SELECT :v::int, x::text, '1'::date", []string{"v"}},
+		{"assignment", my, "SELECT @n := 1, @m:=2", nil},
+		{"slices", pg, "SELECT a[1:n], a[i:j], f(x):y FROM t", nil},
+		{"label", my, "lbl: LOOP LEAVE lbl; END LOOP", nil},
+		{"strings and comments", pg, "SELECT ':a', \":b\", E'\\':c' -- :d\n/* :e */", nil},
+		{"dollar body", pg, "SELECT $$ :a $$, $f$ :b $f$", nil},
+		{"mysql strings", my, "SELECT ':a', \":b\", `:c` # :d", nil},
+		{"psql variables", pg, "SELECT :'v', :\"w\"", nil},
+		{"multi statement", lite, "SELECT :a; SELECT :b", []string{"a", "b"}},
+		{"non-ascii", pg, "SELECT :näme", []string{"näme"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []string
+			for _, p := range Params(tc.kind, tc.sql) {
+				if tc.sql[p.Start:p.End] != ":"+p.Name {
+					t.Fatalf("offsets %d:%d = %q, name %q", p.Start, p.End, tc.sql[p.Start:p.End], p.Name)
+				}
+				got = append(got, p.Name)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("Params = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	if got := ParamNames(pg, "SELECT :b, :a, :b, :B"); !reflect.DeepEqual(got, []string{"b", "a", "B"}) {
+		t.Fatalf("ParamNames = %q", got)
+	}
+	if got := ParamNames(pg, "SELECT 1"); got == nil || len(got) != 0 {
+		t.Fatalf("ParamNames none = %#v", got)
+	}
+}
+
+func TestParamsDoNotChangeSplit(t *testing.T) {
+	script := "SELECT x::int, :a FROM t WHERE y = :b; SELECT a[1:2]"
+	got := texts(Split(driver.Postgres, script))
+	want := []string{"SELECT x::int, :a FROM t WHERE y = :b", "SELECT a[1:2]"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Split = %q", got)
+	}
+}

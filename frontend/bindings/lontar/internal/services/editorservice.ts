@@ -59,6 +59,10 @@ export function CompletionSchema(sessionID: string, schema: string, refresh: boo
  * query.Editors.Execute. requestID can be passed to Cancel. The run is
  * recorded in the query history.
  * 
+ * Parameters: a script with :name placeholders that have no value in
+ * opts.Params runs nothing; the result only has NeedsParams. This is
+ * checked before safe mode, so the values are asked for first.
+ * 
  * Safe mode: on a "confirm" connection a script containing writes
  * (query.IsWrite) is not run unless opts.Confirmed; the result then only
  * has NeedsConfirm and the write statements, for the UI to show. On a
@@ -96,6 +100,14 @@ export function FetchMore(editorID: string, requestID: string, resultID: string,
  */
 export function OpenEditor(sessionID: string): $CancellablePromise<string> {
     return $Call.ByID(796351349, sessionID);
+}
+
+/**
+ * ParamNames returns the distinct :name placeholders of a script in order
+ * of first use; the editor asks for their values before a run.
+ */
+export function ParamNames(kind: driver$0.Kind, sql: string): $CancellablePromise<string[] | null> {
+    return $Call.ByID(4189186679, kind, sql);
 }
 
 /**

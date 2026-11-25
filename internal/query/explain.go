@@ -22,6 +22,9 @@ type ExplainOptions struct {
 	// BaseOffset is the position of the SQL text inside the editor
 	// (UTF-16 code units); it is added to the reported error position.
 	BaseOffset int `json:"baseOffset"`
+	// Params are the values of the statement's :name placeholders (see
+	// ExecOptions.Params).
+	Params map[string]ParamValue `json:"params"`
 }
 
 // Plan formats.
@@ -76,6 +79,9 @@ type Plan struct {
 	SessionReset bool       `json:"sessionReset"`
 	Tx           TxInfo     `json:"tx"`
 	DurationMs   float64    `json:"durationMs"`
+	// NeedsParams reports that nothing was run: these :name placeholders
+	// have no value in ExplainOptions.Params.
+	NeedsParams []string `json:"needsParams,omitempty"`
 }
 
 // ExplainError codes.

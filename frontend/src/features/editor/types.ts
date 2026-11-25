@@ -58,7 +58,21 @@ export interface ExecResult {
   /** Confirm safe mode: nothing ran; these write statements need confirmation. */
   needsConfirm?: boolean
   writeStatements?: string[]
+  /** Nothing ran: these :name placeholders have no value. */
+  needsParams?: string[]
 }
+
+/** How a parameter value is bound: as a string (the database casts it) or as a number. */
+export type ParamType = 'text' | 'number'
+
+/** The value of one :name placeholder; always bound as a parameter, never put into the SQL. */
+export interface ParamValue {
+  value: string
+  null: boolean
+  type: ParamType
+}
+
+export type ParamValues = Record<string, ParamValue>
 
 export interface ExecOptions {
   maxRows: number
@@ -66,12 +80,16 @@ export interface ExecOptions {
   baseOffset: number
   /** The user confirmed the writes (confirm safe mode). */
   confirmed: boolean
+  /** Values of the :name placeholders. */
+  params?: ParamValues
 }
 
 export interface ExplainOptions {
   /** Run the statement and report actual rows and times (reads only; not SQLite). */
   analyze: boolean
   baseOffset: number
+  /** Values of the :name placeholders. */
+  params?: ParamValues
 }
 
 export interface PlanProp {
@@ -110,6 +128,8 @@ export interface Plan {
   sessionReset: boolean
   tx: TxInfo
   durationMs: number
+  /** Nothing ran: these :name placeholders have no value. */
+  needsParams?: string[]
 }
 
 export interface Statement {

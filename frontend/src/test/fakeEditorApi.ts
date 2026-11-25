@@ -94,6 +94,7 @@ export function fakeEditorApi() {
     cancel: vi.fn(async () => true),
     fetchMore: vi.fn(async (_e: string, _r: string, id: string) => resultSet(id, 1)),
     statementAt: vi.fn(async (_k: string, sql: string) => (sql.trim() ? { text: sql.trim(), start: 0, end: sql.trimEnd().length, delimEnd: sql.length } : null)),
+    paramNames: vi.fn(async (_k: string, sql: string) => [...new Set([...sql.matchAll(/(?<![\w:\])]):([A-Za-z_]\w*)/g)].map((m) => m[1]))]),
     completionSchema: vi.fn(async (_s: string, schema: string) => ({
       database: 'shop',
       schema,
