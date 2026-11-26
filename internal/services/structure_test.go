@@ -17,6 +17,8 @@ func TestStructureEditService(t *testing.T) {
 	ctx := context.Background()
 	m, sid := openSQLiteSession(t)
 	hist := history.New(t.TempDir())
+	// Closed before TempDir removes it (Windows cannot delete an open file).
+	t.Cleanup(func() { _ = hist.Close() })
 	svc := NewStructureEditService(m, all.Registry(), hist)
 	sess, _ := m.Get(sid)
 
