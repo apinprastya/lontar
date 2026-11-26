@@ -61,9 +61,9 @@ export default function TableTab({ tab, platform }: { tab: TabState; platform?: 
 
   if (tab.view === 'structure') {
     return (
-      <div className="table-tab" role="tabpanel" aria-label={tab.table}>
+      <div className="table-tab" role="tabpanel" aria-label={tab.creating ? 'New table' : tab.table}>
         <StructureView tab={tab} />
-        <ViewToggle tab={tab} platform={platform} />
+        {!tab.creating && <ViewToggle tab={tab} platform={platform} />}
       </div>
     )
   }

@@ -308,3 +308,23 @@ func TestParamsDoNotChangeSplit(t *testing.T) {
 		t.Fatalf("Split = %q", got)
 	}
 }
+
+func TestBalanced(t *testing.T) {
+	for _, tc := range []struct {
+		kind driver.Kind
+		text string
+		want bool
+	}{
+		{driver.Postgres, "f(a, (b))", true},
+		{driver.Postgres, "f(a", false},
+		{driver.Postgres, "a)(", false},
+		{driver.Postgres, "')' || \")\" -- )\n", true},
+		{driver.MySQL, "concat(')', `)`) # )", true},
+		{driver.SQLite, "[)] + (1)", true},
+		{driver.Postgres, "$$)$$", true},
+	} {
+		if got := Balanced(tc.kind, tc.text); got != tc.want {
+			t.Errorf("Balanced(%s, %q) = %v", tc.kind, tc.text, got)
+		}
+	}
+}

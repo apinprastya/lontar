@@ -63,6 +63,14 @@ export const EditorService = {
   CompletionColumns: vi.fn<(sessionId: string, schema: string, table: string) => Promise<unknown>>(),
 }
 
+export const StructureEditService = {
+  Capabilities: vi.fn<(sessionId: string) => Promise<unknown>>(),
+  Preview: vi.fn<(sessionId: string, tc: unknown) => Promise<unknown>>(),
+  Apply: vi.fn<(sessionId: string, tc: unknown) => Promise<unknown>>(),
+  DropTablePreview: vi.fn<(sessionId: string, schema: string, table: string, cascade: boolean) => Promise<unknown>>(),
+  DropTable: vi.fn<(sessionId: string, schema: string, table: string, cascade: boolean) => Promise<unknown>>(),
+}
+
 export const EditService = {
   Preview: vi.fn<(sessionId: string, cs: unknown) => Promise<unknown>>(),
   Apply: vi.fn<(sessionId: string, cs: unknown) => Promise<unknown>>(),
@@ -166,6 +174,7 @@ export function resetBindings() {
     ...Object.values(EditorService),
     ...Object.values(HistoryService),
     ...Object.values(EditService),
+    ...Object.values(StructureEditService),
     ...Object.values(DialogService),
     ...Object.values(ExportService),
     ...Object.values(ImportService),

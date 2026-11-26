@@ -21,6 +21,7 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `internal/sshtunnel/` | Connecting through an SSH bastion, optionally via up to 3 jump hosts (host keys checked on every hop against the user's `known_hosts`, read-only, and Lontar's own) |
 | `internal/driver/` (`postgres/`, `mysql/`, `sqlite/`, `all/`) | Per-engine dialect (quoting, placeholders) and introspection (tables, columns, structure, DDL). `objects.go`: the optional `ObjectLister` (functions, procedures, sequences, types, triggers, events for the sidebar); `ObjectDDL` must resolve the UI's `ObjectRef` with `FindObject` before touching SQL |
 | `internal/query/` | Table browsing (`browse.go`), the SQL editor runtime (`editor.go`, `execute.go`), statement classification, single-table SELECT parsing (`source.go`) |
+| `internal/ddl/` | Structure edits: validates a structured `TableChange` against fresh introspection (fingerprint stale check, `Caps` per engine/version) and builds the DDL per engine (`postgres.go`, `mysql.go`, `sqlite.go`); `Apply` runs it (one transaction on PostgreSQL/SQLite, in order on MySQL/MariaDB) |
 | `internal/edits/` | Staged grid edits: validates a structured `ChangeSet` against introspected metadata and applies it in one transaction; `source.go` maps query results onto a table |
 | `internal/sqlsplit/` | Client-side script splitting (quotes, comments, `$$`, `DELIMITER`, triggers, psql `COPY … FROM stdin` blocks and meta-commands); `Scanner` streams with a 64 MiB statement limit and `Split` runs on it. `Params` finds the editor's `:name` placeholders, which `query/params.go` binds |
 | `internal/export/`, `internal/importer/` | CSV/JSON/SQL export; CSV, JSON and NDJSON import (formats share one `source` pipeline) |
@@ -37,8 +38,8 @@ zustand, CodeMirror 6, Glide Data Grid, cmdk).
 | `website/` | Marketing site (Astro, static): home and download pages. A **separate npm project**; download links come from the GitHub Releases API at runtime (`src/lib/releases.ts`, `src/scripts/download.ts`) with fallback links to the latest release |
 | `build/` | Packaging per platform (nfpm, NSIS, plists, icons) |
 | `frontend/bindings/` | **Generated** Wails bindings — never edit by hand |
-| `frontend/src/features/<area>/` | UI by feature (connections, workspace, grid, editor, edits, structure, objects, palette, …) with their tests. `objects/` is the read-only object tab; `structure/DdlSection.tsx` is the DDL block it shares with the structure view |
-| `frontend/src/stores/` | zustand stores: `connections.ts` (saved connections, open sessions), `workspace.ts` (one store per session: table, query and object tabs, sidebar objects, staging, commit), `queryTabs.ts`, `pending.ts` (pure staged-edit model) |
+| `frontend/src/features/<area>/` | UI by feature (connections, workspace, grid, editor, edits, structure, objects, palette, …) with their tests. `objects/` is the read-only object tab; `structure/DdlSection.tsx` is the DDL block it shares with the structure view; `structure/StructureEditor.tsx` (dialogs in `editDialogs.tsx`) is the staged structure editor |
+| `frontend/src/stores/` | zustand stores: `connections.ts` (saved connections, open sessions), `workspace.ts` (one store per session: table, query and object tabs, sidebar objects, staging, commit), `queryTabs.ts`, `pending.ts` (pure staged-edit model), `structureEdits.ts` (pure structure draft → `TableChange`) and `structureTabs.ts` (structure editing actions) |
 | `frontend/src/components/` | Shared components (`icons.tsx`, `ToolButton`, `EngineLogo`, `ConfirmDialog`) |
 | `frontend/src/test/` | Test fakes (`mockBindings`, `fakeEditorApi`, structure fixtures) |
 
@@ -85,6 +86,13 @@ A change is finished when all of these hold (CI enforces them):
   display only and is never executed. Query-result editing goes through the
   same path (`edits.ResolveSource` decides editability; anything unclear is
   read-only).
+- **Structure edits never send DDL.** The frontend sends a `ddl.TableChange`
+  (with the structure it was made from). Go re-introspects and refuses a
+  stale change, checks every referenced name, quotes identifiers with the
+  dialect and literals itself. The only user-written SQL fragments are types
+  and expressions (defaults, checks, generated columns, index expressions,
+  partial-index predicates), validated as one expression with balanced
+  parentheses and no `;` or trailing comment.
 - **Identifiers from the UI are validated, not trusted.** Table/column names
   are looked up in metadata before they reach generated SQL (`LookupColumns`,
   `LoadTable`, `FindTable`).

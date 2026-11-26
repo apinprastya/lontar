@@ -71,6 +71,22 @@ export function handleShortcut(e: ModifierEvent, platform: string | undefined, s
       return true
     }
   }
+  if (tab?.kind === 'table' && tab.view === 'structure' && tab.structureEdit) {
+    // Structure editing: Mod+S reviews the SQL; undo/redo the draft.
+    if (key === 's' && !e.shiftKey) {
+      void s.previewStructure(tab.id)
+      return true
+    }
+    if (!inText && key === 'z') {
+      if (e.shiftKey) s.redoStructure(tab.id)
+      else s.undoStructure(tab.id)
+      return true
+    }
+    if (key === 'e' && !e.shiftKey) {
+      if (!tab.creating) s.toggleTabView(tab.id)
+      return true
+    }
+  }
   if (tab?.kind === 'table') {
     if (key === 's' && !e.shiftKey) {
       void s.requestCommit(tab.id)

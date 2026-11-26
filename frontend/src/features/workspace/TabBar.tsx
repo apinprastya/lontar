@@ -9,6 +9,7 @@ import { OBJECT_KIND_LABELS, objectLabel } from '../objects/types'
 /** Tab title; tables of another schema (e.g. opened by a foreign key) are qualified. */
 function tabTitle(t: Tab, schema: string): string {
   if (t.kind === 'object') return displayName(t.object.schema, objectLabel(t.object), schema)
+  if (t.kind === 'table' && t.creating) return 'New table'
   return t.kind === 'query' ? t.title : displayName(t.schema, t.table, schema)
 }
 

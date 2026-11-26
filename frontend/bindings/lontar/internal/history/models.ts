@@ -31,7 +31,8 @@ export interface Entry {
 
     /**
      * Source is who ran the script: SourceEditor ("", the SQL editor) or
-     * SourceMCP (an AI assistant through `lontar mcp`).
+     * SourceMCP (an AI assistant through `lontar mcp`) or SourceStructure
+     * (the Structure view).
      */
     "source": string;
 }

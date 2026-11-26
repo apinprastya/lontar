@@ -49,6 +49,8 @@ import StatusBar from './StatusBar'
 import TabBar from './TabBar'
 import TableTab from './TableTab'
 import ObjectView from '../objects/ObjectView'
+import { DropTableDialog } from '../structure/editDialogs'
+import { structureEditApi, type StructureEditApi } from '../structure/editApi'
 
 export interface WorkspaceProps {
   platform?: string
@@ -58,6 +60,7 @@ export interface WorkspaceProps {
   edits?: EditApi
   files?: SqlFileApi
   sqlRun?: SqlRunApi
+  structure?: StructureEditApi
 }
 
 /** Event (Go filedrop.go) with the paths of .sql files dropped on the workspace. */
@@ -168,6 +171,8 @@ function WorkspaceView({
   const exportRequest = useWorkspace((s) => s.exportRequest)
   const importRequest = useWorkspace((s) => s.importRequest)
   const runSqlFileOpen = useWorkspace((s) => s.runSqlFileOpen)
+  const dropTable = useWorkspace((s) => s.dropTable)
+  const structureCaps = useWorkspace((s) => s.structureCaps)
   const closeConfirm = useWorkspace((s) => s.closeConfirm)
   const saveAsk = useWorkspace((s) => s.saveAsk)
   const fileConflict = useWorkspace((s) => s.fileConflict)
@@ -176,7 +181,7 @@ function WorkspaceView({
   const paletteTables = usePaletteTables(store, api, palette === 'tables')
   const objects = useWorkspace((s) => s.objects)
   // Overlays (palette, dialogs) own the keyboard while open.
-  const overlay = Boolean(palette || exportRequest || importRequest || runSqlFileOpen || closeConfirm || hostKey || closeSessionAsk || saveAsk || fileConflict)
+  const overlay = Boolean(palette || exportRequest || importRequest || runSqlFileOpen || dropTable || closeConfirm || hostKey || closeSessionAsk || saveAsk || fileConflict)
   const overlayRef = useRef(overlay)
   overlayRef.current = overlay
   const openSwitcher = () => {
@@ -499,6 +504,20 @@ function WorkspaceView({
           }}
         />
       )}
+      {dropTable && (
+        <DropTableDialog
+          table={dropTable.table}
+          statements={dropTable.statements}
+          cascade={dropTable.cascade}
+          canCascade={Boolean(structureCaps?.dropCascade) || session.kind === 'postgres'}
+          loading={dropTable.loading}
+          busy={dropTable.busy}
+          failure={dropTable.failure}
+          onCascade={(on) => void store.getState().setDropCascade(on)}
+          onConfirm={() => void store.getState().confirmDropTable()}
+          onCancel={() => store.getState().cancelDropTable()}
+        />
+      )}
       {exportRequest && <ExportDialog sessionId={session.id} source={exportRequest} onClose={() => store.getState().requestExport(null)} />}
       {importRequest && (
         <ImportWizard
@@ -559,7 +578,7 @@ function WorkspaceView({
  * Workspace for the open session: sidebar | table tabs | optional row
  * detail, with a status bar. Each session gets its own workspace store.
  */
-export default function Workspace({ platform, api = workspaceApi, editor = editorApi, edits = editApi, files = sqlFileApi, sqlRun }: WorkspaceProps) {
+export default function Workspace({ platform, api = workspaceApi, editor = editorApi, edits = editApi, files = sqlFileApi, sqlRun, structure = structureEditApi }: WorkspaceProps) {
   const session = useConnections((s) => s.session)
   // One store per open session: switching keeps each session's tabs,
   // results and staged edits. A store is disposed when its session closes.
@@ -570,7 +589,7 @@ export default function Workspace({ platform, api = workspaceApi, editor = edito
     store = stores.current.get(session.id) ?? null
     if (!store) {
       const { id, kind, connectionId, safeMode } = session
-      store = createWorkspaceStore({ id, kind, connectionId, safeMode }, api, editor, edits, files)
+      store = createWorkspaceStore({ id, kind, connectionId, safeMode }, api, editor, edits, files, structure)
       stores.current.set(id, store)
     }
   }

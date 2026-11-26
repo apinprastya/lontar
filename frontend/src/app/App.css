@@ -3489,3 +3489,193 @@ textarea.cell-editor-input {
   box-shadow: var(--shadow);
   font-size: 13px;
 }
+
+/* ---- Structure editing ---------------------------------------------------- */
+
+.structure-header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.struct-edit-header {
+  align-items: center;
+  gap: 8px;
+}
+
+.struct-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.struct-field input {
+  font-family: var(--font-mono);
+}
+
+.struct-grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+.struct-grow input {
+  flex: 1;
+  font-family: var(--font-ui);
+}
+
+.struct-note {
+  margin: 0 12px 6px;
+  color: var(--muted);
+}
+
+.struct-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.struct-edit-table td {
+  padding: 3px 8px;
+  vertical-align: middle;
+}
+
+.struct-edit-table input:not([type='checkbox']),
+.struct-edit-table select {
+  font-size: 12px;
+  min-width: 0;
+}
+
+.struct-edit-table input:not([type='checkbox']) {
+  width: 160px;
+  font-family: var(--font-mono);
+}
+
+.struct-edit-table input.struct-wide {
+  width: 320px;
+}
+
+.struct-edit-table input.changed {
+  border-color: var(--edit-modified);
+}
+
+.struct-edit-table input[aria-invalid='true'],
+.struct-edit-table select[aria-invalid='true'] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.struct-sub {
+  display: block;
+  margin-top: 3px;
+}
+
+.struct-default {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.struct-row-new {
+  background: color-mix(in srgb, var(--edit-inserted) 12%, transparent);
+}
+
+.struct-row-modified {
+  background: color-mix(in srgb, var(--edit-modified) 12%, transparent);
+}
+
+.struct-row-dropped {
+  background: color-mix(in srgb, var(--edit-deleted) 12%, transparent);
+}
+
+.struct-row-dropped td > *:not(.struct-drop) {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.struct-row-failed {
+  outline: 1px solid var(--edit-failed);
+  outline-offset: -1px;
+}
+
+.struct-pk {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--muted);
+  opacity: 0.45;
+}
+
+.struct-pk.on {
+  color: var(--key-icon);
+  opacity: 1;
+}
+
+.struct-pk:hover:not(:disabled) {
+  border-color: var(--border);
+  opacity: 1;
+}
+
+.struct-pk .count {
+  font-size: 10px;
+}
+
+.struct-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.struct-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.struct-dialog {
+  width: min(600px, calc(100vw - 32px));
+}
+
+.struct-subhead {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 14px 0 6px;
+  color: var(--muted);
+}
+
+.struct-parts {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.struct-parts li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.struct-parts select,
+.struct-parts input:not([type='checkbox']) {
+  flex: 1;
+  min-width: 0;
+}
+
+.struct-parts input.struct-narrow {
+  flex: 0 0 80px;
+}
+
+.struct-gap {
+  margin-top: 12px;
+}
+
+label.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

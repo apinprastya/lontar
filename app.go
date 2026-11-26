@@ -57,6 +57,7 @@ type backend struct {
 	editor      *services.EditorService
 	history     *services.HistoryService
 	edit        *services.EditService
+	structure   *services.StructureEditService
 	dialogs     *services.DialogService
 	export      *services.ExportService
 	importer    *services.ImportService
@@ -147,6 +148,7 @@ func newBackend(configDir string) backend {
 		editor:      editor,
 		history:     services.NewHistoryService(hist),
 		edit:        services.NewEditService(sessions, drivers),
+		structure:   services.NewStructureEditService(sessions, drivers, hist),
 		dialogs:     services.NewDialogService(WailsDialogs{}),
 		export:      services.NewExportService(sessions, drivers, events),
 		importer:    services.NewImportService(sessions, drivers, events),
@@ -239,6 +241,7 @@ func appOptions(assets fs.FS, b backend) application.Options {
 			application.NewService(b.uiState),
 			application.NewService(b.sqlFiles),
 			application.NewService(b.sqlRun),
+			application.NewService(b.structure),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

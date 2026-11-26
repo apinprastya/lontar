@@ -2,6 +2,7 @@ import { KeyIcon, LinkIcon } from '../../components/icons'
 import { useWorkspace, type TabState } from '../../stores/workspace'
 import { formatEstimate } from '../sidebar/tableList'
 import DdlSection from './DdlSection'
+import StructureEditor from './StructureEditor'
 import { displayName } from './fk'
 import { columnExtra, formatBytes, type ForeignKey, type StructureSection, type TableDetail } from './types'
 
@@ -199,6 +200,7 @@ function Ddl({ tab }: { tab: TabState }) {
 /** Read-only structure of a table tab: metadata header and sections. */
 export default function StructureView({ tab }: { tab: TabState }) {
   const s = useWorkspace((st) => st)
+  if (tab.structureEdit && s.structureCaps) return <StructureEditor tab={tab} />
   const d = tab.structure
   if (tab.structureError && !d) {
     return (
@@ -226,8 +228,23 @@ export default function StructureView({ tab }: { tab: TabState }) {
         <strong className="mono">{displayName(d.schema, d.name, s.schema)}</strong>
         <span className="muted">{meta.join(' · ')}</span>
         {tab.structureLoading && <span className="muted">Refreshing…</span>}
+        {d.type === 'table' && s.safeMode !== 'readonly' && (
+          <span className="structure-header-actions">
+            <button type="button" onClick={() => void s.startStructureEdit(tab.id)}>
+              Edit structure
+            </button>
+            <button type="button" onClick={() => void s.requestDropTable(d.schema, d.name)}>
+              Drop table…
+            </button>
+          </span>
+        )}
         {d.comment && <p className="structure-comment">{d.comment}</p>}
       </header>
+      {s.structureCapsError && (
+        <div className="banner error tab-error" role="alert">
+          <span className="selectable">Structure editing is not available: {s.structureCapsError}</span>
+        </div>
+      )}
       <div className="structure-sections" role="tablist" aria-label="Structure sections">
         {SECTIONS.map((sec) => {
           const n = sec.count?.(d) ?? null

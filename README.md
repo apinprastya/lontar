@@ -373,7 +373,8 @@ another result set or closing the tab asks you to commit or discard first.
 ## Table structure
 
 Every table tab has a **Data | Structure** switch at the bottom (**Mod+E**).
-The structure view is read-only. Its header shows the table comment, the
+The structure view shows the table as it is; **Edit structure** changes it
+(see "Editing table structure" below). Its header shows the table comment, the
 estimated row count and the size (plus the engine and collation on
 MySQL/MariaDB). It has these sections:
 
@@ -406,7 +407,67 @@ reused, and you are asked to commit or discard first if it has staged
 changes. A table in another schema opens as `schema.table`.
 
 Right-click a table in the sidebar for **Open data**, **Open structure**,
-**Copy name** and **Copy DDL**.
+**Copy name** and **Copy DDL**, and, unless the connection is read-only,
+**Edit structure** and **Drop table…**.
+
+### Editing table structure
+
+**Edit structure** in the structure view, the sidebar menu or the command
+palette turns the view into an editor. Changes are staged like grid edits:
+new rows are green, changed ones amber, dropped ones red and struck through.
+**Undo** / **Redo** (**Mod+Z** / **Mod+Shift+Z** outside a text field) step
+through them. **Apply changes…** (**Mod+S**) shows the exact SQL that will
+run. Nothing changes until you press **Apply**. **Done** or **Discard
+changes** leaves the editor.
+
+- **Columns**: add, rename, drop; change the type, nullability, default,
+  auto-increment and comment (and collation on MySQL/MariaDB). The key
+  button adds a column to the primary key; clicking keys in order sets the
+  key order. The type field suggests common types. On MySQL/MariaDB, `enum`
+  and `set` take a comma-separated value list. On PostgreSQL, a type change
+  can have a **USING** expression.
+- **Defaults** are **No default**, **NULL**, **Value** (text that Lontar
+  quotes for you) or **Expression** (SQL such as `now()`). New columns can
+  instead be **Generated** from an expression (stored or virtual, as the
+  engine allows).
+- **Indexes**: add (columns or expressions, ascending or descending, unique,
+  method, prefix lengths on MySQL/MariaDB, a `WHERE` condition on
+  PostgreSQL/SQLite), rename and drop.
+- **Foreign keys**: add (to another table or this one, with ON UPDATE / ON
+  DELETE actions) and drop. To change one, drop it and add a new one.
+- **Checks**: add and drop.
+- **Triggers**: drop. A trigger body is code, so **New trigger…** opens a
+  template in a query tab, and **Edit as SQL** opens its definition there.
+- **Table**: rename it and change its comment in the editor header. **New
+  table** (the sidebar's **+** button or the command palette) opens an empty
+  editor with an `id` key; **Create table…** creates it. **Drop table…** (on
+  PostgreSQL optionally `CASCADE`) shows its statement and asks first.
+
+Lontar builds the DDL in Go from what you changed; the UI never sends SQL.
+Before anything runs, Go reloads the table and refuses if it changed since
+you started editing ("Reload structure"). It checks every column, index and
+constraint name, quotes identifiers, and quotes values and comments as
+literals. The only SQL you type is checked to be one expression, or a valid
+type name. PostgreSQL and SQLite apply all statements in one transaction,
+so a failure changes nothing. MySQL and MariaDB commit each DDL statement:
+Lontar puts as much as it can into one `ALTER TABLE`. If a later statement
+fails, the message says how many statements before it were applied.
+Applied changes are recorded in the query history.
+
+What each engine can change:
+
+| | PostgreSQL | MySQL / MariaDB | SQLite |
+|---|---|---|---|
+| Add / rename / drop columns | yes | yes | yes (rename 3.25+, drop 3.35+) |
+| Type, NULL, default, auto-increment of existing columns | yes | yes | no |
+| Primary key, foreign keys, checks of existing tables | yes | yes (checks: MySQL 8.0.16+, MariaDB 10.2.1+) | no |
+| Comments | yes | yes | no |
+| Rename index | yes | MySQL 5.7+, MariaDB 10.5.2+ | no |
+| New table with everything above | yes | yes | yes |
+
+SQLite's `ALTER TABLE` cannot change existing columns or constraints. Those
+controls are disabled with an explanation, and Go refuses them too. Write a
+table rebuild in the SQL editor if you need one.
 
 ## Safe mode
 
@@ -415,8 +476,8 @@ Each connection has a safe mode, set in the connection form:
 | Mode | Effect |
 |---|---|
 | Off | No restrictions |
-| Confirm writes | The SQL editor shows the statements that write and asks before running them. Committing grid edits always opens the preview first. Imports and Run SQL file ask first. Choosing the Production tag suggests this mode. |
-| Read-only | The session is read-only in the database itself (PostgreSQL `default_transaction_read_only`, MySQL `transaction_read_only`, MariaDB `tx_read_only`, SQLite `mode=ro`). Grid editing and importing are disabled, the editor's writes are rejected, and Run SQL file refuses files that write. |
+| Confirm writes | The SQL editor shows the statements that write and asks before running them. Committing grid edits always opens the preview first (structure changes always show their SQL first in every mode). Imports and Run SQL file ask first. Choosing the Production tag suggests this mode. |
+| Read-only | The session is read-only in the database itself (PostgreSQL `default_transaction_read_only`, MySQL `transaction_read_only`, MariaDB `tx_read_only`, SQLite `mode=ro`). Grid editing, structure editing and importing are disabled, the editor's writes are rejected, and Run SQL file refuses files that write. |
 
 The active mode is shown next to the connection name and applies from the
 next connect. "Confirm" decides by each statement's leading keyword and
