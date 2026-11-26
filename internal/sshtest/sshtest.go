@@ -35,13 +35,14 @@ type Server struct {
 	user, password string
 	keys           []ssh.PublicKey
 
-	ln       net.Listener
-	mu       sync.Mutex
-	conns    map[net.Conn]bool
-	closed   bool
-	forwards atomic.Int64
-	logins   atomic.Int64
-	wg       sync.WaitGroup
+	ln         net.Listener
+	mu         sync.Mutex
+	conns      map[net.Conn]bool
+	closed     bool
+	forwards   atomic.Int64
+	logins     atomic.Int64
+	keepalives atomic.Int64
+	wg         sync.WaitGroup
 }
 
 // Options configures Start.
@@ -105,6 +106,9 @@ func (s *Server) Forwards() int64 { return s.forwards.Load() }
 
 // Logins returns how many clients authenticated.
 func (s *Server) Logins() int64 { return s.logins.Load() }
+
+// KeepAlives returns how many keepalive requests were answered.
+func (s *Server) KeepAlives() int64 { return s.keepalives.Load() }
 
 // DropAll closes every client connection (simulating a network drop).
 func (s *Server) DropAll() {
@@ -190,8 +194,12 @@ func (s *Server) serve(c net.Conn) {
 	go func() {
 		for r := range reqs {
 			// keepalive@openssh.com and anything else: reply OK when asked.
+			ok := r.Type == "keepalive@openssh.com"
+			if ok {
+				s.keepalives.Add(1)
+			}
 			if r.WantReply {
-				_ = r.Reply(r.Type == "keepalive@openssh.com", nil)
+				_ = r.Reply(ok, nil)
 			}
 		}
 	}()

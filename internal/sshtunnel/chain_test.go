@@ -391,14 +391,24 @@ func TestChainTimeoutCoversWholeChain(t *testing.T) {
 func TestChainKeepAlive(t *testing.T) {
 	c := newChainEnv(t, 2)
 	c.trustAll(t)
-	d := c.dialer(Options{KeepAlive: 10 * time.Millisecond})
+	// The interval is also the reply timeout: keep it well above a slow
+	// runner's round trip through the chain.
+	d := c.dialer(Options{KeepAlive: 100 * time.Millisecond})
 	closed := recordCloses(d)
 	tun, err := d.Open(context.Background(), c.config())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tun.Close()
-	time.Sleep(50 * time.Millisecond)
+	// Wait for answered keepalives rather than a fixed sleep.
+	answered := func() int64 {
+		var n int64
+		for _, s := range c.servers {
+			n += s.KeepAlives()
+		}
+		return n
+	}
+	waitFor(t, func() bool { return answered() >= 2 || tun.Err() != nil })
 	if tun.Err() != nil {
 		t.Fatalf("keepalive broke a healthy chain: %v", tun.Err())
 	}
